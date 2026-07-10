@@ -179,6 +179,8 @@ class Handler(BaseHTTPRequestHandler):
     # ── plumbing ─────────────────────────────────────────────────────────────
     def _send(self, obj, code=200, content_type="application/json"):
         body = obj if isinstance(obj, bytes) else json.dumps(obj, indent=1).encode()
+        if content_type.startswith(("application/json", "text/")) and "charset" not in content_type:
+            content_type += "; charset=utf-8"
         self.send_response(code)
         self.send_header("Content-Type", content_type)
         self.send_header("Access-Control-Allow-Origin", "*")
