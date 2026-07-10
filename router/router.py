@@ -217,6 +217,23 @@ class Handler(BaseHTTPRequestHandler):
             workers = [dict(r) for r in db().execute("SELECT id,mode,last_heartbeat FROM workers")]
             return self._send({"requested": req["value"] if req else None, "workers": workers})
 
+        if path == "/stats":
+            week = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+            kinds = {r["kind"] or "?": r["n"] for r in db().execute(
+                "SELECT kind, COUNT(*) n FROM artifacts GROUP BY kind")}
+            return self._send({
+                "artifacts_total": db().execute("SELECT COUNT(*) n FROM artifacts").fetchone()["n"],
+                "artifacts_week": db().execute(
+                    "SELECT COUNT(*) n FROM artifacts WHERE created_at>?", (week,)).fetchone()["n"],
+                "by_kind": kinds,
+                "jobs_done_week": db().execute(
+                    "SELECT COUNT(*) n FROM jobs WHERE finished_at>?", (week,)).fetchone()["n"],
+                "avg_score": db().execute(
+                    "SELECT ROUND(AVG(score),2) s FROM artifacts WHERE score IS NOT NULL").fetchone()["s"],
+                "approved": db().execute(
+                    "SELECT COUNT(*) n FROM artifacts WHERE status='approved'").fetchone()["n"],
+            })
+
         if path == "/events":
             rows = db().execute("SELECT * FROM events ORDER BY id DESC LIMIT ?",
                                 (int(q.get("limit", 50)),))

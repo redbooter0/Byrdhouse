@@ -3,169 +3,333 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ByrdHouse</title>
+<title>ByrdHouse Command Center</title>
 <style>
-  :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3; --dim:#8b949e;
-          --green:#3fb950; --yellow:#d29922; --red:#f85149; --accent:#58a6ff; }
+  :root { --bg:#0a0812; --panel:#141021; --panel2:#1b1530; --line:#2c2347;
+          --text:#ece7fb; --dim:#9a8fc0; --accent:#8b5cf6; --accent2:#a78bfa;
+          --green:#34d399; --yellow:#fbbf24; --red:#f87171; }
   * { box-sizing:border-box; margin:0; }
-  body { background:var(--bg); color:var(--text); font:15px/1.5 -apple-system,'Segoe UI',sans-serif; padding:16px; }
-  h1 { font-size:20px; display:flex; align-items:center; gap:10px; }
-  h2 { font-size:14px; color:var(--dim); text-transform:uppercase; letter-spacing:.08em; margin:0 0 10px; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:14px; margin-top:14px; }
-  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
-  .wide { grid-column:1/-1; }
-  .light { width:12px; height:12px; border-radius:50%; display:inline-block; }
+  body { background:var(--bg); color:var(--text); font:14px/1.5 -apple-system,'Segoe UI',sans-serif; display:flex; min-height:100vh; }
+  a { color:var(--accent2); }
+
+  /* sidebar */
+  #side { width:225px; background:var(--panel); border-right:1px solid var(--line); padding:16px 10px; flex-shrink:0; }
+  #side h1 { font-size:16px; letter-spacing:.06em; padding:0 8px 4px; }
+  #side h1 span { color:var(--accent2); }
+  #side .sub { font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.14em; padding:0 8px 14px; }
+  #side .cap { font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.12em; margin:14px 8px 6px; }
+  .room { display:flex; align-items:center; gap:8px; width:100%; text-align:left; background:none; border:0; color:var(--text);
+          padding:8px 10px; border-radius:8px; cursor:pointer; font-size:13px; }
+  .room small { display:block; color:var(--dim); font-size:10px; }
+  .room:hover { background:var(--panel2); }
+  .room.on { background:linear-gradient(90deg,#2d1f57,#1b1530); outline:1px solid var(--accent); }
+  .room .lock { margin-left:auto; font-size:10px; color:var(--dim); border:1px solid var(--line); border-radius:8px; padding:0 6px; }
+
+  /* main */
+  #main { flex:1; padding:18px; min-width:0; }
+  .topbar { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; align-items:center; }
+  .chip { background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:7px 12px; font-size:12px;
+          display:flex; align-items:center; gap:7px; }
+  .light { width:9px; height:9px; border-radius:50%; display:inline-block; flex-shrink:0; }
   .green{background:var(--green)} .yellow{background:var(--yellow)} .red{background:var(--red)}
-  table { width:100%; border-collapse:collapse; font-size:13px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .wide { grid-column:1/-1; }
+  h2 { font-size:12px; color:var(--dim); text-transform:uppercase; letter-spacing:.1em; margin-bottom:10px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; }
+  .stat { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:12px; }
+  .stat b { font-size:26px; display:block; }
+  .stat span { color:var(--dim); font-size:11px; }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
   td,th { padding:4px 6px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; }
   th { color:var(--dim); font-weight:600; }
-  .pill { padding:1px 8px; border-radius:10px; font-size:12px; border:1px solid var(--line); white-space:nowrap; }
-  button { background:#21262d; color:var(--text); border:1px solid var(--line); border-radius:6px;
-           padding:6px 12px; cursor:pointer; font-size:13px; }
-  button:hover { border-color:var(--accent); }
+  .pill { padding:1px 8px; border-radius:10px; font-size:11px; border:1px solid var(--line); white-space:nowrap; }
+  button.b { background:linear-gradient(90deg,#7c3aed,#6d28d9); border:0; color:#fff; border-radius:8px;
+             padding:8px 14px; cursor:pointer; font-size:13px; }
+  button.s { background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:8px;
+             padding:6px 12px; cursor:pointer; font-size:12.5px; }
+  button.s:hover { border-color:var(--accent); }
   button.ok{color:var(--green)} button.no{color:var(--red)}
-  input,select { background:#0d1117; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font-size:13px; width:100%; }
-  label { font-size:12px; color:var(--dim); display:block; margin:8px 0 2px; }
-  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; }
-  .art { border:1px solid var(--line); border-radius:8px; overflow:hidden; background:#0d1117; }
-  .art img { width:100%; aspect-ratio:3/2; object-fit:cover; display:block; background:#000; }
-  .art .m { padding:8px; font-size:12px; color:var(--dim); }
+  input,select,textarea { background:#0d0a18; color:var(--text); border:1px solid var(--line); border-radius:8px;
+                          padding:7px 9px; font-size:13px; width:100%; }
+  label { font-size:11px; color:var(--dim); display:block; margin:8px 0 2px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:10px; }
+  .art { border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--panel2); }
+  .art img { width:100%; aspect-ratio:16/9; object-fit:cover; display:block; background:#000; }
+  .art .m { padding:8px; font-size:11.5px; color:var(--dim); }
   .art .m b { color:var(--text); }
-  .row { display:flex; gap:6px; margin-top:6px; }
-  #msg { color:var(--yellow); font-size:13px; min-height:18px; margin-top:6px; }
+  .row { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+  #msg { color:var(--yellow); font-size:12.5px; min-height:18px; margin-top:8px; }
   .muted { color:var(--dim); font-size:12px; }
+  .note { background:var(--panel2); border:1px dashed var(--line); border-radius:10px; padding:12px; color:var(--dim); font-size:13px; }
+  @media (max-width:820px){ body{flex-direction:column} #side{width:100%; display:flex; flex-wrap:wrap; gap:2px}
+    #side h1,#side .sub,#side .cap{width:100%} .room{width:auto} }
 </style>
 </head>
 <body>
-<h1><span id="overallLight" class="light yellow"></span> ByrdHouse <span class="muted" id="hostinfo"></span></h1>
+<nav id="side">
+  <h1>🦅 BYRD<span>HOUSE</span></h1>
+  <div class="sub">Command Center</div>
+  <div id="rooms"></div>
+  <div class="cap">Admin</div>
+  <div style="padding:0 8px"><label>Admin token</label><input id="token" type="password"></div>
+</nav>
 
-<div class="grid">
-  <div class="panel">
-    <h2>Health</h2>
-    <table id="health"></table>
-  </div>
-
-  <div class="panel">
-    <h2>Queue</h2>
-    <table id="queue"></table>
-    <div class="muted" style="margin-top:8px">Workers</div>
-    <table id="workers"></table>
-    <div class="row">
-      <button onclick="requestMode('IMAGE')">Request IMAGE mode</button>
-      <button onclick="requestMode('OPERATOR')">Request OPERATOR mode</button>
-    </div>
-  </div>
-
-  <div class="panel">
-    <h2>Generate</h2>
-    <label>Recipe</label><select id="recipe"></select>
-    <div id="slots"></div>
-    <label>Project</label><input id="project" value="careyrpg">
-    <label>Purpose (required — no artifact without one)</label><input id="purpose" placeholder="why this batch exists">
-    <label>Admin token (stored in this browser)</label><input id="token" type="password">
-    <div class="row"><button onclick="submitJob()">Queue image.generate</button></div>
-    <div id="msg"></div>
-  </div>
-
-  <div class="panel wide">
-    <h2>Latest artifacts</h2>
-    <div class="cards" id="arts"></div>
-  </div>
-
-  <div class="panel wide">
-    <h2>Events</h2>
-    <table id="events"></table>
-  </div>
-</div>
+<main id="main">
+  <div class="topbar" id="statusChips"></div>
+  <div id="view"></div>
+  <div id="msg"></div>
+</main>
 
 <script>
 const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 $('token').value = localStorage.getItem('bh_token') || '';
 $('token').addEventListener('change', e => localStorage.setItem('bh_token', e.target.value));
-
-const hdrs = () => ({ 'Content-Type':'application/json',
-                      'Authorization':'Bearer ' + $('token').value, 'X-Actor':'dashboard' });
+const hdrs = () => ({ 'Content-Type':'application/json', 'Authorization':'Bearer '+$('token').value, 'X-Actor':'dashboard' });
 const jget = async p => (await fetch(p)).json();
 const jpost = async (p, body) => {
   const r = await fetch(p, { method:'POST', headers:hdrs(), body:JSON.stringify(body) });
-  const j = await r.json();
-  if (!r.ok) throw new Error(j.error || r.status);
-  return j;
+  const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j;
 };
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const say = t => $('msg').textContent = t;
 
-let recipes = [];
-async function loadRecipes() {
-  recipes = await jget('/recipes');
-  $('recipe').innerHTML = recipes.map(r => `<option value="${esc(r.id)}">${esc(r.id)} v${r.version}</option>`).join('');
-  renderSlots();
+/* ── Rooms (ROOM_MAP.md — the rooms are the product) ── */
+const ROOMS = [
+  { id:'command',  name:'Command Center', sub:'Overview & Status' },
+  { id:'image',    name:'Image Studio',   sub:'Generate & Thumbnails' },
+  { id:'items',    name:'Generated Items',sub:'Gallery & Review' },
+  { id:'content',  name:'Content Pipeline', sub:'Research → Package' },
+  { id:'exports',  name:'Exports Room',   sub:'CSV & Reports' },
+  { id:'memory',   name:'Memory Room',    sub:'via Cherry Studio' },
+  { id:'mcp',      name:'MCP Tools',      sub:'Roster & Pings' },
+  { id:'events',   name:'System Room',    sub:'Events & Workers' },
+  { id:'realms',   name:'Realms Room',    sub:'Weekend Lane', lock:'U6 belt' },
+  { id:'video',    name:'Video Studio',   sub:'Motion', lock:'U5' },
+  { id:'coder',    name:'Coder Room',     sub:'Claude Code', lock:'config' },
+  { id:'business', name:'Business Room',  sub:'Money Map', lock:'R2' },
+  { id:'users',    name:'Users Room',     sub:'Frozen', lock:'demand' },
+  { id:'bot',      name:'Bot Room',       sub:'Autonomy Ladder', lock:'after U3' },
+];
+let room = 'command';
+function renderRooms() {
+  $('rooms').innerHTML = ROOMS.map(r =>
+    `<button class="room ${room===r.id?'on':''}" onclick="go('${r.id}')">
+       <span><b>${r.name}</b><small>${r.sub}</small></span>${r.lock?`<span class="lock">${r.lock}</span>`:''}
+     </button>`).join('');
 }
-function renderSlots() {
-  const r = recipes.find(x => x.id === $('recipe').value);
+function go(r) { room = r; renderRooms(); render(); }
+
+/* ── status chips (always visible) ── */
+async function chips() {
+  try {
+    const s = await jget('/status');
+    const checks = (s.machine && s.machine.checks) || [];
+    const svc = n => { const c = checks.find(x => x.name === 'svc_'+n); return c ? c.state : 'yellow'; };
+    const q = s.queue || {};
+    $('statusChips').innerHTML =
+      `<span class="chip"><span class="light ${(s.machine&&s.machine.overall)||'yellow'}"></span><b>System</b> ${esc(s.machine.host||'no status.json')}</span>`
+      + ['lmstudio','comfyui','qdrant','router'].map(n =>
+          `<span class="chip"><span class="light ${svc(n)}"></span>${n}</span>`).join('')
+      + `<span class="chip">queue: ${Object.entries(q).map(([k,v])=>`${esc(k)} ${v}`).join(' · ') || 'empty'}</span>`
+      + (s.workers||[]).map(w => `<span class="chip">${esc(w.id)} <span class="pill">${esc(w.mode)}</span></span>`).join('');
+    window._status = s;
+  } catch(e) { say('status error: '+e.message); }
+}
+
+/* ── shared renderers ── */
+function artCard(a) {
+  const meta = JSON.parse(a.meta || '{}');
+  const img = a.kind === 'image' || a.kind === 'thumbnail'
+    ? `<img src="/artifacts/${a.id}/file" loading="lazy" onerror="this.style.display='none'">` : '';
+  return `<div class="art">${img}<div class="m">
+    <b>${esc(meta.recipe || a.kind)}</b> · ${esc(a.project_id)}<br>
+    ${a.score != null ? 'score <b>'+a.score+'</b> · ' : ''}<span class="pill">${esc(a.status)}</span><br>
+    ${esc(meta.purpose || meta.title || '')}
+    <div class="row">
+      <button class="s ok" onclick="review('${a.id}','approve')">approve</button>
+      <button class="s no" onclick="review('${a.id}','reject')">reject</button>
+    </div></div></div>`;
+}
+async function review(id, action) {
+  try { await jpost(`/artifacts/${id}/review`, { action }); render(); } catch (e) { say('error: '+e.message); }
+}
+async function requestMode(m) {
+  try { await jpost('/mode', { mode:m }); say(m+' mode requested — worker switches on next heartbeat'); }
+  catch (e) { say('error: '+e.message); }
+}
+
+/* ── views ── */
+const V = {};
+V.command = async () => {
+  const st = await jget('/stats');
+  const arts = await jget('/artifacts?limit=8');
+  const ev = await jget('/events?limit=12');
+  return `
+  <div class="grid">
+    <div class="panel wide"><h2>Mission Overview — ByrdHouse is Active</h2>
+      <div class="stats">
+        <div class="stat"><b>${st.artifacts_total}</b><span>artifacts total</span></div>
+        <div class="stat"><b>${st.artifacts_week}</b><span>this week</span></div>
+        <div class="stat"><b>${st.by_kind.image||0}</b><span>images</span></div>
+        <div class="stat"><b>${st.by_kind.thumbnail||0}</b><span>thumbnails</span></div>
+        <div class="stat"><b>${st.jobs_done_week}</b><span>jobs finished (7d)</span></div>
+        <div class="stat"><b>${st.avg_score ?? '—'}</b><span>avg judge score</span></div>
+        <div class="stat"><b>${st.approved}</b><span>approved</span></div>
+      </div></div>
+    <div class="panel"><h2>Machine health</h2><table>${
+      ((window._status||{}).machine?.checks||[]).map(c =>
+        `<tr><td><span class="light ${c.state}"></span></td><td>${esc(c.name)}</td><td class="muted">${esc(c.detail)}</td></tr>`).join('')
+      || '<tr><td class="muted">run byrd-status.ps1 (or start-byrdhouse.ps1) to populate</td></tr>'}</table></div>
+    <div class="panel"><h2>Recent activity</h2><table>${ev.map(e =>
+      `<tr><td class="muted">${esc((e.ts||'').slice(5,16))}</td><td>${esc(e.actor)}</td><td>${esc(e.action)}</td>
+       <td>${e.ok?'':'<span class="pill" style="color:var(--red)">failed</span>'}</td></tr>`).join('')}</table></div>
+    <div class="panel wide"><h2>Latest artifacts</h2><div class="cards">${arts.map(artCard).join('') || '<span class="muted">nothing yet — visit the Image Studio</span>'}</div></div>
+  </div>`;
+};
+
+V.image = async () => {
+  const recipes = await jget('/recipes');
+  window._recipes = recipes.filter(r => r.kind === 'image.generate');
+  const arts = (await jget('/artifacts?limit=18')).filter(a => a.kind==='image'||a.kind==='thumbnail');
+  return `
+  <div class="grid">
+    <div class="panel"><h2>Generate (recipes over prompts)</h2>
+      <label>Recipe</label><select id="recipe" onchange="slotFields()">${window._recipes.map(r =>
+        `<option value="${esc(r.id)}">${esc(r.id)} v${r.version}</option>`).join('')}</select>
+      <div id="slots"></div>
+      <label>Thumbnail title (optional — real text composited on top, never diffused)</label>
+      <input id="thumbTitle" placeholder="e.g. BEST BUILDS TIER LIST (leave empty for art only)">
+      <label>Project</label><input id="project" value="careyrpg">
+      <label>Purpose (required)</label><input id="purpose" placeholder="why this batch exists">
+      <div class="row"><button class="b" onclick="submitGen()">Queue generation</button>
+        <button class="s" onclick="requestMode('IMAGE')">IMAGE mode</button>
+        <button class="s" onclick="requestMode('OPERATOR')">OPERATOR mode</button></div>
+      <div class="muted" style="margin-top:8px">Batch generates → auto-judged by Qwen-VL → approve here. Approved images are your thumbnail art.</div>
+    </div>
+    <div class="panel wide"><h2>Image Studio output</h2><div class="cards">${arts.map(artCard).join('') || '<span class="muted">no images yet</span>'}</div></div>
+  </div>`;
+};
+function slotFields() {
+  const r = (window._recipes||[]).find(x => x.id === $('recipe').value);
   if (!r) return;
-  const manual = r.slots.filter(s => !r.vary.includes(s));
-  $('slots').innerHTML = manual.map(s =>
+  $('slots').innerHTML = r.slots.filter(s => !r.vary.includes(s)).map(s =>
     `<label>${esc(s)}</label><input data-slot="${esc(s)}" placeholder="${esc(s)}">`).join('');
 }
-$('recipe').addEventListener('change', renderSlots);
-
-async function submitJob() {
+async function submitGen() {
   try {
     const slots = {};
     document.querySelectorAll('#slots input').forEach(i => { if (i.value) slots[i.dataset.slot] = i.value; });
     if (!$('purpose').value) throw new Error('purpose is required');
-    const j = await jpost('/jobs', { type:'image.generate', project:$('project').value,
-      required_mode:'IMAGE', required_caps:['comfyui'],
-      payload:{ recipe:$('recipe').value, slots, project:$('project').value, purpose:$('purpose').value } });
-    $('msg').textContent = 'queued ' + j.id;
-  } catch (e) { $('msg').textContent = 'error: ' + e.message; }
-}
-async function requestMode(m) {
-  try { await jpost('/mode', { mode:m }); $('msg').textContent = m + ' mode requested'; }
-  catch (e) { $('msg').textContent = 'error: ' + e.message; }
-}
-async function review(id, action) {
-  try { await jpost(`/artifacts/${id}/review`, { action }); refresh(); }
-  catch (e) { $('msg').textContent = 'error: ' + e.message; }
+    const title = $('thumbTitle').value.trim();
+    const payload = { recipe:$('recipe').value, slots, project:$('project').value, purpose:$('purpose').value };
+    if (title) payload.title = title;
+    const j = await jpost('/jobs', { type: title ? 'content.thumbnail' : 'image.generate',
+      project:$('project').value, required_mode:'IMAGE', required_caps:['comfyui'], payload });
+    say('queued '+j.id+(title?' (two-pass thumbnail)':''));
+  } catch (e) { say('error: '+e.message); }
 }
 
-async function refresh() {
+V.items = async () => {
+  const arts = await jget('/artifacts?limit=40');
+  return `<div class="panel"><h2>Generated Items — everything with a card</h2>
+    <div class="cards">${arts.map(artCard).join('') || '<span class="muted">empty</span>'}</div></div>`;
+};
+
+V.content = async () => {
+  const arts = (await jget('/artifacts?limit=30')).filter(a => ['ideas','package'].includes(a.kind));
+  return `
+  <div class="grid">
+    <div class="panel"><h2>content.research — outliers → ideas</h2>
+      <label>CSV path on the worker PC (export from your Outliers tool)</label>
+      <input id="csvPath" placeholder="E:\\ByrdHouse\\inbox\\outliers.csv">
+      <div class="row"><button class="b" onclick="queueSimple('content.research',{csv_path:$('csvPath').value,top:5},'ANY')">Rank this week's ideas</button></div>
+    </div>
+    <div class="panel"><h2>content.package — transcript → titles/tags (your voice)</h2>
+      <label>Transcript file path on the worker PC</label>
+      <input id="trPath" placeholder="E:\\ByrdHouse\\inbox\\video_transcript.txt">
+      <div class="row"><button class="b" onclick="queueSimple('content.package',{transcript_path:$('trPath').value},'OPERATOR')">Write packaging</button></div>
+      <div class="muted" style="margin-top:8px">Voice pack: recipes/voice_carey.json — put 15-20 of YOUR real titles in it.</div>
+    </div>
+    <div class="panel wide"><h2>Research & packaging artifacts</h2><table>${arts.map(a =>
+      `<tr><td>${esc(a.kind)}</td><td>${esc(a.project_id)}</td><td class="muted">${esc(a.path)}</td>
+       <td><span class="pill">${esc(a.status)}</span></td></tr>`).join('') || '<tr><td class="muted">none yet</td></tr>'}</table></div>
+  </div>`;
+};
+async function queueSimple(type, payload, mode) {
   try {
-    const s = await jget('/status');
-    const checks = (s.machine && s.machine.checks) || [];
-    $('overallLight').className = 'light ' + ((s.machine && s.machine.overall) || 'yellow');
-    $('hostinfo').textContent = s.machine.host ? `${s.machine.host} · ${s.machine.generated_at || ''}` : 'no status.json yet — run byrd-status';
-    $('health').innerHTML = checks.map(c =>
-      `<tr><td><span class="light ${c.state}"></span></td><td>${esc(c.name)}</td><td class="muted">${esc(c.detail)}</td></tr>`).join('')
-      || '<tr><td class="muted">run byrd-status.ps1 to populate</td></tr>';
-    $('queue').innerHTML = Object.entries(s.queue || {}).map(([k,v]) =>
-      `<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join('') || '<tr><td class="muted">queue empty</td></tr>';
-    $('workers').innerHTML = (s.workers || []).map(w =>
-      `<tr><td>${esc(w.id)}</td><td><span class="pill">${esc(w.mode)}</span></td><td class="muted">${esc((w.last_heartbeat||'').slice(11,19))}</td></tr>`).join('')
-      || '<tr><td class="muted">no workers yet</td></tr>';
-
-    const arts = await jget('/artifacts?limit=12');
-    $('arts').innerHTML = arts.map(a => {
-      const meta = JSON.parse(a.meta || '{}');
-      return `<div class="art">
-        <img src="/artifacts/${a.id}/file" loading="lazy" onerror="this.style.display='none'">
-        <div class="m"><b>${esc(meta.recipe || a.kind)}</b> · ${esc(a.project_id)}<br>
-          ${a.score != null ? 'score <b>' + a.score + '</b> · ' : ''}<span class="pill">${esc(a.status)}</span><br>
-          ${esc(meta.purpose || '')}
-          <div class="row">
-            <button class="ok" onclick="review('${a.id}','approve')">approve</button>
-            <button class="no" onclick="review('${a.id}','reject')">reject</button>
-          </div></div></div>`; }).join('') || '<span class="muted">nothing generated yet</span>';
-
-    const ev = await jget('/events?limit=25');
-    $('events').innerHTML = ev.map(e =>
-      `<tr><td class="muted">${esc((e.ts||'').slice(5,19))}</td><td>${esc(e.actor)}</td><td>${esc(e.action)}</td><td class="muted">${esc(e.subject)}</td><td>${e.ok ? '' : '<span class="pill" style="color:var(--red)">failed</span>'}</td></tr>`).join('');
-  } catch (e) { $('msg').textContent = 'refresh error: ' + e.message; }
+    const j = await jpost('/jobs', { type, required_mode:mode, payload,
+      required_caps: mode==='OPERATOR' ? ['lmstudio'] : [] });
+    say('queued '+j.id);
+  } catch (e) { say('error: '+e.message); }
 }
 
-loadRecipes();
-refresh();
-setInterval(refresh, 10000);
+V.exports = async () => {
+  const arts = (await jget('/artifacts?limit=20')).filter(a => ['export','report'].includes(a.kind));
+  return `<div class="grid">
+    <div class="panel"><h2>Exports Room</h2>
+      <div class="row">
+        <button class="b" onclick="queueSimple('export.csv',{what:'artifacts'},'ANY')">Export artifacts CSV</button>
+        <button class="s" onclick="queueSimple('export.csv',{what:'jobs'},'ANY')">Export jobs CSV</button>
+        <button class="s" onclick="queueSimple('report.daily',{},'ANY')">Run daily report</button>
+      </div></div>
+    <div class="panel wide"><h2>Exports & reports</h2><table>${arts.map(a =>
+      `<tr><td>${esc(a.kind)}</td><td class="muted">${esc(a.path)}</td><td class="muted">${esc((a.created_at||'').slice(0,16))}</td></tr>`).join('')
+      || '<tr><td class="muted">none yet</td></tr>'}</table></div></div>`;
+};
+
+V.memory = async () => {
+  const checks = ((window._status||{}).machine?.checks||[]).filter(c => c.name.includes('memory')||c.name.includes('qdrant'));
+  return `<div class="grid"><div class="panel"><h2>Memory Room — live via MCP</h2>
+    <div class="note">Your memory system (SQLite + Qdrant + custom MCP on BYRD-MINI) stays where it is — Cherry Studio is its interface.
+    The belt only watches its health:</div>
+    <table style="margin-top:10px">${checks.map(c =>
+      `<tr><td><span class="light ${c.state}"></span></td><td>${esc(c.name)}</td><td class="muted">${esc(c.detail)}</td></tr>`).join('')
+      || '<tr><td class="muted">memory drift check appears here once BYRD-MINI is set up</td></tr>'}</table></div></div>`;
+};
+
+V.mcp = async () => {
+  const checks = ((window._status||{}).machine?.checks||[]).filter(c => c.name.startsWith('mcp_'));
+  return `<div class="grid"><div class="panel"><h2>MCP Tools — roster (max 8, every server earns a room)</h2>
+    <div class="note">Core six: Memory · Filesystem · Fetch · Brave Search · SQLite · LM Studio bridge.<br>
+    Weekend two: Godot MCP · Godot Docs. Configure ping URLs in byrdhouse.config.json → byrd-status shows green here.</div>
+    <table style="margin-top:10px">${checks.map(c =>
+      `<tr><td><span class="light ${c.state}"></span></td><td>${esc(c.name.replace('mcp_',''))}</td><td class="muted">${esc(c.detail)}</td></tr>`).join('')
+      || '<tr><td class="muted">no MCP pings configured yet</td></tr>'}</table></div></div>`;
+};
+
+V.events = async () => {
+  const ev = await jget('/events?limit=60');
+  const jobs = await jget('/jobs?limit=30');
+  return `<div class="grid">
+    <div class="panel wide"><h2>Jobs</h2><table><tr><th>id</th><th>type</th><th>status</th><th>worker</th><th>error</th></tr>${
+      jobs.map(j => `<tr><td class="muted">${esc(j.id)}</td><td>${esc(j.type)}</td>
+        <td><span class="pill">${esc(j.status)}</span></td><td class="muted">${esc(j.worker_id||'')}</td>
+        <td class="muted">${esc((j.error||'').slice(0,60))}</td></tr>`).join('')}</table></div>
+    <div class="panel wide"><h2>Event log (the bot's future training ground)</h2><table>${ev.map(e =>
+      `<tr><td class="muted">${esc((e.ts||'').slice(5,19))}</td><td>${esc(e.actor)}</td><td>${esc(e.action)}</td>
+       <td class="muted">${esc(e.subject)}</td><td>${e.ok?'':'<span class="pill" style="color:var(--red)">failed</span>'}</td></tr>`).join('')}</table></div>
+  </div>`;
+};
+
+const LOCKED = {
+  realms:  ['Realms / Game Studio', 'Weekend Lane is open NOW in Cherry Studio (Godot MCP) — belt jobs (game.godot_task) land at U6. This room shows the edit→run→fix reports once the loop is wired.'],
+  video:   ['Video Studio', 'U5 MOTION: approved images become short clips (video.i2v). Also home of video.assemble editing. Unlocks after the Image Lab proves the judge loop.'],
+  coder:   ['Coder Room', 'Already yours: Claude Code on BYRD-GAMING with the memory MCP + LM Studio MCP attached. A custom in-dashboard coder is deferred until a real gap survives a month of daily use.'],
+  business:['Business Room', 'Layer 0 Money Map lives in docs/STATE.md: debt falling, cash-gate law, R0 = first output used on your own channel. LLC/trademark unfreezes at R2.'],
+  users:   ['Users Room', 'Frozen by decision until a real outsider wants access. No accounts, credits, or tiers before demand exists.'],
+  bot:     ['Bot Room', 'The Autonomy Ladder (A0→A3) is a permissions change on this API, never a new build. Pilot after U3: read-only suggestions fed by the event log. Every endpoint already carries its access tier.'],
+};
+for (const [k, [title, text]] of Object.entries(LOCKED)) {
+  V[k] = async () => `<div class="panel"><h2>${title}</h2><div class="note">${text}</div></div>`;
+}
+
+async function render() {
+  try { $('view').innerHTML = await V[room](); if (room==='image') slotFields(); }
+  catch (e) { say('render error: '+e.message); }
+}
+async function tick() { await chips(); await render(); }
+renderRooms(); tick(); setInterval(tick, 12000);
 </script>
 </body>
 </html>

@@ -25,6 +25,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import byrdimage  # noqa: E402
 import byrdjudge  # noqa: E402
+import compose_thumbnail  # noqa: E402
 
 ROOT = Path(os.environ.get("BYRDHOUSE_ROOT") or sys.exit("BYRDHOUSE_ROOT not set"))
 CFG = json.loads((ROOT / "byrdhouse.config.json").read_text(encoding="utf-8"))
@@ -132,8 +133,150 @@ def run_report(job) -> None:
         "created_at": datetime.now(timezone.utc).isoformat()}]})
 
 
+def run_content_thumbnail(job) -> None:
+    """v3.1 §3 two-pass: generate the ART (no text), then composite REAL text."""
+    p = json.loads(job["payload"])
+    title = p.get("title") or ""
+    if not title:
+        raise RuntimeError("content.thumbnail needs payload.title")
+    recipe_spec = byrdjudge._find_recipe_spec(ROOT, f"{p['recipe']}@999") or {}
+    _, saved = byrdimage.generate(
+        ROOT, p["recipe"], p.get("slots", {}), p.get("project", "careyrpg"),
+        p.get("purpose", "thumbnail"), batch=p.get("batch"),
+        checkpoint=p.get("checkpoint"), job_id=job["id"])
+    compose_cfg = recipe_spec.get("compose", {})
+    cards = []
+    for png, card in saved:
+        final = png.with_name(png.stem + "_final.png")
+        compose_thumbnail.compose(
+            png, title, final,
+            zone=compose_cfg.get("text_zone", "upper-left"),
+            palette=card.get("vary_picks", {}).get("palette", "default"),
+            max_words=compose_cfg.get("max_words", 5))
+        card = dict(card, kind="thumbnail", path=str(final), title=title,
+                    artifact_id=card["artifact_id"] + "f")
+        final.with_suffix(".png.json").write_text(json.dumps(card, indent=2),
+                                                  encoding="utf-8")
+        cards.append(card)
+    api(f"/jobs/{job['id']}/artifacts", {"artifacts": cards})
+    for card in cards:
+        api("/jobs", {"type": "image.judge", "project": card["project"],
+                      "required_mode": "OPERATOR", "required_caps": ["lmstudio"],
+                      "payload": {"artifact_id": card["artifact_id"],
+                                  "path": card["path"]}})
+
+
+def _lms_chat(prompt: str, max_tokens=900) -> str:
+    model = CFG["gpu"].get("operator_model", "")
+    if not model or model.startswith("CHANGE_ME"):
+        raise RuntimeError("gpu.operator_model not set in byrdhouse.config.json")
+    lms = CFG["services"]["lmstudio"].rstrip("/")
+    req = urllib.request.Request(
+        f"{lms}/chat/completions",
+        data=json.dumps({"model": model, "temperature": 0.7, "max_tokens": max_tokens,
+                         "messages": [{"role": "user", "content": prompt}]}).encode(),
+        headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=600) as r:
+        return json.loads(r.read().decode())["choices"][0]["message"]["content"]
+
+
+def run_content_package(job) -> None:
+    """v3.1 §2: transcript -> titles/tags/description/pinned comment in YOUR voice."""
+    import re as _re
+    p = json.loads(job["payload"])
+    transcript = p.get("transcript_text") or Path(p["transcript_path"]).read_text(encoding="utf-8")
+    voice_path = ROOT / "recipes" / "voice_carey.json"
+    voice = json.loads(voice_path.read_text(encoding="utf-8")) if voice_path.exists() else {}
+    prompt = (
+        "You write YouTube packaging for the channel "
+        f"{voice.get('channel', 'CareyRPG')} ({voice.get('niche', 'gaming')}). "
+        f"Write EXACTLY in the voice of these real examples: {json.dumps(voice.get('examples', {}))}. "
+        f"Rules: {json.dumps(voice.get('rules', []))}.\n\n"
+        f"Video transcript (may be truncated):\n{transcript[:6000]}\n\n"
+        "Reply with ONLY a JSON object: {\"titles\": [5 options], \"tags\": [12-18 tags], "
+        "\"description\": \"2 short paragraphs + timestamps placeholder\", "
+        "\"pinned_comment\": \"one comment\"}")
+    content = _lms_chat(prompt)
+    m = _re.search(r"\{.*\}", content, _re.DOTALL)
+    if not m:
+        raise RuntimeError(f"packager returned no JSON: {content[:200]}")
+    package = json.loads(m.group(0))
+    out_dir = ROOT / "artifacts" / p.get("project", "careyrpg") / f"{datetime.now():%Y-%m}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dest = out_dir / f"package_{job['id']}.json"
+    dest.write_text(json.dumps(package, indent=2), encoding="utf-8")
+    api(f"/jobs/{job['id']}/artifacts", {"artifacts": [{
+        "job_id": job["id"], "project": p.get("project", "careyrpg"),
+        "kind": "package", "path": str(dest),
+        "purpose": p.get("purpose", "video packaging"), "status": "draft",
+        "titles": package.get("titles", []),
+        "created_at": datetime.now(timezone.utc).isoformat()}]})
+
+
+def run_content_research(job) -> None:
+    """v3.1 §2: outlier CSV (manual export) -> ranked video ideas artifact."""
+    import csv
+    p = json.loads(job["payload"])
+    rows = []
+    with open(p["csv_path"], newline="", encoding="utf-8-sig") as f:
+        for row in csv.DictReader(f):
+            norm = {k.lower().strip(): (v or "").strip() for k, v in row.items()}
+            def num(*keys):
+                for k in keys:
+                    try:
+                        return float(norm.get(k, "").replace("x", "").replace(",", ""))
+                    except ValueError:
+                        continue
+                return 0.0
+            rows.append({"title": norm.get("title") or norm.get("video") or "?",
+                         "multiplier": num("multiplier", "outlier", "x"),
+                         "vph": num("vph", "views per hour", "viewsperhour")})
+    rows.sort(key=lambda r: (r["multiplier"], r["vph"]), reverse=True)
+    top = rows[: int(p.get("top", 5))]
+    md = [f"# This week's video ideas — {datetime.now():%Y-%m-%d}",
+          "", "Ranked by outlier multiplier, then views/hour:", ""]
+    md += [f"{i+1}. **{r['title']}** — {r['multiplier']:g}x, {r['vph']:g} VPH"
+           for i, r in enumerate(top)]
+    out_dir = ROOT / "artifacts" / p.get("project", "careyrpg") / f"{datetime.now():%Y-%m}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dest = out_dir / f"ideas_{job['id']}.md"
+    dest.write_text("\n".join(md), encoding="utf-8")
+    api(f"/jobs/{job['id']}/artifacts", {"artifacts": [{
+        "job_id": job["id"], "project": p.get("project", "careyrpg"),
+        "kind": "ideas", "path": str(dest), "purpose": "weekly topic research",
+        "status": "draft", "created_at": datetime.now(timezone.utc).isoformat()}]})
+
+
+def run_export_csv(job) -> None:
+    """Exports Room: dump artifacts (or jobs) to a CSV artifact."""
+    import csv
+    p = json.loads(job["payload"])
+    what = p.get("what", "artifacts")
+    if what not in ("artifacts", "jobs"):
+        raise RuntimeError("export.csv payload.what must be artifacts|jobs")
+    rows = api(f"/{what}?limit={int(p.get('limit', 1000))}")
+    out_dir = ROOT / "artifacts" / "exports" / f"{datetime.now():%Y-%m}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dest = out_dir / f"{what}_{datetime.now():%Y%m%d}_{job['id']}.csv"
+    if rows:
+        with open(dest, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            w.writeheader()
+            w.writerows(rows)
+    else:
+        dest.write_text("", encoding="utf-8")
+    api(f"/jobs/{job['id']}/artifacts", {"artifacts": [{
+        "job_id": job["id"], "project": "byrdhouse", "kind": "export",
+        "path": str(dest), "purpose": f"{what} export", "status": "approved",
+        "created_at": datetime.now(timezone.utc).isoformat()}]})
+
+
 RUNNERS = {"image.generate": run_generate, "image.judge": run_judge,
-           "report.daily": run_report}
+           "report.daily": run_report,
+           "content.thumbnail": run_content_thumbnail,
+           "content.package": run_content_package,
+           "content.research": run_content_research,
+           "export.csv": run_export_csv}
 
 
 def desired_mode(gpu: Gpu) -> str:

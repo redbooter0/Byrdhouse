@@ -42,7 +42,18 @@ if ($env:BYRDHOUSE_ROOT -ne $Root) {
     Write-Host "  set BYRDHOUSE_ROOT=$Root (reopen other terminals to see it)"
 }
 
-# 5. Tool presence report (informational — install what's missing)
+# 5. Pillow — the kit's only pip dependency (thumbnail text compositor, v3.1 §3)
+if (Get-Command python -ErrorAction SilentlyContinue) {
+    python -c "import PIL" 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host '  installing Pillow (thumbnail compositor)...'
+        python -m pip install --quiet pillow
+    } else { Write-Host '  [ok]      Pillow' -ForegroundColor Green }
+} else {
+    Write-Host '  [missing] python — install Python 3.10+ and re-run' -ForegroundColor Yellow
+}
+
+# 6. Tool presence report (informational — install what's missing)
 foreach ($tool in @(
     @{ cmd = 'nvidia-smi'; why = 'GPU/VRAM checks and mode switching' },
     @{ cmd = 'lms';        why = 'LM Studio CLI — model load/unload for GPU modes' },
@@ -56,6 +67,6 @@ foreach ($tool in @(
     }
 }
 
-# 6. First status report
+# 7. First status report
 Write-Host "`nRunning byrd-status...`n" -ForegroundColor Cyan
 & (Join-Path $Root 'scripts\byrd-status.ps1')

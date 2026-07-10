@@ -38,12 +38,12 @@
   "gpu": {
     "vram_free_threshold_mb": 1024,
     "default_mode": "OPERATOR",
-    "operator_model": "CHANGE_ME_lmstudio_model_key_for_qwen",
-    "judge_model": "CHANGE_ME_lmstudio_model_key_for_qwen_vl"
+    "operator_model": "CHANGE_ME_e.g._qwen/qwen3.5-9b (Gemma = fast chat only; Qwen for tools/MCP)",
+    "judge_model": "CHANGE_ME_a_vision_model_key_e.g._qwen3.5-vl"
   },
   "memory": {
     "_comment": "Used by byrd-status for the SQLite-vs-Qdrant drift check. Fill in real values on BYRD-MINI; leave placeholders elsewhere and the check reports 'not configured' (yellow).",
-    "sqlite_db": "D:/ByrdHouse/db/CHANGE_ME_memory.db",
+    "sqlite_db": "CHANGE_ME_e.g._D:/ByrdHouse/SQLite/byrdhouse_memory.db",
     "sqlite_table": "CHANGE_ME_memories",
     "qdrant_collection": "CHANGE_ME_collection"
   },

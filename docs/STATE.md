@@ -56,6 +56,7 @@ ByrdHouse is a **creator platform**, not a mining platform. Core lanes: image ge
 
 ## Done log
 
+- 2026-07-10 · Content engine (v3.1) shipped: content.thumbnail two-pass (art via recipe → REAL text composited by Pillow, 1280x720), content.package (voice-pack packaging via local Qwen), content.research (outlier CSV → ranked ideas), export.csv. Dashboard rebuilt as the room-based Command Center (14 rooms, stats, per-room views). Permanent test suite (tests/integration_test.py, 22 checks) + GitHub Actions CI (belt test, PowerShell parse, JSON validation, node check). set-router-host.ps1 ready for MINI day
 - 2026-07-10 · Full belt shipped and integration-tested in repo (mock ComfyUI + mock LM Studio): router API v1 (v2 §6 contract, SQLite schema §5, stdlib-only), worker daemon with mode shifts + auto-judge enqueue, byrdjudge (Qwen-VL scoring vs recipe rubric), iPad dashboard (health/queue/generate/approve/events), backup-nightly, retry→dead job path verified, dashboard screenshot-verified in Chromium
 - 2026-07-10 · Gaming-PC side completed in repo: start-byrdhouse.ps1 (one command), install-startup-task.ps1 (logon task), byrdimage.py submit layer (random seed per job, unique filename prefix, verified prompt injection into every CLIPTextEncode, checkpoint recorded on card) + sdxl_base_api workflow — pipeline smoke-tested end-to-end against a mock ComfyUI
 - 2026-07-10 · U0 kit committed to the GitHub repo (config template, byrd-status v2, setup scripts, mode script, docs trio, starter recipes) — repo is now the kit distribution channel

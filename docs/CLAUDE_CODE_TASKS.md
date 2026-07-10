@@ -67,6 +67,21 @@ Action 3) and log the fix in DECISIONS.md.
 
 **Done when:** both directions work without touching nvidia-smi by hand.
 
+## Task 6 — MINI DAY (BYRD-MINI, when it arrives)
+
+1. Clone repo → `powershell -ExecutionPolicy Bypass -File scripts\setup-mini.ps1`
+2. Copy the tuned config values from GAMING (or re-edit placeholders); fill the
+   `memory.*` section (SQLite path like `D:\ByrdHouse\SQLite\...`, table, Qdrant collection)
+3. Move the belt home: run `scripts\set-router-host.ps1 mini` on BOTH machines,
+   copy `E:\ByrdHouse\db\byrdhouse.db` → `D:\ByrdHouse\db\`, restart both with
+   `start-byrdhouse.ps1` (it prints the checklist)
+4. `install-startup-task.ps1` + `backup-nightly.ps1 -Install` on MINI (admin)
+5. Verify from the iPad: dashboard now at `http://byrd-mini:8787`, all chips green,
+   queue a generation — MINI routes, GAMING generates
+
+**Done when:** byrd-status green on both machines, dashboard served from MINI,
+one image round-trips through the new belt home.
+
 ## U0 Definition of Done (from Blueprint v2)
 
 Cold-reboot both PCs → one command each → byrd-status all green → generate one

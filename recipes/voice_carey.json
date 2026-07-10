@@ -1,0 +1,28 @@
+{
+  "id": "voice_carey",
+  "version": 1,
+  "kind": "voice_pack",
+  "_note": "Blueprint v3.1 §5 — YOUR actual writing, injected as few-shot examples into every content.package job so Qwen writes like Carey, not a press release. Replace the placeholders with 15-20 of your real best titles/captions/comments. Version it like any recipe; the Learn loop can rank voice versions later.",
+  "channel": "CareyRPG",
+  "niche": "gaming, RPG-heavy (Last Epoch, RuneScape, ARPG builds and tier lists)",
+  "examples": {
+    "titles": [
+      "REPLACE_ME with a real title you wrote",
+      "REPLACE_ME e.g. 'This Build Broke Last Epoch (S-Tier)'",
+      "REPLACE_ME"
+    ],
+    "captions": [
+      "REPLACE_ME with a real caption/description opener you wrote",
+      "REPLACE_ME"
+    ],
+    "comments": [
+      "REPLACE_ME with a real pinned comment you wrote",
+      "REPLACE_ME"
+    ]
+  },
+  "rules": [
+    "3-8 word titles, front-load the hook",
+    "no clickbait you can't cash: the video must deliver the title",
+    "plain talk, no corporate words, occasional CAPS for the money word"
+  ]
+}
