@@ -46,6 +46,21 @@ def api(path, payload=None, method=None):
         return json.loads(r.read().decode())
 
 
+def upload_preview(artifact_id, path):
+    """Push the image bytes to the router so the dashboard can preview it —
+    artifact files live on this machine's disk, not the router's."""
+    try:
+        req = urllib.request.Request(
+            f"{ROUTER}/artifacts/{artifact_id}/file", data=Path(path).read_bytes(),
+            method="POST",
+            headers={"Content-Type": "image/png",
+                     "Authorization": f"Bearer {TOKEN}", "X-Actor": WORKER_ID})
+        with urllib.request.urlopen(req, timeout=60) as r:
+            r.read()
+    except Exception as e:
+        log(f"preview upload failed for {artifact_id}: {e}")  # non-fatal: card still registers
+
+
 def log(msg):
     print(f"[worker {datetime.now():%H:%M:%S}] {msg}", flush=True)
 
@@ -112,6 +127,8 @@ def run_generate(job) -> None:
         card["path"] = str(png)
         cards.append(card)
     api(f"/jobs/{job['id']}/artifacts", {"artifacts": cards})
+    for card in cards:
+        upload_preview(card["artifact_id"], card["path"])
     for card in cards:  # v2 §7.1 step 5: auto-enqueue the judge pass
         api("/jobs", {"type": "image.judge", "project": card["project"],
                       "required_mode": "OPERATOR", "required_caps": ["lmstudio"],
@@ -174,6 +191,8 @@ def run_content_thumbnail(job) -> None:
                                                   encoding="utf-8")
         cards.append(card)
     api(f"/jobs/{job['id']}/artifacts", {"artifacts": cards})
+    for card in cards:
+        upload_preview(card["artifact_id"], card["path"])
     for card in cards:
         api("/jobs", {"type": "image.judge", "project": card["project"],
                       "required_mode": "OPERATOR", "required_caps": ["lmstudio"],

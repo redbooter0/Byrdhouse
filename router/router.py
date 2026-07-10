@@ -23,7 +23,8 @@ Endpoints (v2 §6):                                          access
   POST /jobs/<id>/cancel    cancel a queued job             token
   POST /jobs/<id>/artifacts {artifacts:[card,...]}          token
   GET  /artifacts?project=&status=&id=&limit=               open
-  GET  /artifacts/<id>/file image bytes (if local)          open
+  GET  /artifacts/<id>/file image bytes (local or preview)  open
+  POST /artifacts/<id>/file upload preview bytes (worker)   token
   POST /artifacts/<id>/review {action:approve|reject|judge} token
   GET  /recipes             list recipe files               open
   POST /workers/heartbeat   {id,caps,mode,vram}             token
@@ -52,6 +53,7 @@ CFG = json.loads((ROOT / "byrdhouse.config.json").read_text(encoding="utf-8-sig"
 TOKEN = CFG["auth"]["admin_token"]
 DB_PATH = ROOT / "db" / "byrdhouse.db"
 DASHBOARD = Path(__file__).resolve().parent.parent / "dashboard"
+PREVIEWS = ROOT / "artifacts" / "_previews"  # worker-uploaded copies for the dashboard
 
 JOB_TYPES = {
     "image.generate", "image.judge", "image.upscale", "video.i2v",
@@ -253,6 +255,11 @@ class Handler(BaseHTTPRequestHandler):
                 data = Path(row["path"]).read_bytes()
                 ctype = "image/png" if row["path"].endswith(".png") else "application/octet-stream"
                 return self._send(data, content_type=ctype)
+            # artifact files live on the worker's disk — fall back to the
+            # preview copy the worker uploaded at registration time
+            cached = PREVIEWS / f"{m.group(1)}.png"
+            if row and cached.exists():
+                return self._send(cached.read_bytes(), content_type="image/png")
             return self._send({"error": "file not on this host"}, 404)
 
         if path == "/recipes":
@@ -325,6 +332,17 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authed():
             return self._send({"error": "bad or missing bearer token"}, 401)
         path = urlparse(self.path).path.rstrip("/")
+
+        m = re.fullmatch(r"/artifacts/([\w.-]+)/file", path)
+        if m:  # raw image upload from the worker (body is bytes, not JSON)
+            n = int(self.headers.get("Content-Length") or 0)
+            if not 0 < n <= 20_000_000:
+                return self._send({"error": "bad upload size"}, 400)
+            PREVIEWS.mkdir(parents=True, exist_ok=True)
+            (PREVIEWS / f"{m.group(1)}.png").write_bytes(self.rfile.read(n))
+            event(self._actor(), "artifact.preview", m.group(1), {"bytes": n})
+            return self._send({"ok": True}, 201)
+
         try:
             body = self._body()
         except json.JSONDecodeError:

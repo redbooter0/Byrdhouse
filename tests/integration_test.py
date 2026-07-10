@@ -192,6 +192,16 @@ def main():
         check("re-registered artifact upserts (one card, latest state)",
               len(rows) == 1 and rows[0]["status"] == "needs_review")
 
+        # Artifact files live on the worker's disk; the dashboard preview must
+        # come from the bytes the worker uploaded to the router
+        png = b"\x89PNG-preview-test"
+        rq2 = urllib.request.Request(
+            f"http://127.0.0.1:{RP}/artifacts/art.dupetest.0/file", data=png, method="POST",
+            headers={"Content-Type": "image/png", "Authorization": f"Bearer {TOKEN}"})
+        urllib.request.urlopen(rq2, timeout=15).read()
+        with urllib.request.urlopen(f"http://127.0.0.1:{RP}/artifacts/art.dupetest.0/file", timeout=15) as r:
+            check("preview served from uploaded cache (file not on router host)", r.read() == png)
+
         # PowerShell 5.1 writes status.json with a UTF-8 BOM — /status must tolerate it
         (ROOT / "status.json").write_bytes(
             b"\xef\xbb\xbf" + json.dumps({"host": "TEST", "overall": "green", "checks": []}).encode())
