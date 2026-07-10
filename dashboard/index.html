@@ -161,10 +161,6 @@ async function jobAct(id, action) {
   try { await jpost(`/jobs/${id}/${action}`, {}); say(action+'d '+id); render(); }
   catch (e) { say('error: '+e.message); }
 }
-async function requestMode(m) {
-  try { await jpost('/mode', { mode:m }); say(m+' mode requested — worker switches on next heartbeat'); }
-  catch (e) { say('error: '+e.message); }
-}
 
 /* ── views ── */
 const V = {};
@@ -209,10 +205,9 @@ V.image = async () => {
       <input id="thumbTitle" placeholder="e.g. BEST BUILDS TIER LIST (leave empty for art only)">
       <label>Project</label><input id="project" value="careyrpg">
       <label>Purpose (required)</label><input id="purpose" placeholder="why this batch exists">
-      <div class="row"><button class="b" onclick="submitGen()">Queue generation</button>
-        <button class="s" onclick="requestMode('IMAGE')">IMAGE mode</button>
-        <button class="s" onclick="requestMode('OPERATOR')">OPERATOR mode</button></div>
-      <div class="muted" style="margin-top:8px">Batch generates → auto-judged by Qwen-VL → approve here. Approved images are your thumbnail art.</div>
+      <div class="row"><button class="b" onclick="submitGen()">Queue generation</button></div>
+      <div class="muted" style="margin-top:8px">Batch generates → auto-judged by Qwen-VL → approve here. Approved images are your thumbnail art.<br>
+      GPU mode shifts automatically with the queue — the worker chip up top shows the live mode.</div>
     </div>
     <div class="panel wide"><h2>Image Studio output</h2><div class="cards">${arts.map(artCard).join('') || '<span class="muted">no images yet</span>'}</div></div>
   </div>`;
