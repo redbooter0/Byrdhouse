@@ -50,6 +50,12 @@
              padding:6px 12px; cursor:pointer; font-size:12.5px; }
   button.s:hover { border-color:var(--accent); }
   button:disabled { opacity:.45; cursor:default; }
+  .busy { border:1px dashed var(--accent); border-radius:10px; background:var(--panel2);
+          display:flex; flex-direction:column; align-items:center; justify-content:center;
+          aspect-ratio:16/11; gap:6px; color:var(--dim); font-size:12px;
+          animation:pulse 1.6s ease-in-out infinite; }
+  .busy b { color:var(--accent2); }
+  @keyframes pulse { 0%,100%{opacity:.55} 50%{opacity:1} }
   button.ok{color:var(--green)} button.no{color:var(--red)}
   input,select,textarea { background:#0d0a18; color:var(--text); border:1px solid var(--line); border-radius:8px;
                           padding:7px 9px; font-size:13px; width:100%; }
@@ -191,9 +197,17 @@ V.command = async () => {
   </div>`;
 };
 
+function busyCards(jobs) {
+  const gen = t => t==='image.generate'||t==='content.thumbnail';
+  return jobs.filter(j => ['queued','claimed','running'].includes(j.status) && gen(j.type))
+    .map(j => `<div class="busy"><b>${esc(j.status==='queued'?'queued':'generating…')}</b>
+      <span>${esc(j.type)}</span><span>${esc(j.id.slice(-8))}</span></div>`).join('');
+}
 V.image = async () => {
   const recipes = await jget('/recipes');
   window._recipes = recipes.filter(r => r.kind === 'image.generate');
+  const jobs = await jget('/jobs?limit=30');
+  const inflight = busyCards(jobs);
   const arts = (await jget('/artifacts?limit=18')).filter(a => a.kind==='image'||a.kind==='thumbnail');
   return `
   <div class="grid">
@@ -209,7 +223,7 @@ V.image = async () => {
       <div class="muted" style="margin-top:8px">Batch generates → auto-judged by Qwen-VL → approve here. Approved images are your thumbnail art.<br>
       GPU mode shifts automatically with the queue — the worker chip up top shows the live mode.</div>
     </div>
-    <div class="panel wide"><h2>Image Studio output</h2><div class="cards">${arts.map(artCard).join('') || '<span class="muted">no images yet</span>'}</div></div>
+    <div class="panel wide"><h2>Image Studio output</h2><div class="cards">${inflight}${arts.map(artCard).join('') || (inflight ? '' : '<span class="muted">no images yet</span>')}</div></div>
   </div>`;
 };
 function slotFields() {
