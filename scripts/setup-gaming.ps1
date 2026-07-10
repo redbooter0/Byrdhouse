@@ -44,7 +44,9 @@ if ($env:BYRDHOUSE_ROOT -ne $Root) {
 
 # 5. Pillow — the kit's only pip dependency (thumbnail text compositor, v3.1 §3)
 if (Get-Command python -ErrorAction SilentlyContinue) {
-    python -c "import PIL" 2>$null
+    # cmd /c keeps Python's stderr traceback from becoming a terminating error
+    # under $ErrorActionPreference='Stop' on PowerShell 5.1
+    cmd /c "python -c ""import PIL"" >nul 2>&1"
     if ($LASTEXITCODE -ne 0) {
         Write-Host '  installing Pillow (thumbnail compositor)...'
         python -m pip install --quiet pillow
