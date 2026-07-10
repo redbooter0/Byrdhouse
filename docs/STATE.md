@@ -46,16 +46,17 @@ ByrdHouse is a **creator platform**, not a mining platform. Core lanes: image ge
 - Miners: manual on/off as heat allows; no automation yet; revisit after U1
 - ByrdHouse revenue: **$0** → goal R0 = first output used on my own channel, then first paid output
 
-## Next 5 actions
+## Next actions (gaming PC — everything below is config or debugging, no building)
 
-1. On BYRD-GAMING: clone this repo, run `scripts\setup-gaming.ps1` (creates E:\ByrdHouse, installs kit, runs first status)
-2. Edit `E:\ByrdHouse\byrdhouse.config.json` placeholders (hosts, operator model, ComfyUI dir, token)
-3. Run `scripts\start-byrdhouse.ps1` — fix reds until the report speaks truth; then `install-startup-task.ps1` (admin) so it runs at logon
-4. Generate the first image through the new submit layer: `scripts\byrdimage.ps1 -Recipe rpg_tier_list -Project careyrpg -Purpose "first tier list art" -Slot subject="...",game="Last Epoch"` — check the card lands next to the PNG in artifacts\
-5. Task 2 (de-hardcode any remaining legacy scripts) + cold-reboot test = U0 done on GAMING
+1. Clone repo, run `scripts\setup-gaming.ps1` (creates E:\ByrdHouse, installs full kit, runs first status)
+2. Edit `E:\ByrdHouse\byrdhouse.config.json` placeholders: hosts, operator_model, judge_model (a Qwen-VL build in LM Studio), ComfyUI dir, admin_token, backup dest
+3. Run `scripts\start-byrdhouse.ps1` — boots LM Studio + ComfyUI + router + worker + status. Fix reds. Then `install-startup-task.ps1` and `backup-nightly.ps1 -Install` (both admin, once)
+4. Open the dashboard on the iPad: `http://byrd-gaming:8787` (tailnet) — paste admin token, queue a generation with two taps, approve/reject from the gallery
+5. Cold-reboot test = U0 DoD. When BYRD-MINI arrives: run setup-mini.ps1, flip startup.run_router (false on GAMING, true on MINI), point services.router at byrd-mini, copy db\byrdhouse.db over
 
 ## Done log
 
+- 2026-07-10 · Full belt shipped and integration-tested in repo (mock ComfyUI + mock LM Studio): router API v1 (v2 §6 contract, SQLite schema §5, stdlib-only), worker daemon with mode shifts + auto-judge enqueue, byrdjudge (Qwen-VL scoring vs recipe rubric), iPad dashboard (health/queue/generate/approve/events), backup-nightly, retry→dead job path verified, dashboard screenshot-verified in Chromium
 - 2026-07-10 · Gaming-PC side completed in repo: start-byrdhouse.ps1 (one command), install-startup-task.ps1 (logon task), byrdimage.py submit layer (random seed per job, unique filename prefix, verified prompt injection into every CLIPTextEncode, checkpoint recorded on card) + sdxl_base_api workflow — pipeline smoke-tested end-to-end against a mock ComfyUI
 - 2026-07-10 · U0 kit committed to the GitHub repo (config template, byrd-status v2, setup scripts, mode script, docs trio, starter recipes) — repo is now the kit distribution channel
 - 2026-07-08 · U0 kit designed (config, byrd-status v2, state/decisions docs, Claude Code task briefs)

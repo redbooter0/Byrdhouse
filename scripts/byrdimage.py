@@ -42,8 +42,9 @@ from pathlib import Path
 
 
 def die(msg: str) -> None:
-    print(f"[byrdimage] ERROR: {msg}", file=sys.stderr)
-    sys.exit(2)
+    # SystemExit with a string: CLI prints it to stderr and exits nonzero;
+    # the worker daemon catches it and records the message on the dead job.
+    raise SystemExit(f"[byrdimage] {msg}")
 
 
 def load_json(path: Path):
@@ -75,36 +76,22 @@ def http_json(url: str, payload=None, timeout=30):
         return json.loads(r.read().decode())
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--recipe", required=True)
-    ap.add_argument("--set", action="append", default=[], metavar="key=value")
-    ap.add_argument("--project", default="sandbox")
-    ap.add_argument("--purpose", required=True)
-    ap.add_argument("--batch", type=int)
-    ap.add_argument("--checkpoint")
-    ap.add_argument("--dry-run", action="store_true")
-    args = ap.parse_args()
-
-    root = os.environ.get("BYRDHOUSE_ROOT")
-    if not root:
-        die("BYRDHOUSE_ROOT not set — run the setup script first")
+def generate(root, recipe_name, slots, project, purpose,
+             batch=None, checkpoint=None, dry_run=False, job_id=None):
+    """Run one image.generate: recipe -> ComfyUI -> archived PNGs + cards.
+    Returns (job_id, [(png_path, card_dict), ...]). Raises SystemExit on
+    validation errors (via die) — callers that need exceptions can catch it."""
     root = Path(root)
     cfg = load_json(root / "byrdhouse.config.json")
     comfy = cfg["services"]["comfyui"].rstrip("/")
     img_cfg = cfg.get("image", {})
 
-    recipe_path = find_recipe(root, args.recipe)
+    recipe_path = find_recipe(root, recipe_name)
     recipe = load_json(recipe_path)
     recipe_tag = f"{recipe['id']}@{recipe['version']}"
 
-    # ── Fill the template: explicit --set slots, then random picks from vary ──
-    slots = {}
-    for kv in args.set:
-        if "=" not in kv:
-            die(f"--set needs key=value, got '{kv}'")
-        k, v = kv.split("=", 1)
-        slots[k] = v
+    # ── Fill the template: explicit slots, then random picks from vary ───────
+    slots = dict(slots)
     vary_picks = {}
     for k, options in recipe.get("vary", {}).items():
         if k not in slots:
@@ -119,10 +106,10 @@ def main() -> None:
     negative = recipe.get("negative", "")
 
     defaults = recipe.get("defaults", {})
-    checkpoint = args.checkpoint or defaults.get("checkpoint") or die("no checkpoint")
+    checkpoint = checkpoint or defaults.get("checkpoint") or die("no checkpoint")
     if not checkpoint.endswith(".safetensors"):
         checkpoint += ".safetensors"
-    batch = args.batch or defaults.get("batch", 1)
+    batch = batch or defaults.get("batch", 1)
     steps = defaults.get("steps", 30)
 
     # ── Build the graph ───────────────────────────────────────────────────────
@@ -130,7 +117,7 @@ def main() -> None:
     graph = load_json(root / workflow_rel)
     graph.pop("_comment", None)
 
-    job_id = new_id("job")
+    job_id = job_id or new_id("job")
     seed = secrets.randbits(63)                      # fix 1: random per job
     prefix = f"{datetime.now():%Y%m%d}_{recipe['id']}_{job_id}"  # fix 2: unique
 
@@ -181,10 +168,10 @@ def main() -> None:
     print(f"[byrdimage] job {job_id}  recipe {recipe_tag}  seed {seed}")
     print(f"[byrdimage] prompt: {prompt}")
     print(f"[byrdimage] vary picks: {vary_picks or '(none)'}")
-    if args.dry_run:
+    if dry_run:
         print(json.dumps(graph, indent=2))
         print("[byrdimage] dry run — nothing submitted")
-        return
+        return job_id, []
 
     # ── Submit + poll ─────────────────────────────────────────────────────────
     resp = http_json(f"{comfy}/prompt", {"prompt": graph, "client_id": job_id})
@@ -208,7 +195,7 @@ def main() -> None:
         die("timed out after 15 min waiting for ComfyUI")
 
     # ── Archive + metadata cards (v2 §8: no artifact without a card) ─────────
-    month_dir = root / "artifacts" / args.project / f"{datetime.now():%Y-%m}"
+    month_dir = root / "artifacts" / project / f"{datetime.now():%Y-%m}"
     month_dir.mkdir(parents=True, exist_ok=True)
     now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -227,10 +214,10 @@ def main() -> None:
             card = {
                 "artifact_id": new_id("art"),
                 "job_id": job_id,
-                "project": args.project,
+                "project": project,
                 "kind": "image",
                 "recipe": recipe_tag,
-                "purpose": args.purpose,
+                "purpose": purpose,
                 "prompt": prompt,
                 "negative": negative,
                 "seed": seed,
@@ -245,12 +232,39 @@ def main() -> None:
             }
             dest.with_suffix(dest.suffix + ".json").write_text(
                 json.dumps(card, indent=2), encoding="utf-8")
-            saved.append(dest)
+            saved.append((dest, card))
             print(f"[byrdimage]   archived {dest} (+card)")
 
     if not saved:
         die("job finished but produced no images")
     print(f"[byrdimage] done — {len(saved)} image(s) in {month_dir}")
+    return job_id, saved
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--recipe", required=True)
+    ap.add_argument("--set", action="append", default=[], metavar="key=value")
+    ap.add_argument("--project", default="sandbox")
+    ap.add_argument("--purpose", required=True)
+    ap.add_argument("--batch", type=int)
+    ap.add_argument("--checkpoint")
+    ap.add_argument("--dry-run", action="store_true")
+    args = ap.parse_args()
+
+    root = os.environ.get("BYRDHOUSE_ROOT")
+    if not root:
+        die("BYRDHOUSE_ROOT not set — run the setup script first")
+
+    slots = {}
+    for kv in args.set:
+        if "=" not in kv:
+            die(f"--set needs key=value, got '{kv}'")
+        k, v = kv.split("=", 1)
+        slots[k] = v
+
+    generate(root, args.recipe, slots, args.project, args.purpose,
+             batch=args.batch, checkpoint=args.checkpoint, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

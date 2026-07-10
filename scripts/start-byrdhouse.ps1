@@ -59,5 +59,32 @@ if (Test-Http "$comfyUrl/system_stats") {
     }
 }
 
+# ── Router (the belt API) ────────────────────────────────────────────────────
+$routerUrl = $cfg.services.router
+if ($cfg.startup.run_router) {
+    if (Test-Http "$routerUrl/health") {
+        Write-Host "[router] already up at $routerUrl"
+    } else {
+        Write-Host '[router] starting...'
+        Start-Process python -ArgumentList "`"$root\router\router.py`"" -WindowStyle Hidden
+        $deadline = (Get-Date).AddSeconds(30)
+        while ((Get-Date) -lt $deadline -and -not (Test-Http "$routerUrl/health")) { Start-Sleep 2 }
+        if (Test-Http "$routerUrl/health") { Write-Host "[router] up — dashboard at $routerUrl" }
+        else { Write-Host '[router] failed to answer — run manually to see the error: python router\router.py' -ForegroundColor Red }
+    }
+}
+
+# ── Worker daemon ────────────────────────────────────────────────────────────
+if ($cfg.startup.run_worker) {
+    $running = Get-CimInstance Win32_Process -Filter "Name LIKE 'python%'" -ErrorAction SilentlyContinue |
+               Where-Object { $_.CommandLine -like '*worker.py*' }
+    if ($running) {
+        Write-Host '[worker] already running'
+    } else {
+        Write-Host '[worker] starting...'
+        Start-Process python -ArgumentList "`"$root\scripts\worker.py`"" -WindowStyle Hidden
+    }
+}
+
 # ── Status report ────────────────────────────────────────────────────────────
 & (Join-Path $root 'scripts\byrd-status.ps1')

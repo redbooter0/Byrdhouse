@@ -16,9 +16,15 @@
     "gaming_root": "E:/ByrdHouse"
   },
   "startup": {
-    "_comment": "Used by start-byrdhouse.ps1 on BYRD-GAMING. comfyui_dir is the folder containing your ComfyUI launcher; comfyui_cmd is the launcher itself (portable installs: run_nvidia_gpu.bat).",
+    "_comment": "Used by start-byrdhouse.ps1. comfyui_dir holds your ComfyUI launcher (portable installs: run_nvidia_gpu.bat). run_router=true hosts the belt API on THIS machine — true on GAMING until BYRD-MINI is set up, then flip it to false here, true on MINI, and point services.router at byrd-mini. run_worker=true runs the job daemon (GAMING only).",
     "comfyui_dir": "CHANGE_ME_e.g._E:/ComfyUI_windows_portable",
-    "comfyui_cmd": "run_nvidia_gpu.bat"
+    "comfyui_cmd": "run_nvidia_gpu.bat",
+    "run_router": true,
+    "run_worker": true
+  },
+  "backup": {
+    "_comment": "backup-nightly.ps1 mirrors db/, artifacts/, recipes/, docs/, workflows/ + config here. Point at BYRD-VAULT's share or any second physical disk.",
+    "dest": "CHANGE_ME_e.g._\\\\byrd-vault\\ByrdHouseBackup_or_F:/ByrdHouseBackup"
   },
   "image": {
     "_comment": "Defaults for the byrdimage submit layer (scripts/byrdimage.py).",
@@ -32,7 +38,8 @@
   "gpu": {
     "vram_free_threshold_mb": 1024,
     "default_mode": "OPERATOR",
-    "operator_model": "CHANGE_ME_lmstudio_model_key_for_qwen"
+    "operator_model": "CHANGE_ME_lmstudio_model_key_for_qwen",
+    "judge_model": "CHANGE_ME_lmstudio_model_key_for_qwen_vl"
   },
   "memory": {
     "_comment": "Used by byrd-status for the SQLite-vs-Qdrant drift check. Fill in real values on BYRD-MINI; leave placeholders elsewhere and the check reports 'not configured' (yellow).",

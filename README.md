@@ -27,6 +27,11 @@ For BYRD-MINI, same thing with `scripts\setup-mini.ps1` (roots at `D:\ByrdHouse`
 | `scripts/start-byrdhouse.ps1` | THE one command: LM Studio server + operator model + ComfyUI + status report |
 | `scripts/install-startup-task.ps1` | Registers start-byrdhouse as a logon scheduled task (run as admin, once) |
 | `scripts/byrdimage.py` / `.ps1` | Image submit layer: recipe → filled prompt → random seed → unique prefix → ComfyUI → archived PNG + metadata card (stdlib-only Python) |
+| `scripts/byrdjudge.py` | JUDGE loop: Qwen-VL (LM Studio) scores artifacts against their recipe's rubric — score, tags, caption onto the card |
+| `scripts/worker.py` | Worker daemon: pulls jobs from the router, runs the GPU mode ritual, executes image.generate/image.judge/report.daily, auto-enqueues judging |
+| `router/router.py` | The belt: Router API v1 (Blueprint v2 §6) + SQLite schema (§5) + serves the dashboard. Stdlib-only, port 8787 |
+| `dashboard/index.html` | iPad command surface: health lights, queue, workers, generate form, artifact gallery with approve/reject, event log. No logic — only endpoint calls |
+| `scripts/backup-nightly.ps1` | BYRD-VAULT job: live-safe SQLite backup + robocopy mirror; `-Install` registers the daily 03:30 task |
 | `workflows/sdxl_base_api.json` | SDXL text2img graph (ComfyUI API format) the submit layer fills at runtime |
 | `scripts/rag_system.py` | Lightweight local RAG (document chunks + index on disk) |
 | `docs/STATE.md` | One page of current truth — update weekly |

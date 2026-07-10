@@ -8,9 +8,11 @@ A local-first AI command platform run by one founder (Carey) across three device
 
 The governing documents are the Master Blueprint v2 (technical spec: job envelope, SQLite schema, Router API, GPU modes, unlock roadmap U0–U6), v3 (money-gated sequencing) and v3.1 (content engine). Condensed operating state lives in `docs/STATE.md` (current truth — update it on milestones), `docs/DECISIONS.md` (append-only) and `docs/ROOM_MAP.md`.
 
-## Current Stage: U0 STABILIZE
+## Current Stage: U0 STABILIZE (software for U0–U3 already shipped)
 
-Work orders are in `docs/CLAUDE_CODE_TASKS.md`. The U0 Definition of Done: cold-reboot both PCs → one command each → `byrd-status` all green → one image generated end-to-end. Do not build ahead of the unlock ladder (U1 Image Lab → U2 Command Surface → U3 Spine/job queue → …). Frozen until real demand: user accounts, credits, newsletters, monetization surfaces, Unreal, video generation.
+Work orders are in `docs/CLAUDE_CODE_TASKS.md`. The U0 Definition of Done: cold-reboot both PCs → one command each → `byrd-status` all green → one image generated end-to-end. Per founder decision (see DECISIONS.md 2026-07-10) the full belt — router, worker, judge, dashboard — is already built and integration-tested; the unlock ladder now gates hardware verification and *usage*, not code. Still frozen until real demand: user accounts, credits, newsletters, monetization surfaces, Unreal, video generation.
+
+The belt in this repo: `router/router.py` (API v1 per v2 §6 + SQLite schema per §5, serves `dashboard/index.html`) ← `scripts/worker.py` (pull-based daemon on GAMING: mode ritual, image.generate via `byrdimage.generate()`, image.judge via `byrdjudge.judge_card()`, auto-enqueues judge jobs after generation). Until BYRD-MINI is set up, GAMING hosts the router (`startup.run_router` in config); the handoff procedure is in STATE.md.
 
 ## Hard Rules (from the blueprints — enforce these in any code you touch)
 

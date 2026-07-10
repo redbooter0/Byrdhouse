@@ -13,6 +13,13 @@ __pycache__/
 .venv/
 venv/
 
+# ByrdHouse runtime state (lives on the machines, not in git)
+db/*.db
+db/*.db-*
+status.json
+artifacts/
+logs/
+
 # Caddy runtime state
 config/caddy_data/
 config/caddy_config/

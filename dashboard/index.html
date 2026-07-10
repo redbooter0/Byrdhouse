@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ByrdHouse</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3; --dim:#8b949e;
+          --green:#3fb950; --yellow:#d29922; --red:#f85149; --accent:#58a6ff; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--text); font:15px/1.5 -apple-system,'Segoe UI',sans-serif; padding:16px; }
+  h1 { font-size:20px; display:flex; align-items:center; gap:10px; }
+  h2 { font-size:14px; color:var(--dim); text-transform:uppercase; letter-spacing:.08em; margin:0 0 10px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:14px; margin-top:14px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .wide { grid-column:1/-1; }
+  .light { width:12px; height:12px; border-radius:50%; display:inline-block; }
+  .green{background:var(--green)} .yellow{background:var(--yellow)} .red{background:var(--red)}
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  td,th { padding:4px 6px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--dim); font-weight:600; }
+  .pill { padding:1px 8px; border-radius:10px; font-size:12px; border:1px solid var(--line); white-space:nowrap; }
+  button { background:#21262d; color:var(--text); border:1px solid var(--line); border-radius:6px;
+           padding:6px 12px; cursor:pointer; font-size:13px; }
+  button:hover { border-color:var(--accent); }
+  button.ok{color:var(--green)} button.no{color:var(--red)}
+  input,select { background:#0d1117; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font-size:13px; width:100%; }
+  label { font-size:12px; color:var(--dim); display:block; margin:8px 0 2px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; }
+  .art { border:1px solid var(--line); border-radius:8px; overflow:hidden; background:#0d1117; }
+  .art img { width:100%; aspect-ratio:3/2; object-fit:cover; display:block; background:#000; }
+  .art .m { padding:8px; font-size:12px; color:var(--dim); }
+  .art .m b { color:var(--text); }
+  .row { display:flex; gap:6px; margin-top:6px; }
+  #msg { color:var(--yellow); font-size:13px; min-height:18px; margin-top:6px; }
+  .muted { color:var(--dim); font-size:12px; }
+</style>
+</head>
+<body>
+<h1><span id="overallLight" class="light yellow"></span> ByrdHouse <span class="muted" id="hostinfo"></span></h1>
+
+<div class="grid">
+  <div class="panel">
+    <h2>Health</h2>
+    <table id="health"></table>
+  </div>
+
+  <div class="panel">
+    <h2>Queue</h2>
+    <table id="queue"></table>
+    <div class="muted" style="margin-top:8px">Workers</div>
+    <table id="workers"></table>
+    <div class="row">
+      <button onclick="requestMode('IMAGE')">Request IMAGE mode</button>
+      <button onclick="requestMode('OPERATOR')">Request OPERATOR mode</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Generate</h2>
+    <label>Recipe</label><select id="recipe"></select>
+    <div id="slots"></div>
+    <label>Project</label><input id="project" value="careyrpg">
+    <label>Purpose (required — no artifact without one)</label><input id="purpose" placeholder="why this batch exists">
+    <label>Admin token (stored in this browser)</label><input id="token" type="password">
+    <div class="row"><button onclick="submitJob()">Queue image.generate</button></div>
+    <div id="msg"></div>
+  </div>
+
+  <div class="panel wide">
+    <h2>Latest artifacts</h2>
+    <div class="cards" id="arts"></div>
+  </div>
+
+  <div class="panel wide">
+    <h2>Events</h2>
+    <table id="events"></table>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+$('token').value = localStorage.getItem('bh_token') || '';
+$('token').addEventListener('change', e => localStorage.setItem('bh_token', e.target.value));
+
+const hdrs = () => ({ 'Content-Type':'application/json',
+                      'Authorization':'Bearer ' + $('token').value, 'X-Actor':'dashboard' });
+const jget = async p => (await fetch(p)).json();
+const jpost = async (p, body) => {
+  const r = await fetch(p, { method:'POST', headers:hdrs(), body:JSON.stringify(body) });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+};
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+let recipes = [];
+async function loadRecipes() {
+  recipes = await jget('/recipes');
+  $('recipe').innerHTML = recipes.map(r => `<option value="${esc(r.id)}">${esc(r.id)} v${r.version}</option>`).join('');
+  renderSlots();
+}
+function renderSlots() {
+  const r = recipes.find(x => x.id === $('recipe').value);
+  if (!r) return;
+  const manual = r.slots.filter(s => !r.vary.includes(s));
+  $('slots').innerHTML = manual.map(s =>
+    `<label>${esc(s)}</label><input data-slot="${esc(s)}" placeholder="${esc(s)}">`).join('');
+}
+$('recipe').addEventListener('change', renderSlots);
+
+async function submitJob() {
+  try {
+    const slots = {};
+    document.querySelectorAll('#slots input').forEach(i => { if (i.value) slots[i.dataset.slot] = i.value; });
+    if (!$('purpose').value) throw new Error('purpose is required');
+    const j = await jpost('/jobs', { type:'image.generate', project:$('project').value,
+      required_mode:'IMAGE', required_caps:['comfyui'],
+      payload:{ recipe:$('recipe').value, slots, project:$('project').value, purpose:$('purpose').value } });
+    $('msg').textContent = 'queued ' + j.id;
+  } catch (e) { $('msg').textContent = 'error: ' + e.message; }
+}
+async function requestMode(m) {
+  try { await jpost('/mode', { mode:m }); $('msg').textContent = m + ' mode requested'; }
+  catch (e) { $('msg').textContent = 'error: ' + e.message; }
+}
+async function review(id, action) {
+  try { await jpost(`/artifacts/${id}/review`, { action }); refresh(); }
+  catch (e) { $('msg').textContent = 'error: ' + e.message; }
+}
+
+async function refresh() {
+  try {
+    const s = await jget('/status');
+    const checks = (s.machine && s.machine.checks) || [];
+    $('overallLight').className = 'light ' + ((s.machine && s.machine.overall) || 'yellow');
+    $('hostinfo').textContent = s.machine.host ? `${s.machine.host} · ${s.machine.generated_at || ''}` : 'no status.json yet — run byrd-status';
+    $('health').innerHTML = checks.map(c =>
+      `<tr><td><span class="light ${c.state}"></span></td><td>${esc(c.name)}</td><td class="muted">${esc(c.detail)}</td></tr>`).join('')
+      || '<tr><td class="muted">run byrd-status.ps1 to populate</td></tr>';
+    $('queue').innerHTML = Object.entries(s.queue || {}).map(([k,v]) =>
+      `<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join('') || '<tr><td class="muted">queue empty</td></tr>';
+    $('workers').innerHTML = (s.workers || []).map(w =>
+      `<tr><td>${esc(w.id)}</td><td><span class="pill">${esc(w.mode)}</span></td><td class="muted">${esc((w.last_heartbeat||'').slice(11,19))}</td></tr>`).join('')
+      || '<tr><td class="muted">no workers yet</td></tr>';
+
+    const arts = await jget('/artifacts?limit=12');
+    $('arts').innerHTML = arts.map(a => {
+      const meta = JSON.parse(a.meta || '{}');
+      return `<div class="art">
+        <img src="/artifacts/${a.id}/file" loading="lazy" onerror="this.style.display='none'">
+        <div class="m"><b>${esc(meta.recipe || a.kind)}</b> · ${esc(a.project_id)}<br>
+          ${a.score != null ? 'score <b>' + a.score + '</b> · ' : ''}<span class="pill">${esc(a.status)}</span><br>
+          ${esc(meta.purpose || '')}
+          <div class="row">
+            <button class="ok" onclick="review('${a.id}','approve')">approve</button>
+            <button class="no" onclick="review('${a.id}','reject')">reject</button>
+          </div></div></div>`; }).join('') || '<span class="muted">nothing generated yet</span>';
+
+    const ev = await jget('/events?limit=25');
+    $('events').innerHTML = ev.map(e =>
+      `<tr><td class="muted">${esc((e.ts||'').slice(5,19))}</td><td>${esc(e.actor)}</td><td>${esc(e.action)}</td><td class="muted">${esc(e.subject)}</td><td>${e.ok ? '' : '<span class="pill" style="color:var(--red)">failed</span>'}</td></tr>`).join('');
+  } catch (e) { $('msg').textContent = 'refresh error: ' + e.message; }
+}
+
+loadRecipes();
+refresh();
+setInterval(refresh, 10000);
+</script>
+</body>
+</html>

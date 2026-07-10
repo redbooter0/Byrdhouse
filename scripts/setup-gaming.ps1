@@ -27,7 +27,7 @@ if (-not (Test-Path $cfgDest)) {
 }
 
 # 3. Kit files: scripts, docs, recipes (overwrite = repo is the source of truth for kit files)
-foreach ($d in 'scripts','docs','recipes','workflows') {
+foreach ($d in 'scripts','docs','recipes','workflows','router','dashboard') {
     $src = Join-Path $repo $d
     if (Test-Path $src) {
         Copy-Item "$src\*" (Join-Path $Root $d) -Recurse -Force
