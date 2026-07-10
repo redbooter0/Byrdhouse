@@ -9,7 +9,7 @@
     "palette": ["gold-red", "electric-blue", "black-gold"],
     "lighting": ["rim light", "neon glow", "ember backlight"]
   },
-  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 30, "batch": 4 },
+  "defaults": { "checkpoint": "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors", "steps": 30, "batch": 4 },
   "compose": { "text_zone": "upper-left", "max_words": 5, "font_weight": 900, "stroke": true, "drop_shadow": true },
   "rubric": { "readability": "1-5", "contrast": "1-5", "subject_pop": "1-5", "tier_grammar": "1-5" }
 }
