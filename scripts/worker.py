@@ -33,6 +33,7 @@ ROUTER = CFG["services"]["router"].rstrip("/")
 TOKEN = CFG["auth"]["admin_token"]
 WORKER_ID = f"worker-{socket.gethostname().lower()}"
 CAPS = ["comfyui", "lmstudio"]
+GPU_ENABLED = True
 
 
 def api(path, payload=None, method=None):
@@ -49,6 +50,16 @@ def log(msg):
     print(f"[worker {datetime.now():%H:%M:%S}] {msg}", flush=True)
 
 
+def _lms_unload_all():
+    if GPU_ENABLED:
+        subprocess.run(["lms", "unload", "--all"], timeout=120)
+
+
+def _lms_load(model: str):
+    if GPU_ENABLED and model and not model.startswith("CHANGE_ME"):
+        subprocess.run(["lms", "load", model], timeout=600)
+
+
 class Gpu:
     """The mode ritual (v2 §7.1). With --no-gpu every switch is a no-op."""
 
@@ -56,11 +67,12 @@ class Gpu:
         self.enabled = enabled
         self.mode = CFG["gpu"].get("default_mode", "OPERATOR")
 
-    def _vram_used(self) -> int:
+    def _vram(self):
         out = subprocess.run(
-            ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
+            ["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
             capture_output=True, text=True, timeout=15).stdout
-        return int(out.strip().splitlines()[0])
+        used, total = out.strip().splitlines()[0].split(",")
+        return int(used.strip()), int(total.strip())
 
     def switch(self, target: str):
         if target == self.mode:
@@ -72,10 +84,11 @@ class Gpu:
                 threshold = int(CFG["gpu"].get("vram_free_threshold_mb", 1024))
                 deadline = time.time() + 180
                 while time.time() < deadline:
-                    used = self._vram_used()
-                    if used < threshold:
+                    used, total = self._vram()
+                    free = total - used
+                    if free >= threshold:
                         break
-                    log(f"  waiting for VRAM: {used}MB used")
+                    log(f"  waiting for VRAM: {free}MB free ({used}MB used)")
                     time.sleep(5)
                 else:
                     raise RuntimeError("VRAM did not free — aborting mode switch")
@@ -111,6 +124,8 @@ def run_judge(job) -> None:
     image_path = Path(p["path"])
     card_path = image_path.with_suffix(image_path.suffix + ".json")
     card = json.loads(card_path.read_text(encoding="utf-8")) if card_path.exists() else dict(p)
+    _lms_unload_all()
+    _lms_load(CFG["gpu"].get("judge_model", ""))
     verdict = byrdjudge.judge_card(ROOT, card, image_path)
     card.update(score=verdict["score"], tags=verdict["tags"], caption=verdict["caption"])
     card["rubric_scores"] = verdict["scores"]
@@ -170,6 +185,8 @@ def _lms_chat(prompt: str, max_tokens=900) -> str:
     model = CFG["gpu"].get("operator_model", "")
     if not model or model.startswith("CHANGE_ME"):
         raise RuntimeError("gpu.operator_model not set in byrdhouse.config.json")
+    _lms_unload_all()
+    _lms_load(model)
     lms = CFG["services"]["lmstudio"].rstrip("/")
     req = urllib.request.Request(
         f"{lms}/chat/completions",
@@ -302,8 +319,10 @@ def main():
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--poll", type=float, default=5.0)
     args = ap.parse_args()
+    global GPU_ENABLED
+    GPU_ENABLED = not args.no_gpu
 
-    gpu = Gpu(enabled=not args.no_gpu)
+    gpu = Gpu(enabled=GPU_ENABLED)
     log(f"{WORKER_ID} starting — router {ROUTER}, mode {gpu.mode}, gpu={'on' if gpu.enabled else 'off'}")
     last_beat = 0.0
     idle_streak = 0

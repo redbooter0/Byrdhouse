@@ -39,7 +39,6 @@ For BYRD-MINI, same thing with `scripts\setup-mini.ps1` (roots at `D:\ByrdHouse`
 | `docs/ROOM_MAP.md` | The 14 rooms, two lanes, MCP roster |
 | `docs/CLAUDE_CODE_TASKS.md` | U0 work orders to hand to Claude Code on each machine |
 | `recipes/` | Versioned image recipes: `yt_thumbnail` + the CareyRPG pack (tier list, build guide, shock reveal, vs matchup) |
-| `backend/` + `odysseus/` + `docker-compose.yml` | Auxiliary smart-home/AI-hub stack (Node Stripe backend + FastAPI HA/Ollama gateway) — see `docs/SMART_HOME_HUB.md`. Monetization surface **frozen** per Blueprint v2 §1.8 until real external demand |
 
 ## The operating rules (from the blueprints)
 

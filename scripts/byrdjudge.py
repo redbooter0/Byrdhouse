@@ -18,11 +18,12 @@ import os
 import re
 import sys
 import urllib.request
+import urllib.error
 from pathlib import Path
 
 
 def _load(path):
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    return json.loads(Path(path).read_text(encoding="utf-8-sig"))
 
 
 def _find_recipe_spec(root: Path, recipe_tag: str):
@@ -69,8 +70,12 @@ def judge_card(root, card: dict, image_path) -> dict:
     req = urllib.request.Request(
         f"{lms}/chat/completions", data=json.dumps(payload).encode(),
         headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=300) as r:
-        content = json.loads(r.read().decode())["choices"][0]["message"]["content"]
+    try:
+        with urllib.request.urlopen(req, timeout=300) as r:
+            content = json.loads(r.read().decode())["choices"][0]["message"]["content"]
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"LM Studio judge request failed: HTTP {e.code} {body[:1000]}") from e
 
     m = re.search(r"\{.*\}", content, re.DOTALL)
     if not m:
