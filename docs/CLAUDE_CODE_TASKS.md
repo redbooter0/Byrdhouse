@@ -1,91 +1,103 @@
-# CLAUDE_CODE_TASKS — U0 STABILIZE work orders
+# CLAUDE_CODE_TASKS — ByrdHouse active work orders
 
-Hand each task to a Claude Code session on the named machine. Every task ends in a
-testable check. Log completions in docs/STATE.md's Done log and any decisions in
-docs/DECISIONS.md.
+Every task must end with a concrete check. Do not loop on setup/status commands. Log completions in `docs/STATE.md` and decisions in `docs/DECISIONS.md`.
 
----
+## Current stage
 
-## Task 1 — Config + root + first status (BYRD-MINI)
+U0 is functionally complete. The active stage is **U1 IMAGE LAB**.
 
-1. Clone/pull this repo, run `powershell -ExecutionPolicy Bypass -File scripts\setup-mini.ps1`
-2. Edit `D:\ByrdHouse\byrdhouse.config.json`: real Tailscale hostnames, LM Studio operator
-   model key, memory.* section (`D:\ByrdHouse\db\byrdhouse_memory.db`, table `memories`,
-   collection `byrdhouse_memories`), fresh admin_token.
-3. Run `D:\ByrdHouse\scripts\byrd-status.ps1`.
+Source of truth:
 
-**Done when:** status runs, `D:\ByrdHouse\status.json` exists, and every red has a
-known reason (fix or log it).
+- MINI router/dashboard: `http://byrd-mini:8787`
+- MINI root: `D:\ByrdHouse`
+- GAMING root: `E:\ByrdHouse`
+- GitHub repo: `https://github.com/redbooter0/Byrdhouse.git`
 
-## Task 2 — De-hardcode all existing scripts (BYRD-MINI)
+Known non-blocking yellows:
 
-Search every existing ByrdHouse script (`D:\ByrdHouse\scripts`, importers, byrdimage
-submitters) for IP literals (`192.168.`, `100.`, `http://<ip>`), port literals, and absolute
-paths to the other machine. Replace each with a read from the config:
+- BYRD-VAULT offline/unreachable.
+- GAMING memory drift not configured because memory belongs on MINI.
+- MINI has no NVIDIA GPU.
+- Old dead jobs from prior debugging.
+
+## Command-loop prevention
+
+Use this before touching commands:
+
+1. Is the target machine already set up? If yes, do not run setup.
+2. Is the yellow status already documented? If yes, do not chase it.
+3. Is there a new failing job? If no, do not inspect old dead jobs.
+4. Is the dashboard/router reachable? If yes, use the app path instead of manual scripts.
+5. Did a command fail twice with the same error? Stop and fix that exact error; do not rerun the same command a third time unchanged.
+
+## Task A — U0 closeout reboot test
+
+Run once, not repeatedly.
+
+1. Reboot BYRD-MINI.
+2. Reboot BYRD-GAMING.
+3. Open `http://byrd-mini:8787`.
+4. Confirm worker `worker-byrd-gaming` returns online.
+5. Queue one `rpg_tier_list` image from the dashboard.
+6. Confirm it becomes generated, judged, and reviewable.
+
+**Done when:** one new artifact has score/tags/caption and can be approved.
+
+**If it fails:** fix only the failing startup/service. Do not rerun setup unless the root folder is missing.
+
+## Task B — U1 image recipe batch
+
+Use the working router/worker path.
+
+1. Queue 10 CareyRPG images:
+   - 3 `rpg_tier_list`
+   - 2 `build_guide`
+   - 2 `shock_reveal`
+   - 2 `vs_matchup`
+   - 1 `yt_thumbnail`
+2. Approve/reject each from the dashboard gallery.
+3. Record bad patterns in recipe/rubric notes.
+
+**Done when:** at least 5 approved artifacts have score, tags, caption, prompt, seed, checkpoint, and purpose.
+
+## Task C — U1 thumbnail truth test
+
+1. Queue at least 2 `content.thumbnail` jobs.
+2. Confirm each generated image has no baked-in title text.
+3. Confirm each final thumbnail is composited by `scripts/compose_thumbnail.py`.
+4. Confirm final PNGs are 1280x720.
+
+**Done when:** two final thumbnails exist and their title text is real composited text.
+
+## Task D — U1 export and review hygiene
+
+1. Run/export approved and rejected artifacts to CSV through the `export.csv` job.
+2. Confirm approved/rejected decisions are represented in the export.
+3. Ignore old debugging `dead` jobs unless they block new queue work.
+
+**Done when:** one CSV artifact exists under `artifacts\exports`.
+
+## Task E — Code-change gate
+
+Only use this when code changed.
+
+1. Run:
 
 ```powershell
-$cfg = Get-Content "$env:BYRDHOUSE_ROOT\byrdhouse.config.json" -Raw | ConvertFrom-Json
-$comfy = $cfg.services.comfyui
+python tests\integration_test.py
 ```
 
-**Done when:** `grep` for hardcoded IPs across all scripts returns zero hits, and the
-remote-generation path still works (submit one job MINI → GAMING).
+2. If passing, commit and push.
+3. If failing, fix the failing test only.
 
-## Task 3 — Mirror to gaming PC (BYRD-GAMING)
+**Done when:** repo main is clean and pushed.
 
-1. Clone/pull this repo, run `powershell -ExecutionPolicy Bypass -File scripts\setup-gaming.ps1`
-2. Copy the *tuned* config from MINI (or re-apply the same edits) to `E:\ByrdHouse\byrdhouse.config.json`.
-3. Run `byrd-status.ps1` here too.
+## Frozen until later
 
-**Done when:** both machines produce a status.json and each can reach the other's
-services by Tailscale name.
+- Odysseus/smart-home/Stripe.
+- User accounts/credits/newsletters.
+- Miner automation.
+- U5 video/motion pipeline.
+- U6 Godot belt integration.
 
-## Task 4 — byrdimage re-test (BYRD-GAMING)
-
-The kit now ships its own submit layer (`scripts/byrdimage.py` + `byrdimage.ps1` +
-`workflows/sdxl_base_api.json`) that implements the v2 §1.4 Action 3 fixes. If a
-legacy byrdimage-full exists, either port its extra steps (knowledge sync, gallery)
-on top or retire it in favor of this one — log the choice in DECISIONS.md.
-
-Run the pipeline once end-to-end and verify all 7 acceptance checks:
-
-1. Prompt submitted through the standard entry point (no manual ComfyUI clicking)
-2. Image generated (fresh file in the ComfyUI output)
-3. **Seed was randomized at submit time** (different from previous run's card; not the workflow's baked-in seed)
-4. Unique filename prefix per job (no stale-output confusion)
-5. Image archived to `artifacts\<project>\<yyyy-mm>\`
-6. Sidecar metadata card written next to it (prompt, negative, seed, checkpoint actually loaded, purpose)
-7. Gallery/knowledge sync ran (gallery index includes the new image)
-
-**Done when:** 7/7 pass twice in a row. If any fail, fix at the submit layer (v2 §1.4
-Action 3) and log the fix in DECISIONS.md.
-
-## Task 5 — Mode ritual dry-run (BYRD-GAMING)
-
-1. With the operator model loaded, run `scripts\use-image-mode.ps1` — must reach
-   "IMAGE mode ready" with VRAM verified under threshold.
-2. Run `scripts\use-image-mode.ps1 -Restore` — operator model reloads.
-
-**Done when:** both directions work without touching nvidia-smi by hand.
-
-## Task 6 — MINI DAY (BYRD-MINI, when it arrives)
-
-1. Clone repo → `powershell -ExecutionPolicy Bypass -File scripts\setup-mini.ps1`
-2. Copy the tuned config values from GAMING (or re-edit placeholders); fill the
-   `memory.*` section (`D:\ByrdHouse\db\byrdhouse_memory.db`, table `memories`,
-   collection `byrdhouse_memories`)
-3. Move the belt home: run `scripts\set-router-host.ps1 mini` on BOTH machines,
-   copy `E:\ByrdHouse\db\byrdhouse.db` → `D:\ByrdHouse\db\`, restart both with
-   `start-byrdhouse.ps1` (it prints the checklist)
-4. `install-startup-task.ps1` + `backup-nightly.ps1 -Install` on MINI (admin)
-5. Verify from the iPad: dashboard now at `http://byrd-mini:8787`, all chips green,
-   queue a generation — MINI routes, GAMING generates
-
-**Done when:** byrd-status green on both machines, dashboard served from MINI,
-one image round-trips through the new belt home.
-
-## U0 Definition of Done (from Blueprint v2)
-
-Cold-reboot both PCs → one command each → byrd-status all green → generate one
-image end-to-end → nightly backup file exists on BYRD-VAULT (vault can lag; it's the
-last box).
+These can be discussed, but they should not interrupt U1 unless the founder explicitly changes priority.

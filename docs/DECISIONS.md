@@ -2,6 +2,7 @@
 
 *Append-only log. One line per decision: date · decision · why. Never edit old lines.*
 
+- 2026-07-10 · Treat U0 as functionally complete and move active work to U1 Image Lab; setup/status commands are gated by anti-loop rules · prevents future sessions from re-running machine setup instead of using the working belt
 - 2026-07-10 · Built the full software side (U0–U3 + judge + dashboard) up front per founder request; unlocks still gate what gets USED and verified on hardware, but the code ships now so machines only need config + debugging · founder decision overrides build-in-order
 - 2026-07-10 · Router implemented with Python stdlib (http.server + sqlite3) instead of FastAPI — same v2 §6 contract, zero pip installs on the machines; can swap frameworks later without changing routes · fewer failure modes on fresh Windows boxes
 - 2026-07-10 · Until BYRD-MINI is set up, BYRD-GAMING hosts the router (startup.run_router=true); when MINI arrives: flip run_router false on GAMING, true on MINI, point services.router at byrd-mini, copy db/byrdhouse.db over · belt owner is MINI per blueprint, GAMING is a temporary host

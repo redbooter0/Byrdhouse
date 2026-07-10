@@ -2,7 +2,7 @@
 
 Local-first AI command platform: iPad Pro cockpit · BYRD-MINI nervous system · BYRD-GAMING heavy worker.
 
-This repo is the **source of truth for the ByrdHouse platform kit** — config, status tooling, docs, and recipes that get synced onto the machines. The full vision lives in the Master Blueprint docs (v2 technical spec, v3 Money Map, v3.1 Content Engine); the current build stage is **U0 STABILIZE** (see `docs/STATE.md`).
+This repo is the **source of truth for the ByrdHouse platform kit** — config, status tooling, docs, and recipes that get synced onto the machines. The full vision lives in the Master Blueprint docs (v2 technical spec, v3 Money Map, v3.1 Content Engine). U0 is functionally complete on the real machines; the active stage is **U1 IMAGE LAB** (see `docs/STATE.md`).
 
 ## Quick start — BYRD-GAMING (E:\ByrdHouse)
 
@@ -37,7 +37,7 @@ For BYRD-MINI, same thing with `scripts\setup-mini.ps1` (roots at `D:\ByrdHouse`
 | `docs/STATE.md` | One page of current truth — update weekly |
 | `docs/DECISIONS.md` | Append-only decision log |
 | `docs/ROOM_MAP.md` | The 14 rooms, two lanes, MCP roster |
-| `docs/CLAUDE_CODE_TASKS.md` | U0 work orders to hand to Claude Code on each machine |
+| `docs/CLAUDE_CODE_TASKS.md` | Active work orders and anti-command-loop rules |
 | `recipes/` | Versioned image recipes: `yt_thumbnail` + the CareyRPG pack (tier list, build guide, shock reveal, vs matchup) |
 
 ## The operating rules (from the blueprints)
