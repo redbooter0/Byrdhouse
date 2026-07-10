@@ -31,13 +31,13 @@ The belt in this repo: `router/router.py` (API v1 per v2 §6 + SQLite schema per
 - `scripts/` — PowerShell kit: `setup-gaming.ps1` / `setup-mini.ps1` (idempotent bootstrap), `byrd-status.ps1` (health report + `status.json`, exit 0/1/2 = green/yellow/red), `start-byrdhouse.ps1` (the one startup command), `install-startup-task.ps1` (logon task), `use-image-mode.ps1` (mode ritual). Python is stdlib-only by design (`byrdimage.py` submit layer, `rag_system.py`) — no pip installs on the machines.
 - `workflows/` — ComfyUI API-format graphs; `byrdimage.py` fills checkpoint/prompt/seed/prefix at submit time and aborts if any CLIPTextEncode node would go stale. Test changes against a mock ComfyUI (`/prompt`, `/history/{id}`, `/view`) rather than live.
 - `recipes/` — versioned image recipes. Thumbnail text is NEVER diffused — art is generated, text is composited afterward (v3.1 §3).
-- `backend/` + `odysseus/` — auxiliary smart-home/AI-hub stack (see `docs/SMART_HOME_HUB.md`): Express + Stripe proxy (port 3001) → Odysseus FastAPI gateway (port 3000, OpenAI-compatible `/v1/*` + Home Assistant `/api/home/*`) → Ollama. Run via `docker-compose up -d`, or `npm start` in `backend/` and `uvicorn main:app --port 3000` in `odysseus/`. The Stripe/monetization surface is frozen; don't extend it.
+- Odysseus/smart-home/Stripe code is intentionally not part of this repo. Do not reintroduce it without a new founder decision; the active local model GUI is Cherry Studio, while ByrdHouse owns the router/worker/dashboard belt.
 - **Tests:** `python tests/integration_test.py` runs the whole belt (real router + worker against mock ComfyUI/LM Studio, 22 checks) with zero GPU — run it after touching router/worker/byrdimage/judge/compositor code. CI (`.github/workflows/ci.yml`) runs it on every push plus PowerShell syntax parsing and JSON validation. Pillow is the kit's only pip dependency (thumbnail compositor).
 - **Content engine (v3.1):** `content.thumbnail` is two-pass — recipe art via ComfyUI, then REAL text composited by `scripts/compose_thumbnail.py`; never let a model diffuse title text. `content.package` injects `recipes/voice_carey.json` few-shots so output sounds like Carey. `content.research` ranks outlier CSVs.
 
 ## Conventions
 
 - Scripts target Windows PowerShell 5.1 (both machines are Windows). Keep them dependency-free.
-- `.env` is gitignored; never commit tokens (Stripe, HA, HF, admin_token).
+- `.env` is gitignored; never commit tokens (HF, admin_token, local service credentials).
 - When completing a work order: check the box in `docs/STATE.md`, add a Done-log line, and record any decision in `docs/DECISIONS.md` (append-only, one line, with date and why).
 - The founder prefers GUI-first workflows (Cherry Studio, dashboards); terminal commands are backend/maintenance tools. Provide exact copy-paste commands when instructing.
