@@ -23,7 +23,8 @@ Endpoints (v2 §6):                                          access
   POST /jobs/<id>/cancel    cancel a queued job             token
   POST /jobs/<id>/artifacts {artifacts:[card,...]}          token
   GET  /artifacts?project=&status=&id=&limit=               open
-  GET  /artifacts/<id>/file image bytes (if local)          open
+  GET  /artifacts/<id>/file image bytes (local or preview)  open
+  POST /artifacts/<id>/file upload preview bytes (worker)   token
   POST /artifacts/<id>/review {action:approve|reject|judge} token
   GET  /recipes             list recipe files               open
   POST /workers/heartbeat   {id,caps,mode,vram}             token
@@ -52,6 +53,7 @@ CFG = json.loads((ROOT / "byrdhouse.config.json").read_text(encoding="utf-8-sig"
 TOKEN = CFG["auth"]["admin_token"]
 DB_PATH = ROOT / "db" / "byrdhouse.db"
 DASHBOARD = Path(__file__).resolve().parent.parent / "dashboard"
+PREVIEWS = ROOT / "artifacts" / "_previews"  # worker-uploaded copies for the dashboard
 
 JOB_TYPES = {
     "image.generate", "image.judge", "image.upscale", "video.i2v",
@@ -163,11 +165,18 @@ def reaper():
             print(f"[router] reaper error: {e}")
 
 
+def job_row(jid):
+    return db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
+
+
 def event(actor, action, subject, detail=None, ok=True):
     db().execute(
         "INSERT INTO events(ts,actor,action,subject,detail,ok) VALUES(?,?,?,?,?,?)",
         (now(), actor, action, subject, json.dumps(detail or {}), 1 if ok else 0))
     db().commit()
+    if action.startswith(("job.", "mode.")):  # live console trace of state transitions
+        print(f"[router] {action} {subject} ({actor})"
+              + (f" {detail}" if detail and not ok else ""), flush=True)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -179,6 +188,8 @@ class Handler(BaseHTTPRequestHandler):
     # ── plumbing ─────────────────────────────────────────────────────────────
     def _send(self, obj, code=200, content_type="application/json"):
         body = obj if isinstance(obj, bytes) else json.dumps(obj, indent=1).encode()
+        if content_type.startswith(("application/json", "text/")) and "charset" not in content_type:
+            content_type += "; charset=utf-8"
         self.send_response(code)
         self.send_header("Content-Type", content_type)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -230,13 +241,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._send([dict(r) for r in db().execute(sql, args)])
 
         if path == "/artifacts":
-            sql, args = "SELECT * FROM artifacts", []
+            # One card per output: retried jobs used to register duplicate rows
+            # for the same PNG, so show only the latest row per (job_id, path).
+            sql, args = ("SELECT * FROM artifacts WHERE rowid IN"
+                         " (SELECT MAX(rowid) FROM artifacts GROUP BY job_id, COALESCE(path, id))"), []
             conds = []
             for col, key in (("status", "status"), ("project_id", "project"), ("id", "id")):
                 if key in q:
                     conds.append(f"{col}=?"); args.append(q[key])
             if conds:
-                sql += " WHERE " + " AND ".join(conds)
+                sql += " AND " + " AND ".join(conds)
             sql += " ORDER BY created_at DESC LIMIT ?"
             args.append(int(q.get("limit", 50)))
             return self._send([dict(r) for r in db().execute(sql, args)])
@@ -248,6 +262,11 @@ class Handler(BaseHTTPRequestHandler):
                 data = Path(row["path"]).read_bytes()
                 ctype = "image/png" if row["path"].endswith(".png") else "application/octet-stream"
                 return self._send(data, content_type=ctype)
+            # artifact files live on the worker's disk — fall back to the
+            # preview copy the worker uploaded at registration time
+            cached = PREVIEWS / f"{m.group(1)}.png"
+            if row and cached.exists():
+                return self._send(cached.read_bytes(), content_type="image/png")
             return self._send({"error": "file not on this host"}, 404)
 
         if path == "/recipes":
@@ -320,6 +339,17 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authed():
             return self._send({"error": "bad or missing bearer token"}, 401)
         path = urlparse(self.path).path.rstrip("/")
+
+        m = re.fullmatch(r"/artifacts/([\w.-]+)/file", path)
+        if m:  # raw image upload from the worker (body is bytes, not JSON)
+            n = int(self.headers.get("Content-Length") or 0)
+            if not 0 < n <= 20_000_000:
+                return self._send({"error": "bad upload size"}, 400)
+            PREVIEWS.mkdir(parents=True, exist_ok=True)
+            (PREVIEWS / f"{m.group(1)}.png").write_bytes(self.rfile.read(n))
+            event(self._actor(), "artifact.preview", m.group(1), {"bytes": n})
+            return self._send({"ok": True}, 201)
+
         try:
             body = self._body()
         except json.JSONDecodeError:
@@ -368,7 +398,7 @@ class Handler(BaseHTTPRequestHandler):
         m = re.fullmatch(r"/jobs/([\w.-]+)/status", path)
         if m:
             jid, new_status = m.group(1), body.get("status")
-            job = db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
+            job = job_row(jid)
             if not job:
                 return self._send({"error": "no such job"}, 404)
             if new_status == "running":
@@ -379,17 +409,17 @@ class Handler(BaseHTTPRequestHandler):
                              (final, now(), jid))
             elif new_status == "failed":
                 fail_job(job, str(body.get("error", ""))[:2000], self._actor())
-                return self._send(dict(db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()))
+                return self._send(dict(job_row(jid)))
             else:
                 return self._send({"error": f"bad status '{new_status}'"}, 400)
             db().commit()
             event(self._actor(), f"job.{new_status}", jid)
-            return self._send(dict(db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()))
+            return self._send(dict(job_row(jid)))
 
         m = re.fullmatch(r"/jobs/([\w.-]+)/requeue", path)
         if m:
             jid = m.group(1)
-            job = db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
+            job = job_row(jid)
             if not job:
                 return self._send({"error": "no such job"}, 404)
             if job["status"] not in ("dead", "cancelled", "claimed", "running"):
@@ -399,12 +429,12 @@ class Handler(BaseHTTPRequestHandler):
                 " error=NULL, finished_at=NULL WHERE id=?", (jid,))
             db().commit()
             event(self._actor(), "job.requeue", jid, {"was": job["status"]})
-            return self._send(dict(db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()))
+            return self._send(dict(job_row(jid)))
 
         m = re.fullmatch(r"/jobs/([\w.-]+)/cancel", path)
         if m:
             jid = m.group(1)
-            job = db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
+            job = job_row(jid)
             if not job:
                 return self._send({"error": "no such job"}, 404)
             if job["status"] != "queued":
@@ -412,7 +442,7 @@ class Handler(BaseHTTPRequestHandler):
             db().execute("UPDATE jobs SET status='cancelled', finished_at=? WHERE id=?", (now(), jid))
             db().commit()
             event(self._actor(), "job.cancel", jid)
-            return self._send(dict(db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()))
+            return self._send(dict(job_row(jid)))
 
         m = re.fullmatch(r"/jobs/([\w.-]+)/artifacts", path)
         if m:

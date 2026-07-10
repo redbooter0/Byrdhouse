@@ -110,6 +110,8 @@ U2/U3 are already partially built, but they should be treated as usage/hardening
 
 ## Done log
 
+- 2026-07-10 · U0 polish sprint (9 root-cause fixes, one commit each): charset=utf-8 on all responses; artifact dedupe via deterministic IDs + latest-per-(job,path) query; state-aware approve/reject buttons; adaptive auto-refresh (4s active / 15s idle / paused hidden); PNG previews via worker→router byte upload (files live on GAMING, router on MINI); manual GPU-mode buttons removed (worker self-schedules); in-flight job placeholders; mobile Safari cleanup; worker/router dedup refactor + live transition logging. Integration test now 29 checks
+
 - 2026-07-10 · U0 real-hardware belt completed: MINI router + memory home, GAMING worker online, ComfyUI image generated, Qwen-VL judge scored it, artifact approved, GitHub main pushed at `861ef4a`.
 - 2026-07-10 · Removed Odysseus/smart-home/Stripe stack from repo; Cherry Studio remains the local model GUI.
 - 2026-07-10 · Belt hardening: router reaper thread requeues jobs stuck on a dead worker, worker liveness computed server-side, `/jobs/{id}/requeue` and `/jobs/{id}/cancel` added. Integration test includes requeue/cancel/liveness/status checks.
