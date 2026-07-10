@@ -54,6 +54,7 @@ if (Test-Path $cfgPath) {
 # ── 2. Hosts resolvable (Tailscale MagicDNS) ─────────────────────────────────
 if ($cfg) {
     foreach ($h in $cfg.hosts.PSObject.Properties) {
+        if (-not $h.Value -or $h.Value -eq 'none') { continue }   # machine not built yet - set "vault": "" to skip
         if ($h.Value -eq $env:COMPUTERNAME) { continue }
         if (Test-Connection -ComputerName $h.Value -Count 1 -Quiet) {
             Add-Check "host_$($h.Name)" 'green' "$($h.Value) reachable"
