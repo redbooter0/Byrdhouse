@@ -1,4 +1,4 @@
-# install-startup-task.ps1 — register start-byrdhouse.ps1 as a logon task
+﻿# install-startup-task.ps1 — register start-byrdhouse.ps1 as a logon task
 # (Blueprint v2 U0: "one startup command per machine as a scheduled task").
 # Run once from an ADMIN PowerShell:
 #   powershell -ExecutionPolicy Bypass -File scripts\install-startup-task.ps1

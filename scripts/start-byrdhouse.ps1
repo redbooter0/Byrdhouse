@@ -1,4 +1,4 @@
-# start-byrdhouse.ps1 — the ONE command per machine (Blueprint v2, U0 deliverable).
+﻿# start-byrdhouse.ps1 — the ONE command per machine (Blueprint v2, U0 deliverable).
 # On BYRD-GAMING: brings up LM Studio's server + operator model and ComfyUI,
 # then runs byrd-status. On BYRD-MINI it just skips what isn't installed.
 # Cold-reboot test: run this, read the green report, trust the machine.

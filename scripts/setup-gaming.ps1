@@ -1,4 +1,4 @@
-# setup-gaming.ps1 — BYRD-GAMING bootstrap (Blueprint v2 §8 directory map, U0 kit)
+﻿# setup-gaming.ps1 — BYRD-GAMING bootstrap (Blueprint v2 §8 directory map, U0 kit)
 # Run from a clone of the Byrdhouse repo, in an elevated-or-normal PowerShell:
 #   powershell -ExecutionPolicy Bypass -File scripts\setup-gaming.ps1
 # Idempotent: safe to re-run. Never overwrites an existing config.

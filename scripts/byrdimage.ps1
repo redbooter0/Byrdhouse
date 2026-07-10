@@ -1,4 +1,4 @@
-# byrdimage.ps1 — thin wrapper so image generation is one PowerShell command.
+﻿# byrdimage.ps1 — thin wrapper so image generation is one PowerShell command.
 #   byrdimage -Recipe rpg_tier_list -Project careyrpg -Purpose "tier list test" `
 #             -Slot subject="armored paladin",game="Last Epoch"
 #Requires -Version 5.1
