@@ -132,7 +132,7 @@ async function chips() {
       + ['lmstudio','comfyui','qdrant','router'].map(n =>
           `<span class="chip"><span class="light ${svc(n)}"></span>${n}</span>`).join('')
       + `<span class="chip">queue: ${Object.entries(q).map(([k,v])=>`${esc(k)} ${v}`).join(' · ') || 'empty'}</span>`
-      + (s.workers||[]).map(w => `<span class="chip">${esc(w.id)} <span class="pill">${esc(w.mode)}</span></span>`).join('');
+      + (s.workers||[]).map(w => `<span class="chip"><span class="light ${w.status==='online'?'green':'red'}"></span>${esc(w.id)} <span class="pill">${esc(w.status==='online'?w.mode:'offline')}</span></span>`).join('');
     window._status = s;
   } catch(e) { say('status error: '+e.message); }
 }
@@ -153,6 +153,10 @@ function artCard(a) {
 }
 async function review(id, action) {
   try { await jpost(`/artifacts/${id}/review`, { action }); render(); } catch (e) { say('error: '+e.message); }
+}
+async function jobAct(id, action) {
+  try { await jpost(`/jobs/${id}/${action}`, {}); say(action+'d '+id); render(); }
+  catch (e) { say('error: '+e.message); }
 }
 async function requestMode(m) {
   try { await jpost('/mode', { mode:m }); say(m+' mode requested — worker switches on next heartbeat'); }
@@ -302,10 +306,14 @@ V.events = async () => {
   const ev = await jget('/events?limit=60');
   const jobs = await jget('/jobs?limit=30');
   return `<div class="grid">
-    <div class="panel wide"><h2>Jobs</h2><table><tr><th>id</th><th>type</th><th>status</th><th>worker</th><th>error</th></tr>${
+    <div class="panel wide"><h2>Jobs</h2><table><tr><th>id</th><th>type</th><th>status</th><th>worker</th><th>error</th><th></th></tr>${
       jobs.map(j => `<tr><td class="muted">${esc(j.id)}</td><td>${esc(j.type)}</td>
         <td><span class="pill">${esc(j.status)}</span></td><td class="muted">${esc(j.worker_id||'')}</td>
-        <td class="muted">${esc((j.error||'').slice(0,60))}</td></tr>`).join('')}</table></div>
+        <td class="muted">${esc((j.error||'').slice(0,60))}</td>
+        <td>${['dead','cancelled','claimed','running'].includes(j.status)
+              ? `<button class="s ok" onclick="jobAct('${j.id}','requeue')">requeue</button>` : ''}
+            ${j.status==='queued'
+              ? `<button class="s no" onclick="jobAct('${j.id}','cancel')">cancel</button>` : ''}</td></tr>`).join('')}</table></div>
     <div class="panel wide"><h2>Event log (the bot's future training ground)</h2><table>${ev.map(e =>
       `<tr><td class="muted">${esc((e.ts||'').slice(5,19))}</td><td>${esc(e.actor)}</td><td>${esc(e.action)}</td>
        <td class="muted">${esc(e.subject)}</td><td>${e.ok?'':'<span class="pill" style="color:var(--red)">failed</span>'}</td></tr>`).join('')}</table></div>

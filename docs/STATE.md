@@ -56,6 +56,7 @@ ByrdHouse is a **creator platform**, not a mining platform. Core lanes: image ge
 
 ## Done log
 
+- 2026-07-10 · Belt hardening: router reaper thread requeues jobs stuck on a dead worker (15 min heartbeat silence — generous because worker heartbeats pause during a running job), worker liveness computed server-side (online/offline at 10 min, shown on dashboard chips), new POST /jobs/id/requeue + /jobs/id/cancel endpoints with matching System Room buttons (dashboard stays logic-free). Integration test now 26 checks
 - 2026-07-10 · BYRD-MINI bootstrapped for real: setup-mini.ps1 ran clean after two kit fixes (UTF-8 BOM on all .ps1 — PS 5.1 read BOM-less files as ANSI and parse-crashed; Pillow probe via cmd /c so a missing module can't kill setup). Router + dashboard now serving from the mini at http://byrd-mini:8787 — the MINI handoff from GAMING is underway
 
 - 2026-07-10 · Content engine (v3.1) shipped: content.thumbnail two-pass (art via recipe → REAL text composited by Pillow, 1280x720), content.package (voice-pack packaging via local Qwen), content.research (outlier CSV → ranked ideas), export.csv. Dashboard rebuilt as the room-based Command Center (14 rooms, stats, per-room views). Permanent test suite (tests/integration_test.py, 22 checks) + GitHub Actions CI (belt test, PowerShell parse, JSON validation, node check). set-router-host.ps1 ready for MINI day

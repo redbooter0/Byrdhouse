@@ -19,6 +19,8 @@ Endpoints (v2 §6):                                          access
   GET  /jobs?status=&project=&type=                         open
   POST /jobs/claim          {worker_id,caps,mode}           token
   POST /jobs/<id>/status    {status:running|done|failed}    token
+  POST /jobs/<id>/requeue   retry dead/cancelled/stuck job  token
+  POST /jobs/<id>/cancel    cancel a queued job             token
   POST /jobs/<id>/artifacts {artifacts:[card,...]}          token
   GET  /artifacts?project=&status=&id=&limit=               open
   GET  /artifacts/<id>/file image bytes (if local)          open
@@ -58,6 +60,11 @@ JOB_TYPES = {
     "game.godot_task", "code.task",
 }
 REVIEW_TYPES = {"image.generate", "image.upscale", "video.i2v"}  # done -> needs_review
+
+# Worker heartbeats pause while a job runs (the worker loop is synchronous and
+# a generation can take minutes), so liveness thresholds must be generous.
+WORKER_OFFLINE_SEC = 600    # no heartbeat for 10 min -> reported offline
+JOB_REAP_SEC = 900          # claimed/running 15 min past last heartbeat -> failure path
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs(
@@ -112,6 +119,50 @@ def new_id(prefix: str) -> str:
     return f"{prefix}_{ts}{rand}"
 
 
+def live_workers(cols="*"):
+    """Worker rows with status computed from heartbeat age (the dashboard has
+    no logic — liveness is decided here)."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=WORKER_OFFLINE_SEC)).isoformat()
+    out = []
+    for r in db().execute(f"SELECT {cols} FROM workers"):
+        w = dict(r)
+        if "last_heartbeat" in w:
+            w["status"] = "online" if (w["last_heartbeat"] or "") > cutoff else "offline"
+        out.append(w)
+    return out
+
+
+def fail_job(job, err, actor):
+    """The one retry->dead path (v2 §3): requeue while attempts remain, else dead."""
+    if job["attempts"] < job["max_attempts"]:
+        db().execute("UPDATE jobs SET status='queued', worker_id=NULL, error=? WHERE id=?",
+                     (err, job["id"]))
+    else:
+        db().execute("UPDATE jobs SET status='dead', finished_at=?, error=? WHERE id=?",
+                     (now(), err, job["id"]))
+    db().commit()
+    event(actor, "job.failed", job["id"], {"error": err}, ok=False)
+
+
+def reaper():
+    """Requeue jobs stuck on a dead worker. A job is stuck when it is
+    claimed/running but its worker has not heartbeated for JOB_REAP_SEC —
+    long enough that a slow generation can't be mistaken for a crash."""
+    while True:
+        time.sleep(60)
+        try:
+            cutoff = (datetime.now(timezone.utc) - timedelta(seconds=JOB_REAP_SEC)).isoformat()
+            stuck = db().execute(
+                "SELECT j.* FROM jobs j LEFT JOIN workers w ON w.id=j.worker_id"
+                " WHERE j.status IN ('claimed','running')"
+                " AND j.claimed_at < ? AND COALESCE(w.last_heartbeat,'') < ?",
+                (cutoff, cutoff)).fetchall()
+            for job in stuck:
+                fail_job(job, f"reaped: worker {job['worker_id']} silent > {JOB_REAP_SEC}s", "reaper")
+        except Exception as e:
+            print(f"[router] reaper error: {e}")
+
+
 def event(actor, action, subject, detail=None, ok=True):
     db().execute(
         "INSERT INTO events(ts,actor,action,subject,detail,ok) VALUES(?,?,?,?,?,?)",
@@ -164,8 +215,7 @@ class Handler(BaseHTTPRequestHandler):
                 status = json.loads(sj.read_text(encoding="utf-8"))
             counts = {r["status"]: r["n"] for r in db().execute(
                 "SELECT status, COUNT(*) n FROM jobs GROUP BY status")}
-            workers = [dict(r) for r in db().execute("SELECT * FROM workers")]
-            return self._send({"machine": status, "queue": counts, "workers": workers})
+            return self._send({"machine": status, "queue": counts, "workers": live_workers()})
 
         if path == "/jobs":
             sql, args = "SELECT * FROM jobs", []
@@ -214,8 +264,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/mode":
             req = db().execute("SELECT value FROM kv WHERE key='requested_mode'").fetchone()
-            workers = [dict(r) for r in db().execute("SELECT id,mode,last_heartbeat FROM workers")]
-            return self._send({"requested": req["value"] if req else None, "workers": workers})
+            return self._send({"requested": req["value"] if req else None,
+                               "workers": live_workers("id,mode,last_heartbeat")})
 
         if path == "/stats":
             week = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
@@ -328,19 +378,40 @@ class Handler(BaseHTTPRequestHandler):
                 db().execute("UPDATE jobs SET status=?, finished_at=? WHERE id=?",
                              (final, now(), jid))
             elif new_status == "failed":
-                err = str(body.get("error", ""))[:2000]
-                if job["attempts"] < job["max_attempts"]:
-                    db().execute("UPDATE jobs SET status='queued', worker_id=NULL, error=? WHERE id=?",
-                                 (err, jid))
-                else:
-                    db().execute("UPDATE jobs SET status='dead', finished_at=?, error=? WHERE id=?",
-                                 (now(), err, jid))
+                fail_job(job, str(body.get("error", ""))[:2000], self._actor())
+                return self._send(dict(db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()))
             else:
                 return self._send({"error": f"bad status '{new_status}'"}, 400)
             db().commit()
-            event(self._actor(), f"job.{new_status}", jid,
-                  {"error": body.get("error")} if new_status == "failed" else None,
-                  ok=new_status != "failed")
+            event(self._actor(), f"job.{new_status}", jid)
+            return self._send(dict(db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()))
+
+        m = re.fullmatch(r"/jobs/([\w.-]+)/requeue", path)
+        if m:
+            jid = m.group(1)
+            job = db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
+            if not job:
+                return self._send({"error": "no such job"}, 404)
+            if job["status"] not in ("dead", "cancelled", "claimed", "running"):
+                return self._send({"error": f"cannot requeue a '{job['status']}' job"}, 400)
+            db().execute(
+                "UPDATE jobs SET status='queued', worker_id=NULL, attempts=0,"
+                " error=NULL, finished_at=NULL WHERE id=?", (jid,))
+            db().commit()
+            event(self._actor(), "job.requeue", jid, {"was": job["status"]})
+            return self._send(dict(db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()))
+
+        m = re.fullmatch(r"/jobs/([\w.-]+)/cancel", path)
+        if m:
+            jid = m.group(1)
+            job = db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
+            if not job:
+                return self._send({"error": "no such job"}, 404)
+            if job["status"] != "queued":
+                return self._send({"error": f"only queued jobs can be cancelled (this one is '{job['status']}')"}, 400)
+            db().execute("UPDATE jobs SET status='cancelled', finished_at=? WHERE id=?", (now(), jid))
+            db().commit()
+            event(self._actor(), "job.cancel", jid)
             return self._send(dict(db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()))
 
         m = re.fullmatch(r"/jobs/([\w.-]+)/artifacts", path)
@@ -413,6 +484,7 @@ def main():
     if TOKEN.startswith("CHANGE_ME"):
         print("[router] WARNING: auth.admin_token is still the placeholder — set it in byrdhouse.config.json")
     db()  # create schema up front
+    threading.Thread(target=reaper, daemon=True, name="reaper").start()
     event("router", "router.start", f"port {port}")
     print(f"[router] ByrdHouse router on 0.0.0.0:{port}  db={DB_PATH}")
     ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
