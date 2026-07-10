@@ -1,4 +1,4 @@
-# byrd-status.ps1 v2 — ByrdHouse health report (Blueprint v2, §1.4 Action 2)
+﻿# byrd-status.ps1 v2 — ByrdHouse health report (Blueprint v2, §1.4 Action 2)
 # Answers "is ByrdHouse healthy?" with one command.
 # Console: green/yellow/red per check. Also writes machine-readable
 # %BYRDHOUSE_ROOT%\status.json for the dashboard.

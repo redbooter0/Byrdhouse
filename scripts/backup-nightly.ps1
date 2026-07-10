@@ -1,4 +1,4 @@
-# backup-nightly.ps1 — the BYRD-VAULT job (Blueprint v2 §1.4 Action 7).
+﻿# backup-nightly.ps1 — the BYRD-VAULT job (Blueprint v2 §1.4 Action 7).
 # SQLite .backup (safe while WAL is live) + robocopy mirror of the archive.
 # One dead SSD must never erase the memory system.
 #

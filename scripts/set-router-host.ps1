@@ -1,4 +1,4 @@
-# set-router-host.ps1 — move the belt's home between machines (MINI handoff).
+﻿# set-router-host.ps1 — move the belt's home between machines (MINI handoff).
 # Run ON EACH machine after BYRD-MINI is set up:
 #   scripts\set-router-host.ps1 mini      (on BOTH machines)
 # It updates the local byrdhouse.config.json: services.router points at the

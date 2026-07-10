@@ -1,4 +1,4 @@
-# setup-mini.ps1 — BYRD-MINI bootstrap (nervous system: db, queue, dashboard, memory)
+﻿# setup-mini.ps1 — BYRD-MINI bootstrap (nervous system: db, queue, dashboard, memory)
 # Same as setup-gaming.ps1 but rooted at D:\ByrdHouse. The SQLite operations db
 # (db\byrdhouse.db, Blueprint v2 §5) lives on THIS machine only.
 #Requires -Version 5.1

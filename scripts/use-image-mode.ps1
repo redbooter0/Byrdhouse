@@ -1,4 +1,4 @@
-# use-image-mode.ps1 (hardened) — GPU mode transition ritual (Blueprint v2 §7.1)
+﻿# use-image-mode.ps1 (hardened) — GPU mode transition ritual (Blueprint v2 §7.1)
 # The 3070 holds an LLM OR SDXL, never both. This script makes the switch
 # verified instead of hopeful:
 #   IMAGE mode:    unload all LM Studio models, poll nvidia-smi until VRAM is

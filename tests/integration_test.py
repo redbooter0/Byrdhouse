@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -167,6 +168,20 @@ def main():
         dead = [x for x in api("/jobs?type=image.generate") if x["status"] == "dead"]
         check("dead after retries", len(dead) == 1)
         check("real error message recorded", dead and "no recipe 'nope'" in (dead[0]["error"] or ""))
+
+        print("== requeue + cancel + worker liveness")
+        rq = api(f"/jobs/{dead[0]['id']}/requeue", {})
+        check("dead job requeued", rq["status"] == "queued" and rq["attempts"] == 0 and rq["error"] is None)
+        cx = api(f"/jobs/{rq['id']}/cancel", {})
+        check("queued job cancelled", cx["status"] == "cancelled")
+        try:
+            api(f"/jobs/{cx['id']}/cancel", {})
+            check("cancel refuses non-queued job", False)
+        except urllib.error.HTTPError as e:
+            check("cancel refuses non-queued job", e.code == 400)
+        st = api("/status")
+        check("workers report computed liveness",
+              st["workers"] and all(w.get("status") in ("online", "offline") for w in st["workers"]))
 
         print("== stats + report + dashboard")
         st = api("/stats")
