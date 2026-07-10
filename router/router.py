@@ -232,13 +232,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._send([dict(r) for r in db().execute(sql, args)])
 
         if path == "/artifacts":
-            sql, args = "SELECT * FROM artifacts", []
+            # One card per output: retried jobs used to register duplicate rows
+            # for the same PNG, so show only the latest row per (job_id, path).
+            sql, args = ("SELECT * FROM artifacts WHERE rowid IN"
+                         " (SELECT MAX(rowid) FROM artifacts GROUP BY job_id, COALESCE(path, id))"), []
             conds = []
             for col, key in (("status", "status"), ("project_id", "project"), ("id", "id")):
                 if key in q:
                     conds.append(f"{col}=?"); args.append(q[key])
             if conds:
-                sql += " WHERE " + " AND ".join(conds)
+                sql += " AND " + " AND ".join(conds)
             sql += " ORDER BY created_at DESC LIMIT ?"
             args.append(int(q.get("limit", 50)))
             return self._send([dict(r) for r in db().execute(sql, args)])

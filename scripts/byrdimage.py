@@ -243,7 +243,9 @@ def generate(root, recipe_name, slots, project, purpose,
             dest = month_dir / img["filename"]
             dest.write_bytes(data)
             card = {
-                "artifact_id": new_id("art"),
+                # Deterministic per (job, output file): a retried job re-registers
+                # the same card instead of minting a duplicate row.
+                "artifact_id": f"art.{job_id}.{len(saved)}",
                 "job_id": job_id,
                 "project": project,
                 "kind": "image",
