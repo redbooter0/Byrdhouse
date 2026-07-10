@@ -11,7 +11,7 @@ ByrdHouse is a **creator platform**, not a mining platform. Core lanes: image ge
 ## Snapshot — what works today
 
 - LM Studio serving local models on BYRD-GAMING (Qwen 3.5 9B operator / Gemma fallback)
-- Memory MCP on BYRD-MINI (save/search/recent/status) — verified via Cherry Studio
+- Memory MCP on BYRD-MINI (save/search/recent/status) — verified via Cherry Studio; MINI owns the memory stack and Qdrant drift check
 - SQLite + Qdrant (Docker: byrdhouse-qdrant) memory stack
 - Conversation importer (Inbox → Cleaned → Processed)
 - ComfyUI on BYRD-GAMING, remote job submission from BYRD-MINI proven
@@ -49,10 +49,10 @@ ByrdHouse is a **creator platform**, not a mining platform. Core lanes: image ge
 ## Next actions (gaming PC — everything below is config or debugging, no building)
 
 1. Clone repo, run `scripts\setup-gaming.ps1` (creates E:\ByrdHouse, installs full kit, runs first status)
-2. Edit `E:\ByrdHouse\byrdhouse.config.json` placeholders: hosts, operator_model, judge_model (a Qwen-VL build in LM Studio), ComfyUI dir, admin_token, backup dest
+2. Edit `E:\ByrdHouse\byrdhouse.config.json` placeholders: hosts, operator_model, judge_model (a Qwen-VL build in LM Studio), ComfyUI dir, admin_token, backup dest; on MINI fill `memory.sqlite_db`, `memory.sqlite_table = memories`, and `memory.qdrant_collection = byrdhouse_memories`
 3. Run `scripts\start-byrdhouse.ps1` — boots LM Studio + ComfyUI + router + worker + status. Fix reds. Then `install-startup-task.ps1` and `backup-nightly.ps1 -Install` (both admin, once)
 4. Open the dashboard on the iPad: `http://byrd-gaming:8787` (tailnet) — paste admin token, queue a generation with two taps, approve/reject from the gallery
-5. Cold-reboot test = U0 DoD. When BYRD-MINI arrives: run setup-mini.ps1, flip startup.run_router (false on GAMING, true on MINI), point services.router at byrd-mini, copy db\byrdhouse.db over
+5. Cold-reboot test = U0 DoD. When BYRD-MINI arrives: run setup-mini.ps1, flip startup.run_router (false on GAMING, true on MINI), point services.router at byrd-mini, copy db\byrdhouse.db over, and keep memory/qdrant on MINI
 
 ## Done log
 

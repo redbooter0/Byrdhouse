@@ -10,7 +10,8 @@ docs/DECISIONS.md.
 
 1. Clone/pull this repo, run `powershell -ExecutionPolicy Bypass -File scripts\setup-mini.ps1`
 2. Edit `D:\ByrdHouse\byrdhouse.config.json`: real Tailscale hostnames, LM Studio operator
-   model key, memory.* section (sqlite db path, table, Qdrant collection), fresh admin_token.
+   model key, memory.* section (`D:\ByrdHouse\db\byrdhouse_memory.db`, table `memories`,
+   collection `byrdhouse_memories`), fresh admin_token.
 3. Run `D:\ByrdHouse\scripts\byrd-status.ps1`.
 
 **Done when:** status runs, `D:\ByrdHouse\status.json` exists, and every red has a
@@ -71,7 +72,8 @@ Action 3) and log the fix in DECISIONS.md.
 
 1. Clone repo → `powershell -ExecutionPolicy Bypass -File scripts\setup-mini.ps1`
 2. Copy the tuned config values from GAMING (or re-edit placeholders); fill the
-   `memory.*` section (SQLite path like `D:\ByrdHouse\SQLite\...`, table, Qdrant collection)
+   `memory.*` section (`D:\ByrdHouse\db\byrdhouse_memory.db`, table `memories`,
+   collection `byrdhouse_memories`)
 3. Move the belt home: run `scripts\set-router-host.ps1 mini` on BOTH machines,
    copy `E:\ByrdHouse\db\byrdhouse.db` → `D:\ByrdHouse\db\`, restart both with
    `start-byrdhouse.ps1` (it prints the checklist)

@@ -48,7 +48,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(os.environ.get("BYRDHOUSE_ROOT") or sys.exit("BYRDHOUSE_ROOT not set"))
-CFG = json.loads((ROOT / "byrdhouse.config.json").read_text(encoding="utf-8"))
+CFG = json.loads((ROOT / "byrdhouse.config.json").read_text(encoding="utf-8-sig"))
 TOKEN = CFG["auth"]["admin_token"]
 DB_PATH = ROOT / "db" / "byrdhouse.db"
 DASHBOARD = Path(__file__).resolve().parent.parent / "dashboard"
