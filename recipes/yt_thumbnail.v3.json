@@ -1,0 +1,14 @@
+{
+  "id": "yt_thumbnail",
+  "version": 3,
+  "kind": "image.generate",
+  "template": "{subject}, {emotion} expression, {composition}, {palette} palette, {lighting}, bold readable space for text",
+  "negative": "blurry, watermark, extra fingers, low contrast, dull colors",
+  "vary": {
+    "palette": ["teal-orange", "black-gold", "crimson-slate", "electric-blue"],
+    "lighting": ["rim light", "hard flash", "golden hour", "neon glow"],
+    "composition": ["extreme close-up", "rule-of-thirds", "centered symmetry"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 30, "batch": 4 },
+  "rubric": { "readability": "1-5", "contrast": "1-5", "subject_pop": "1-5", "hook": "1-5" }
+}

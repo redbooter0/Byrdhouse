@@ -1,0 +1,53 @@
+name: belt-ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  belt-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Pillow (the kit's only dependency)
+        run: pip install pillow
+      - name: Validate JSON (config, recipes, workflows)
+        run: |
+          python - <<'EOF'
+          import json, glob
+          for f in ['byrdhouse.config.json', *glob.glob('recipes/*.json'), *glob.glob('workflows/*.json')]:
+              json.load(open(f)); print('OK', f)
+          EOF
+      - name: Belt integration test (router + worker + mocks)
+        run: python tests/integration_test.py
+
+  powershell-parse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse every .ps1 for syntax errors
+        shell: pwsh
+        run: |
+          $bad = $false
+          Get-ChildItem scripts -Filter *.ps1 | ForEach-Object {
+            $tokens = $null; $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors) {
+              $bad = $true
+              Write-Host "SYNTAX ERRORS in $($_.Name):" -ForegroundColor Red
+              $errors | ForEach-Object { Write-Host "  $($_.Extent.StartLineNumber): $($_.Message)" }
+            } else {
+              Write-Host "OK $($_.Name)"
+            }
+          }
+          if ($bad) { exit 1 }
+
+  node-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax-check the smart-home backend
+        run: node --check backend/server.js

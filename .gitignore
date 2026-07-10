@@ -1,0 +1,28 @@
+# Secrets — never commit real keys
+.env
+*.env
+!.env.example
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ByrdHouse runtime state (lives on the machines, not in git)
+db/*.db
+db/*.db-*
+status.json
+artifacts/
+logs/
+
+# Caddy runtime state
+config/caddy_data/
+config/caddy_config/
+
+# OS / editor
+.DS_Store

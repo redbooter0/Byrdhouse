@@ -1,0 +1,83 @@
+# Caddy Reverse Proxy Configuration
+# Handles SSL, routing, caching, and security headers
+
+{
+    # Global settings
+    admin off
+    persist_config off
+
+    # Logging
+    log {
+        output file /data/access.log
+        format json
+    }
+
+    # Performance
+    servers :443 {
+        trust_proxy_header = true
+        protocol {
+            allow_pipeline
+            strict_sni_check
+        }
+    }
+}
+
+# ByrdHouse Frontend (Static files)
+byrdhouse.local, localhost {
+    # Serve static files from odysseus static folder
+    handle_path /static/* {
+        root * /app/static
+        file_server
+        encode gzip
+        cache {
+            match_header /static/
+        }
+    }
+
+    # Home dashboard
+    handle_path /home* {
+        root * /app/static
+        try_files {path} /home.html
+        file_server
+        encode gzip
+    }
+
+    # Fallback to Odysseus frontend
+    handle {
+        reverse_proxy odysseus:3000
+    }
+
+    # Security headers
+    header {
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' wss: https://*.huggingface.co https://*.cohere.ai"
+    }
+}
+
+# ByrdHouse Backend API (Node.js)
+api.byrdhouse.local, localhost:3001 {
+    reverse_proxy byrdhouse-backend:3001
+}
+
+# Odysseus AI Gateway (Python/FastAPI)
+ai.byrdhouse.local, localhost:3000 {
+    reverse_proxy odysseus:3000
+
+    # Increase timeouts for streaming
+    @streaming {
+        header Content-Type "text/event-stream"
+    }
+    handle @streaming {
+        reverse_proxy byrdhouse-backend:3001 {
+            flush_interval -1
+        }
+    }
+}
+
+# Health check endpoint
+health.byrdhouse.local {
+    respond "OK" 200
+}
