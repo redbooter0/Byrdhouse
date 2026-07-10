@@ -259,8 +259,9 @@ class Handler(BaseHTTPRequestHandler):
             path = "/index.html"
         f = (DASHBOARD / path.lstrip("/")).resolve()
         if str(f).startswith(str(DASHBOARD)) and f.is_file():
-            ctype = {"html": "text/html", "js": "text/javascript", "css": "text/css"}.get(
-                f.suffix.lstrip("."), "application/octet-stream")
+            ctype = {"html": "text/html", "js": "text/javascript", "css": "text/css",
+                     "png": "image/png", "svg": "image/svg+xml",
+                     "ico": "image/x-icon"}.get(f.suffix.lstrip("."), "application/octet-stream")
             return self._send(f.read_bytes(), content_type=ctype)
 
         self._send({"error": f"no route {path}"}, 404)
