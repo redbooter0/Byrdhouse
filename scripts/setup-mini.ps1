@@ -9,8 +9,10 @@ param([string]$Root = 'D:\ByrdHouse')
 Write-Host @"
 
 MINI-specific reminders:
-  - Fill in the memory.* section of $Root\byrdhouse.config.json
-    (sqlite_db, sqlite_table, qdrant_collection) so byrd-status can detect
-    silent Qdrant drift — Blueprint v2 lists this as fragile risk #3.
+  - Fill in the memory.* section of $Root\byrdhouse.config.json on MINI:
+    sqlite_db = D:\ByrdHouse\db\byrdhouse_memory.db
+    sqlite_table = memories
+    qdrant_collection = byrdhouse_memories
+    so byrd-status can detect silent Qdrant drift — Blueprint v2 lists this as fragile risk #3.
   - Qdrant Docker container (byrdhouse-qdrant) should be set to restart=always.
 "@ -ForegroundColor Cyan
