@@ -165,11 +165,18 @@ def reaper():
             print(f"[router] reaper error: {e}")
 
 
+def job_row(jid):
+    return db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
+
+
 def event(actor, action, subject, detail=None, ok=True):
     db().execute(
         "INSERT INTO events(ts,actor,action,subject,detail,ok) VALUES(?,?,?,?,?,?)",
         (now(), actor, action, subject, json.dumps(detail or {}), 1 if ok else 0))
     db().commit()
+    if action.startswith(("job.", "mode.")):  # live console trace of state transitions
+        print(f"[router] {action} {subject} ({actor})"
+              + (f" {detail}" if detail and not ok else ""), flush=True)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -391,7 +398,7 @@ class Handler(BaseHTTPRequestHandler):
         m = re.fullmatch(r"/jobs/([\w.-]+)/status", path)
         if m:
             jid, new_status = m.group(1), body.get("status")
-            job = db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
+            job = job_row(jid)
             if not job:
                 return self._send({"error": "no such job"}, 404)
             if new_status == "running":
@@ -402,17 +409,17 @@ class Handler(BaseHTTPRequestHandler):
                              (final, now(), jid))
             elif new_status == "failed":
                 fail_job(job, str(body.get("error", ""))[:2000], self._actor())
-                return self._send(dict(db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()))
+                return self._send(dict(job_row(jid)))
             else:
                 return self._send({"error": f"bad status '{new_status}'"}, 400)
             db().commit()
             event(self._actor(), f"job.{new_status}", jid)
-            return self._send(dict(db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()))
+            return self._send(dict(job_row(jid)))
 
         m = re.fullmatch(r"/jobs/([\w.-]+)/requeue", path)
         if m:
             jid = m.group(1)
-            job = db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
+            job = job_row(jid)
             if not job:
                 return self._send({"error": "no such job"}, 404)
             if job["status"] not in ("dead", "cancelled", "claimed", "running"):
@@ -422,12 +429,12 @@ class Handler(BaseHTTPRequestHandler):
                 " error=NULL, finished_at=NULL WHERE id=?", (jid,))
             db().commit()
             event(self._actor(), "job.requeue", jid, {"was": job["status"]})
-            return self._send(dict(db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()))
+            return self._send(dict(job_row(jid)))
 
         m = re.fullmatch(r"/jobs/([\w.-]+)/cancel", path)
         if m:
             jid = m.group(1)
-            job = db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
+            job = job_row(jid)
             if not job:
                 return self._send({"error": "no such job"}, 404)
             if job["status"] != "queued":
@@ -435,7 +442,7 @@ class Handler(BaseHTTPRequestHandler):
             db().execute("UPDATE jobs SET status='cancelled', finished_at=? WHERE id=?", (now(), jid))
             db().commit()
             event(self._actor(), "job.cancel", jid)
-            return self._send(dict(db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()))
+            return self._send(dict(job_row(jid)))
 
         m = re.fullmatch(r"/jobs/([\w.-]+)/artifacts", path)
         if m:

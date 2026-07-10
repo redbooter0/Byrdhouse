@@ -116,6 +116,18 @@ class Gpu:
                                    "caps": CAPS, "mode": self.mode})
 
 
+def register_cards(job, cards):
+    """One path for every generated image: register the cards, upload preview
+    bytes for the dashboard, auto-enqueue the judge pass (v2 §7.1 step 5)."""
+    api(f"/jobs/{job['id']}/artifacts", {"artifacts": cards})
+    for card in cards:
+        upload_preview(card["artifact_id"], card["path"])
+        api("/jobs", {"type": "image.judge", "project": card["project"],
+                      "required_mode": "OPERATOR", "required_caps": ["lmstudio"],
+                      "payload": {"artifact_id": card["artifact_id"],
+                                  "path": card["path"]}})
+
+
 def run_generate(job) -> None:
     p = json.loads(job["payload"])
     job_id, saved = byrdimage.generate(
@@ -126,14 +138,7 @@ def run_generate(job) -> None:
     for png, card in saved:
         card["path"] = str(png)
         cards.append(card)
-    api(f"/jobs/{job['id']}/artifacts", {"artifacts": cards})
-    for card in cards:
-        upload_preview(card["artifact_id"], card["path"])
-    for card in cards:  # v2 §7.1 step 5: auto-enqueue the judge pass
-        api("/jobs", {"type": "image.judge", "project": card["project"],
-                      "required_mode": "OPERATOR", "required_caps": ["lmstudio"],
-                      "payload": {"artifact_id": card["artifact_id"],
-                                  "path": card["path"]}})
+    register_cards(job, cards)
 
 
 def run_judge(job) -> None:
@@ -190,14 +195,7 @@ def run_content_thumbnail(job) -> None:
         final.with_suffix(".png.json").write_text(json.dumps(card, indent=2),
                                                   encoding="utf-8")
         cards.append(card)
-    api(f"/jobs/{job['id']}/artifacts", {"artifacts": cards})
-    for card in cards:
-        upload_preview(card["artifact_id"], card["path"])
-    for card in cards:
-        api("/jobs", {"type": "image.judge", "project": card["project"],
-                      "required_mode": "OPERATOR", "required_caps": ["lmstudio"],
-                      "payload": {"artifact_id": card["artifact_id"],
-                                  "path": card["path"]}})
+    register_cards(job, cards)
 
 
 def _lms_chat(prompt: str, max_tokens=900) -> str:
