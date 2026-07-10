@@ -183,6 +183,12 @@ def main():
         check("workers report computed liveness",
               st["workers"] and all(w.get("status") in ("online", "offline") for w in st["workers"]))
 
+        # PowerShell 5.1 writes status.json with a UTF-8 BOM — /status must tolerate it
+        (ROOT / "status.json").write_bytes(
+            b"\xef\xbb\xbf" + json.dumps({"host": "TEST", "overall": "green", "checks": []}).encode())
+        st = api("/status")
+        check("/status reads BOM'd status.json", st["machine"].get("host") == "TEST")
+
         print("== stats + report + dashboard")
         st = api("/stats")
         check("stats counts artifacts", st["artifacts_total"] >= 4, str(st))

@@ -212,7 +212,7 @@ class Handler(BaseHTTPRequestHandler):
             status = {}
             sj = ROOT / "status.json"
             if sj.exists():
-                status = json.loads(sj.read_text(encoding="utf-8"))
+                status = json.loads(sj.read_text(encoding="utf-8-sig"))
             counts = {r["status"]: r["n"] for r in db().execute(
                 "SELECT status, COUNT(*) n FROM jobs GROUP BY status")}
             return self._send({"machine": status, "queue": counts, "workers": live_workers()})
@@ -254,7 +254,7 @@ class Handler(BaseHTTPRequestHandler):
             out = []
             for p in sorted((ROOT / "recipes").glob("*.v*.json")):
                 try:
-                    r = json.loads(p.read_text(encoding="utf-8"))
+                    r = json.loads(p.read_text(encoding="utf-8-sig"))
                     out.append({"id": r["id"], "version": r["version"], "kind": r.get("kind"),
                                 "slots": re.findall(r"\{(\w+)\}", r.get("template", "")),
                                 "vary": list(r.get("vary", {}).keys()), "file": p.name})
