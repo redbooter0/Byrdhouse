@@ -340,7 +340,16 @@ async function render() {
   catch (e) { say('render error: '+e.message); }
 }
 async function tick() { await chips(); await render(); }
-renderRooms(); tick(); setInterval(tick, 12000);
+function activeJobs() {
+  const q = (window._status||{}).queue || {};
+  return (q.queued||0) + (q.claimed||0) + (q.running||0);
+}
+async function loop() {
+  if (!document.hidden) await tick();
+  setTimeout(loop, activeJobs() ? 4000 : 15000);  // poll fast only while jobs are in flight
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
+renderRooms(); loop();
 </script>
 </body>
 </html>
