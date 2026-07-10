@@ -28,7 +28,7 @@ import byrdjudge  # noqa: E402
 import compose_thumbnail  # noqa: E402
 
 ROOT = Path(os.environ.get("BYRDHOUSE_ROOT") or sys.exit("BYRDHOUSE_ROOT not set"))
-CFG = json.loads((ROOT / "byrdhouse.config.json").read_text(encoding="utf-8"))
+CFG = json.loads((ROOT / "byrdhouse.config.json").read_text(encoding="utf-8-sig"))
 ROUTER = CFG["services"]["router"].rstrip("/")
 TOKEN = CFG["auth"]["admin_token"]
 WORKER_ID = f"worker-{socket.gethostname().lower()}"

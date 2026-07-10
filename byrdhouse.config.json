@@ -9,7 +9,7 @@
     "comfyui": "http://byrd-gaming:8188",
     "lmstudio": "http://byrd-gaming:1234/v1",
     "qdrant": "http://byrd-mini:6333",
-    "router": "http://byrd-mini:8787"
+    "router": "http://byrd-gaming:8787"
   },
   "paths": {
     "mini_root": "D:/ByrdHouse",
@@ -19,6 +19,7 @@
     "_comment": "Used by start-byrdhouse.ps1. comfyui_dir holds your ComfyUI launcher (portable installs: run_nvidia_gpu.bat). run_router=true hosts the belt API on THIS machine — true on GAMING until BYRD-MINI is set up, then flip it to false here, true on MINI, and point services.router at byrd-mini. run_worker=true runs the job daemon (GAMING only).",
     "comfyui_dir": "CHANGE_ME_e.g._E:/ComfyUI_windows_portable",
     "comfyui_cmd": "run_nvidia_gpu.bat",
+    "python_exe": "CHANGE_ME_e.g._E:/ByrdHouse/Generators/ComfyUI/.venv/Scripts/python.exe",
     "run_router": true,
     "run_worker": true
   },

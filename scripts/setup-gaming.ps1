@@ -11,7 +11,7 @@ $repo = Split-Path $PSScriptRoot -Parent
 Write-Host "`nByrdHouse gaming-PC setup → $Root`n" -ForegroundColor Cyan
 
 # 1. Directory map (v2 §8)
-$dirs = 'db','docs','recipes','workflows','projects','artifacts','inbox','cleaned','processed','logs','scripts'
+$dirs = 'db','docs','recipes','workflows','projects','artifacts','inbox','cleaned','processed','logs','scripts','router','dashboard'
 foreach ($d in $dirs) {
     $p = Join-Path $Root $d
     if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null; Write-Host "  created $p" }

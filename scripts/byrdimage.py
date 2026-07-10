@@ -48,7 +48,7 @@ def die(msg: str) -> None:
 
 
 def load_json(path: Path):
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8-sig") as f:
         return json.load(f)
 
 
@@ -66,6 +66,39 @@ def find_recipe(root: Path, name: str) -> Path:
         m = re.search(r"\.v(\d+)\.json$", p.name)
         return int(m.group(1)) if m else 0
     return max(candidates, key=version)
+
+
+def resolve_checkpoint(root: Path, requested: str) -> str:
+    requested = requested.strip()
+    if not requested:
+        die("no checkpoint")
+
+    if requested.lower().endswith(".safetensors"):
+        stem = requested[:-len(".safetensors")]
+    else:
+        stem = requested
+
+    checkpoints = sorted((root / "Generators" / "ComfyUI" / "models" / "checkpoints").glob("*.safetensors"))
+    if not checkpoints:
+        return requested if requested.lower().endswith(".safetensors") else f"{requested}.safetensors"
+
+    def norm(text: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "", text.lower())
+
+    requested_norm = norm(requested)
+    stem_norm = norm(stem)
+
+    exact = [p for p in checkpoints if norm(p.name) == requested_norm or norm(p.stem) == stem_norm]
+    if exact:
+        return exact[0].name
+
+    prefix_matches = [p for p in checkpoints if requested_norm in norm(p.name) or stem_norm in norm(p.stem)]
+    if len(prefix_matches) == 1:
+        return prefix_matches[0].name
+    if prefix_matches:
+        return min(prefix_matches, key=lambda p: len(p.name)).name
+
+    return requested if requested.lower().endswith(".safetensors") else f"{requested}.safetensors"
 
 
 def http_json(url: str, payload=None, timeout=30):
@@ -106,9 +139,7 @@ def generate(root, recipe_name, slots, project, purpose,
     negative = recipe.get("negative", "")
 
     defaults = recipe.get("defaults", {})
-    checkpoint = checkpoint or defaults.get("checkpoint") or die("no checkpoint")
-    if not checkpoint.endswith(".safetensors"):
-        checkpoint += ".safetensors"
+    checkpoint = resolve_checkpoint(root, checkpoint or defaults.get("checkpoint") or die("no checkpoint"))
     batch = batch or defaults.get("batch", 1)
     steps = defaults.get("steps", 30)
 
