@@ -49,12 +49,13 @@ ByrdHouse is a **creator platform**, not a mining platform. Core lanes: image ge
 ## Next 5 actions
 
 1. On BYRD-GAMING: clone this repo, run `scripts\setup-gaming.ps1` (creates E:\ByrdHouse, installs kit, runs first status)
-2. Edit `E:\ByrdHouse\byrdhouse.config.json` placeholders (hosts, operator model, token)
-3. Run `byrd-status.ps1` — fix reds until it speaks truth
-4. Hand docs/CLAUDE_CODE_TASKS.md Task 2 to Claude Code on GAMING (de-hardcode existing scripts)
-5. Task 4: byrdimage-full re-test, 7/7 checks — log results in Done log
+2. Edit `E:\ByrdHouse\byrdhouse.config.json` placeholders (hosts, operator model, ComfyUI dir, token)
+3. Run `scripts\start-byrdhouse.ps1` — fix reds until the report speaks truth; then `install-startup-task.ps1` (admin) so it runs at logon
+4. Generate the first image through the new submit layer: `scripts\byrdimage.ps1 -Recipe rpg_tier_list -Project careyrpg -Purpose "first tier list art" -Slot subject="...",game="Last Epoch"` — check the card lands next to the PNG in artifacts\
+5. Task 2 (de-hardcode any remaining legacy scripts) + cold-reboot test = U0 done on GAMING
 
 ## Done log
 
+- 2026-07-10 · Gaming-PC side completed in repo: start-byrdhouse.ps1 (one command), install-startup-task.ps1 (logon task), byrdimage.py submit layer (random seed per job, unique filename prefix, verified prompt injection into every CLIPTextEncode, checkpoint recorded on card) + sdxl_base_api workflow — pipeline smoke-tested end-to-end against a mock ComfyUI
 - 2026-07-10 · U0 kit committed to the GitHub repo (config template, byrd-status v2, setup scripts, mode script, docs trio, starter recipes) — repo is now the kit distribution channel
 - 2026-07-08 · U0 kit designed (config, byrd-status v2, state/decisions docs, Claude Code task briefs)

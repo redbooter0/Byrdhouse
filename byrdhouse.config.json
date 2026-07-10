@@ -15,6 +15,20 @@
     "mini_root": "D:/ByrdHouse",
     "gaming_root": "E:/ByrdHouse"
   },
+  "startup": {
+    "_comment": "Used by start-byrdhouse.ps1 on BYRD-GAMING. comfyui_dir is the folder containing your ComfyUI launcher; comfyui_cmd is the launcher itself (portable installs: run_nvidia_gpu.bat).",
+    "comfyui_dir": "CHANGE_ME_e.g._E:/ComfyUI_windows_portable",
+    "comfyui_cmd": "run_nvidia_gpu.bat"
+  },
+  "image": {
+    "_comment": "Defaults for the byrdimage submit layer (scripts/byrdimage.py).",
+    "workflow": "workflows/sdxl_base_api.json",
+    "width": 1152,
+    "height": 768,
+    "cfg": 7.0,
+    "sampler": "dpmpp_2m",
+    "scheduler": "karras"
+  },
   "gpu": {
     "vram_free_threshold_mb": 1024,
     "default_mode": "OPERATOR",

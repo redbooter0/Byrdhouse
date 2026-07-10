@@ -39,9 +39,14 @@ remote-generation path still works (submit one job MINI → GAMING).
 **Done when:** both machines produce a status.json and each can reach the other's
 services by Tailscale name.
 
-## Task 4 — byrdimage-full re-test (BYRD-GAMING)
+## Task 4 — byrdimage re-test (BYRD-GAMING)
 
-Run the full pipeline once end-to-end and verify all 7 acceptance checks:
+The kit now ships its own submit layer (`scripts/byrdimage.py` + `byrdimage.ps1` +
+`workflows/sdxl_base_api.json`) that implements the v2 §1.4 Action 3 fixes. If a
+legacy byrdimage-full exists, either port its extra steps (knowledge sync, gallery)
+on top or retire it in favor of this one — log the choice in DECISIONS.md.
+
+Run the pipeline once end-to-end and verify all 7 acceptance checks:
 
 1. Prompt submitted through the standard entry point (no manual ComfyUI clicking)
 2. Image generated (fresh file in the ComfyUI output)

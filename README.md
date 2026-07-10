@@ -24,6 +24,10 @@ For BYRD-MINI, same thing with `scripts\setup-mini.ps1` (roots at `D:\ByrdHouse`
 | `scripts/byrd-status.ps1` | Green/yellow/red health report + `status.json` (hosts, services, VRAM, disk, Qdrant drift, MCP pings) |
 | `scripts/setup-gaming.ps1` / `setup-mini.ps1` | Idempotent machine bootstrap |
 | `scripts/use-image-mode.ps1` | GPU mode ritual: unload LLMs, verify VRAM free, `-Restore` reloads the operator model |
+| `scripts/start-byrdhouse.ps1` | THE one command: LM Studio server + operator model + ComfyUI + status report |
+| `scripts/install-startup-task.ps1` | Registers start-byrdhouse as a logon scheduled task (run as admin, once) |
+| `scripts/byrdimage.py` / `.ps1` | Image submit layer: recipe → filled prompt → random seed → unique prefix → ComfyUI → archived PNG + metadata card (stdlib-only Python) |
+| `workflows/sdxl_base_api.json` | SDXL text2img graph (ComfyUI API format) the submit layer fills at runtime |
 | `scripts/rag_system.py` | Lightweight local RAG (document chunks + index on disk) |
 | `docs/STATE.md` | One page of current truth — update weekly |
 | `docs/DECISIONS.md` | Append-only decision log |

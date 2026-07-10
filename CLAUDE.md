@@ -26,7 +26,8 @@ Work orders are in `docs/CLAUDE_CODE_TASKS.md`. The U0 Definition of Done: cold-
 ## Repo Layout & Commands
 
 - `byrdhouse.config.json` — config template (placeholders say `CHANGE_ME`; real values live only on the machines).
-- `scripts/` — PowerShell kit: `setup-gaming.ps1` / `setup-mini.ps1` (idempotent bootstrap), `byrd-status.ps1` (health report + `status.json`, exit 0/1/2 = green/yellow/red), `use-image-mode.ps1` (mode ritual). Plus `rag_system.py` (stdlib-only local RAG).
+- `scripts/` — PowerShell kit: `setup-gaming.ps1` / `setup-mini.ps1` (idempotent bootstrap), `byrd-status.ps1` (health report + `status.json`, exit 0/1/2 = green/yellow/red), `start-byrdhouse.ps1` (the one startup command), `install-startup-task.ps1` (logon task), `use-image-mode.ps1` (mode ritual). Python is stdlib-only by design (`byrdimage.py` submit layer, `rag_system.py`) — no pip installs on the machines.
+- `workflows/` — ComfyUI API-format graphs; `byrdimage.py` fills checkpoint/prompt/seed/prefix at submit time and aborts if any CLIPTextEncode node would go stale. Test changes against a mock ComfyUI (`/prompt`, `/history/{id}`, `/view`) rather than live.
 - `recipes/` — versioned image recipes. Thumbnail text is NEVER diffused — art is generated, text is composited afterward (v3.1 §3).
 - `backend/` + `odysseus/` — auxiliary smart-home/AI-hub stack (see `docs/SMART_HOME_HUB.md`): Express + Stripe proxy (port 3001) → Odysseus FastAPI gateway (port 3000, OpenAI-compatible `/v1/*` + Home Assistant `/api/home/*`) → Ollama. Run via `docker-compose up -d`, or `npm start` in `backend/` and `uvicorn main:app --port 3000` in `odysseus/`. The Stripe/monetization surface is frozen; don't extend it.
 - No test suite yet. Sanity checks: `node --check backend/server.js`; `python -c "from main import app"` in `odysseus/`; JSON validity for config/recipes.
