@@ -49,6 +49,7 @@
   button.s { background:var(--panel2); color:var(--text); border:1px solid var(--line); border-radius:8px;
              padding:6px 12px; cursor:pointer; font-size:12.5px; }
   button.s:hover { border-color:var(--accent); }
+  button:disabled { opacity:.45; cursor:default; }
   button.ok{color:var(--green)} button.no{color:var(--red)}
   input,select,textarea { background:#0d0a18; color:var(--text); border:1px solid var(--line); border-radius:8px;
                           padding:7px 9px; font-size:13px; width:100%; }
@@ -147,12 +148,14 @@ function artCard(a) {
     ${a.score != null ? 'score <b>'+a.score+'</b> · ' : ''}<span class="pill">${esc(a.status)}</span><br>
     ${esc(meta.purpose || meta.title || '')}
     <div class="row">
-      <button class="s ok" onclick="review('${a.id}','approve')">approve</button>
-      <button class="s no" onclick="review('${a.id}','reject')">reject</button>
+      <button class="s ok" ${a.status==='approved'?'disabled':''} onclick="review(this,'${a.id}','approve')">${a.status==='approved'?'✓ approved':'approve'}</button>
+      <button class="s no" ${a.status==='rejected'?'disabled':''} onclick="review(this,'${a.id}','reject')">${a.status==='rejected'?'✗ rejected':'reject'}</button>
     </div></div></div>`;
 }
-async function review(id, action) {
-  try { await jpost(`/artifacts/${id}/review`, { action }); render(); } catch (e) { say('error: '+e.message); }
+async function review(btn, id, action) {
+  btn.disabled = true; btn.textContent = '…';
+  try { await jpost(`/artifacts/${id}/review`, { action }); render(); }
+  catch (e) { btn.disabled = false; say('error: '+e.message); }
 }
 async function jobAct(id, action) {
   try { await jpost(`/jobs/${id}/${action}`, {}); say(action+'d '+id); render(); }
