@@ -110,7 +110,7 @@ def run_judge(job) -> None:
     p = json.loads(job["payload"])
     image_path = Path(p["path"])
     card_path = image_path.with_suffix(image_path.suffix + ".json")
-    card = json.loads(card_path.read_text(encoding="utf-8")) if card_path.exists() else dict(p)
+    card = json.loads(card_path.read_text(encoding="utf-8-sig")) if card_path.exists() else dict(p)
     verdict = byrdjudge.judge_card(ROOT, card, image_path)
     card.update(score=verdict["score"], tags=verdict["tags"], caption=verdict["caption"])
     card["rubric_scores"] = verdict["scores"]
@@ -184,9 +184,9 @@ def run_content_package(job) -> None:
     """v3.1 §2: transcript -> titles/tags/description/pinned comment in YOUR voice."""
     import re as _re
     p = json.loads(job["payload"])
-    transcript = p.get("transcript_text") or Path(p["transcript_path"]).read_text(encoding="utf-8")
+    transcript = p.get("transcript_text") or Path(p["transcript_path"]).read_text(encoding="utf-8-sig")
     voice_path = ROOT / "recipes" / "voice_carey.json"
-    voice = json.loads(voice_path.read_text(encoding="utf-8")) if voice_path.exists() else {}
+    voice = json.loads(voice_path.read_text(encoding="utf-8-sig")) if voice_path.exists() else {}
     prompt = (
         "You write YouTube packaging for the channel "
         f"{voice.get('channel', 'CareyRPG')} ({voice.get('niche', 'gaming')}). "

@@ -22,7 +22,7 @@ from pathlib import Path
 
 
 def _load(path):
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    return json.loads(Path(path).read_text(encoding="utf-8-sig"))
 
 
 def _find_recipe_spec(root: Path, recipe_tag: str):
