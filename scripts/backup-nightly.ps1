@@ -1,4 +1,4 @@
-# backup-nightly.ps1 — the BYRD-VAULT job (Blueprint v2 §1.4 Action 7).
+﻿# backup-nightly.ps1 - the BYRD-VAULT job (Blueprint v2 §1.4 Action 7).
 # SQLite .backup (safe while WAL is live) + robocopy mirror of the archive.
 # One dead SSD must never erase the memory system.
 #
@@ -16,7 +16,7 @@ if ($Install) {
     $trigger = New-ScheduledTaskTrigger -Daily -At 3:30am
     Register-ScheduledTask -TaskName 'ByrdHouse-Backup' -Action $action -Trigger $trigger `
         -Settings (New-ScheduledTaskSettingsSet -StartWhenAvailable) -Force | Out-Null
-    Write-Host "Registered 'ByrdHouse-Backup' — daily 03:30." -ForegroundColor Green
+    Write-Host "Registered 'ByrdHouse-Backup' - daily 03:30." -ForegroundColor Green
     exit 0
 }
 
@@ -48,4 +48,4 @@ Copy-Item (Join-Path $root 'byrdhouse.config.json') $dest -Force
 
 $stamp = Get-Date -Format 'o'
 Set-Content (Join-Path $dest 'LAST_BACKUP.txt') $stamp
-Write-Host "Backup complete → $dest ($stamp)" -ForegroundColor Green
+Write-Host "Backup complete -> $dest ($stamp)" -ForegroundColor Green

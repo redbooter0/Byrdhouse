@@ -1,4 +1,4 @@
-# byrd-status.ps1 v2 — ByrdHouse health report (Blueprint v2, §1.4 Action 2)
+﻿# byrd-status.ps1 v2 - ByrdHouse health report (Blueprint v2, §1.4 Action 2)
 # Answers "is ByrdHouse healthy?" with one command.
 # Console: green/yellow/red per check. Also writes machine-readable
 # %BYRDHOUSE_ROOT%\status.json for the dashboard.
@@ -13,7 +13,7 @@ function Add-Check([string]$Name, [string]$State, [string]$Detail) {
     [void]$checks.Add([pscustomobject]@{ name = $Name; state = $State; detail = $Detail })
     if (-not $Quiet) {
         $color = @{ green = 'Green'; yellow = 'Yellow'; red = 'Red' }[$State]
-        Write-Host ("  [{0,-6}] {1} — {2}" -f $State.ToUpper(), $Name, $Detail) -ForegroundColor $color
+        Write-Host ("  [{0,-6}] {1} - {2}" -f $State.ToUpper(), $Name, $Detail) -ForegroundColor $color
     }
 }
 
@@ -24,7 +24,7 @@ function Test-Http([string]$Url, [int]$TimeoutSec = 5) {
     } catch { return $false }
 }
 
-if (-not $Quiet) { Write-Host "`nByrdHouse status — $env:COMPUTERNAME — $(Get-Date -Format s)`n" }
+if (-not $Quiet) { Write-Host "`nByrdHouse status - $env:COMPUTERNAME - $(Get-Date -Format s)`n" }
 
 # ── 1. Root + config ─────────────────────────────────────────────────────────
 $root = $env:BYRDHOUSE_ROOT
@@ -43,12 +43,12 @@ $cfg = $null
 if (Test-Path $cfgPath) {
     $cfg = Get-Content $cfgPath -Raw | ConvertFrom-Json
     if ($cfg.auth.admin_token -like 'CHANGE_ME*') {
-        Add-Check 'config' 'yellow' 'Loaded, but placeholders remain (admin_token etc.) — edit byrdhouse.config.json'
+        Add-Check 'config' 'yellow' 'Loaded, but placeholders remain (admin_token etc.) - edit byrdhouse.config.json'
     } else {
         Add-Check 'config' 'green' 'byrdhouse.config.json loaded'
     }
 } else {
-    Add-Check 'config' 'red' "Missing $cfgPath — copy the template from the repo root"
+    Add-Check 'config' 'red' "Missing $cfgPath - copy the template from the repo root"
 }
 
 # ── 2. Hosts resolvable (Tailscale MagicDNS) ─────────────────────────────────
@@ -88,11 +88,11 @@ if ($cfg) {
 if ($cfg -and $cfg.memory) {
     $m = $cfg.memory
     if ($m.sqlite_db -like '*CHANGE_ME*' -or $m.qdrant_collection -like '*CHANGE_ME*') {
-        Add-Check 'memory_drift' 'yellow' 'Not configured — fill memory.* in config on BYRD-MINI'
+        Add-Check 'memory_drift' 'yellow' 'Not configured - fill memory.* in config on BYRD-MINI'
     } elseif (-not (Test-Path $m.sqlite_db)) {
         Add-Check 'memory_drift' 'red' "SQLite db not found: $($m.sqlite_db)"
     } elseif (-not (Get-Command sqlite3 -ErrorAction SilentlyContinue)) {
-        Add-Check 'memory_drift' 'yellow' 'sqlite3 CLI not on PATH — cannot count rows'
+        Add-Check 'memory_drift' 'yellow' 'sqlite3 CLI not on PATH - cannot count rows'
     } else {
         $rows = [int](sqlite3 $m.sqlite_db "SELECT COUNT(*) FROM $($m.sqlite_table);")
         $points = -1
@@ -103,9 +103,9 @@ if ($cfg -and $cfg.memory) {
         if ($points -lt 0) {
             Add-Check 'memory_drift' 'red' "Qdrant collection '$($m.qdrant_collection)' unreadable"
         } elseif ([math]::Abs($rows - $points) -le 5) {
-            Add-Check 'memory_drift' 'green' "SQLite $rows vs Qdrant $points — in sync"
+            Add-Check 'memory_drift' 'green' "SQLite $rows vs Qdrant $points - in sync"
         } else {
-            Add-Check 'memory_drift' 'red' "DRIFT: SQLite $rows vs Qdrant $points — vector saves failing silently"
+            Add-Check 'memory_drift' 'red' "DRIFT: SQLite $rows vs Qdrant $points - vector saves failing silently"
         }
     }
 }
@@ -114,13 +114,13 @@ if ($cfg -and $cfg.memory) {
 $drive = (Get-Item $root).PSDrive
 $freeGB = [math]::Round($drive.Free / 1GB, 1)
 if ($freeGB -lt 15)      { Add-Check 'disk' 'red'    "$($drive.Name): only ${freeGB}GB free" }
-elseif ($freeGB -lt 50)  { Add-Check 'disk' 'yellow' "$($drive.Name): ${freeGB}GB free — plan cleanup/expansion" }
+elseif ($freeGB -lt 50)  { Add-Check 'disk' 'yellow' "$($drive.Name): ${freeGB}GB free - plan cleanup/expansion" }
 else                     { Add-Check 'disk' 'green'  "$($drive.Name): ${freeGB}GB free" }
 
 # ── 6. GPU / VRAM (gaming PC only) ───────────────────────────────────────────
 if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
     $g = (nvidia-smi --query-gpu=name,memory.used,memory.total --format=csv,noheader,nounits) -split ','
-    Add-Check 'gpu' 'green' ("{0} — {1}MB / {2}MB VRAM used" -f $g[0].Trim(), $g[1].Trim(), $g[2].Trim())
+    Add-Check 'gpu' 'green' ("{0} - {1}MB / {2}MB VRAM used" -f $g[0].Trim(), $g[1].Trim(), $g[2].Trim())
 } else {
     Add-Check 'gpu' 'yellow' 'nvidia-smi not found (expected on BYRD-MINI; a problem on BYRD-GAMING)'
 }
@@ -151,6 +151,6 @@ $status | ConvertTo-Json -Depth 4 | Set-Content (Join-Path $root 'status.json') 
 
 if (-not $Quiet) {
     $color = @{ green = 'Green'; yellow = 'Yellow'; red = 'Red' }[$overall]
-    Write-Host "`nOVERALL: $($overall.ToUpper())  →  $root\status.json`n" -ForegroundColor $color
+    Write-Host "`nOVERALL: $($overall.ToUpper())  ->  $root\status.json`n" -ForegroundColor $color
 }
 exit @{ green = 0; yellow = 1; red = 2 }[$overall]

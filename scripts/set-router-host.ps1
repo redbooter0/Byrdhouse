@@ -1,4 +1,4 @@
-# set-router-host.ps1 — move the belt's home between machines (MINI handoff).
+﻿# set-router-host.ps1 - move the belt's home between machines (MINI handoff).
 # Run ON EACH machine after BYRD-MINI is set up:
 #   scripts\set-router-host.ps1 mini      (on BOTH machines)
 # It updates the local byrdhouse.config.json: services.router points at the
@@ -18,7 +18,7 @@ $cfg = Get-Content $cfgPath -Raw | ConvertFrom-Json
 if ($ThisMachine -eq 'auto') {
     # Blueprint roles: GAMING lives on E:, MINI on D:
     $ThisMachine = if ($root -like 'E:*') { 'gaming' } elseif ($root -like 'D:*') { 'mini' } else { '' }
-    if (-not $ThisMachine) { Write-Error "Can't infer role from $root — pass -ThisMachine gaming|mini"; exit 2 }
+    if (-not $ThisMachine) { Write-Error "Can't infer role from $root - pass -ThisMachine gaming|mini"; exit 2 }
 }
 
 $hostName = $cfg.hosts.$RouterHost
@@ -37,6 +37,6 @@ Belt-move checklist (do once, in order):
        robocopy \\$($cfg.hosts.gaming)\ByrdHouse\db $root\db byrdhouse.db
      (or copy E:\ByrdHouse\db\byrdhouse.db over however you like)
   3. Run set-router-host.ps1 mini on GAMING too
-  4. start-byrdhouse.ps1 on MINI, then on GAMING — dashboard is now http://$hostName:8787
+  4. start-byrdhouse.ps1 on MINI, then on GAMING - dashboard is now http://$hostName:8787
 "@ -ForegroundColor Cyan
 }

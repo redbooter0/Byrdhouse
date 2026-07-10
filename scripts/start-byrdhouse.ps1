@@ -1,4 +1,4 @@
-# start-byrdhouse.ps1 — the ONE command per machine (Blueprint v2, U0 deliverable).
+﻿# start-byrdhouse.ps1 - the ONE command per machine (Blueprint v2, U0 deliverable).
 # On BYRD-GAMING: brings up LM Studio's server + operator model and ComfyUI,
 # then runs byrd-status. On BYRD-MINI it just skips what isn't installed.
 # Cold-reboot test: run this, read the green report, trust the machine.
@@ -7,14 +7,14 @@ param([int]$ComfyTimeoutSec = 180)
 
 $ErrorActionPreference = 'Continue'
 $root = $env:BYRDHOUSE_ROOT
-if (-not $root) { Write-Error 'BYRDHOUSE_ROOT not set — run setup-gaming.ps1 first.'; exit 2 }
+if (-not $root) { Write-Error 'BYRDHOUSE_ROOT not set - run setup-gaming.ps1 first.'; exit 2 }
 $cfg = Get-Content (Join-Path $root 'byrdhouse.config.json') -Raw | ConvertFrom-Json
 
 function Test-Http([string]$Url) {
     try { $null = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 5; $true } catch { $false }
 }
 
-Write-Host "`nByrdHouse startup — $env:COMPUTERNAME`n" -ForegroundColor Cyan
+Write-Host "`nByrdHouse startup - $env:COMPUTERNAME`n" -ForegroundColor Cyan
 
 # ── LM Studio: server + operator model ───────────────────────────────────────
 if (Get-Command lms -ErrorAction SilentlyContinue) {
@@ -30,10 +30,10 @@ if (Get-Command lms -ErrorAction SilentlyContinue) {
             Write-Host "[lmstudio] operator model already loaded"
         }
     } else {
-        Write-Host '[lmstudio] gpu.operator_model not set in config — skipping model load' -ForegroundColor Yellow
+        Write-Host '[lmstudio] gpu.operator_model not set in config - skipping model load' -ForegroundColor Yellow
     }
 } else {
-    Write-Host '[lmstudio] lms CLI not found — skipping (fine on BYRD-MINI)' -ForegroundColor Yellow
+    Write-Host '[lmstudio] lms CLI not found - skipping (fine on BYRD-MINI)' -ForegroundColor Yellow
 }
 
 # ── ComfyUI ──────────────────────────────────────────────────────────────────
@@ -52,10 +52,10 @@ if (Test-Http "$comfyUrl/system_stats") {
             Start-Sleep -Seconds 5
         }
         if (-not (Test-Http "$comfyUrl/system_stats")) {
-            Write-Host "[comfyui] still not answering after ${ComfyTimeoutSec}s — check its window" -ForegroundColor Red
+            Write-Host "[comfyui] still not answering after ${ComfyTimeoutSec}s - check its window" -ForegroundColor Red
         }
     } else {
-        Write-Host '[comfyui] startup.comfyui_dir not configured/found — skipping (fine on BYRD-MINI)' -ForegroundColor Yellow
+        Write-Host '[comfyui] startup.comfyui_dir not configured/found - skipping (fine on BYRD-MINI)' -ForegroundColor Yellow
     }
 }
 
@@ -69,8 +69,8 @@ if ($cfg.startup.run_router) {
         Start-Process python -ArgumentList "`"$root\router\router.py`"" -WindowStyle Hidden
         $deadline = (Get-Date).AddSeconds(30)
         while ((Get-Date) -lt $deadline -and -not (Test-Http "$routerUrl/health")) { Start-Sleep 2 }
-        if (Test-Http "$routerUrl/health") { Write-Host "[router] up — dashboard at $routerUrl" }
-        else { Write-Host '[router] failed to answer — run manually to see the error: python router\router.py' -ForegroundColor Red }
+        if (Test-Http "$routerUrl/health") { Write-Host "[router] up - dashboard at $routerUrl" }
+        else { Write-Host '[router] failed to answer - run manually to see the error: python router\router.py' -ForegroundColor Red }
     }
 }
 

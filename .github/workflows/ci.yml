@@ -28,6 +28,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Require UTF-8 BOM on every .ps1 (Windows PowerShell 5.1 reads BOM-less files as ANSI)
+        run: |
+          bad=0
+          for f in scripts/*.ps1; do
+            if [ "$(head -c 3 "$f" | xxd -p)" != "efbbbf" ]; then
+              echo "MISSING BOM: $f"; bad=1
+            fi
+          done
+          exit $bad
       - name: Parse every .ps1 for syntax errors
         shell: pwsh
         run: |

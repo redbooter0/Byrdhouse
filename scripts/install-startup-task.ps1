@@ -1,4 +1,4 @@
-# install-startup-task.ps1 — register start-byrdhouse.ps1 as a logon task
+﻿# install-startup-task.ps1 - register start-byrdhouse.ps1 as a logon task
 # (Blueprint v2 U0: "one startup command per machine as a scheduled task").
 # Run once from an ADMIN PowerShell:
 #   powershell -ExecutionPolicy Bypass -File scripts\install-startup-task.ps1
@@ -6,9 +6,9 @@
 param([string]$TaskName = 'ByrdHouse-Startup')
 
 $root = $env:BYRDHOUSE_ROOT
-if (-not $root) { Write-Error 'BYRDHOUSE_ROOT not set — run setup first.'; exit 2 }
+if (-not $root) { Write-Error 'BYRDHOUSE_ROOT not set - run setup first.'; exit 2 }
 $script = Join-Path $root 'scripts\start-byrdhouse.ps1'
-if (-not (Test-Path $script)) { Write-Error "Missing $script — run setup first."; exit 2 }
+if (-not (Test-Path $script)) { Write-Error "Missing $script - run setup first."; exit 2 }
 
 $action  = New-ScheduledTaskAction -Execute 'powershell.exe' `
            -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$script`""
@@ -20,5 +20,5 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
     -Settings $settings -Force | Out-Null
 
-Write-Host "Registered scheduled task '$TaskName' — runs start-byrdhouse.ps1 30s after logon." -ForegroundColor Green
+Write-Host "Registered scheduled task '$TaskName' - runs start-byrdhouse.ps1 30s after logon." -ForegroundColor Green
 Write-Host "Test it now with:  Start-ScheduledTask -TaskName $TaskName"
