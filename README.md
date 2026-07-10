@@ -1,157 +1,46 @@
-# ByrdHouse - Smart Home AI Hub
+# ByrdHouse
 
-## Overview
-ByrdHouse is a modern smart home dashboard with AI-powered voice control, multi-model support, and monetization features.
+Local-first AI command platform: iPad Pro cockpit · BYRD-MINI nervous system · BYRD-GAMING heavy worker.
 
-## Architecture
+This repo is the **source of truth for the ByrdHouse platform kit** — config, status tooling, docs, and recipes that get synced onto the machines. The full vision lives in the Master Blueprint docs (v2 technical spec, v3 Money Map, v3.1 Content Engine); the current build stage is **U0 STABILIZE** (see `docs/STATE.md`).
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      ByrdHouse Frontend                      │
-│              (Modern SPA - home.html + dashboard)           │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Reverse Proxy (Caddy)                    │
-│              SSL termination, routing, caching              │
-└─────────────────────────────────────────────────────────────┘
-         │                    │                    │
-         ▼                    ▼                    ▼
-┌─────────────┐      ┌─────────────┐      ┌─────────────┐
-│ byrdhouse-  │      │  Odysseus   │      │   Home      │
-│  backend    │      │  (Python)   │      │  Assistant  │
-│  (Node.js)  │      │  FastAPI    │      │   (HA)      │
-│  :3001      │      │  :3000      │      │  :8123      │
-└─────────────┘      └─────────────┘      └─────────────┘
-                              │
-                              ▼
-                    ┌─────────────────────┐
-                    │    Ollama + HF     │
-                    │   (Local Models)    │
-                    │   + HuggingFace    │
-                    │   Inference API    │
-                    └─────────────────────┘
+## Quick start — BYRD-GAMING (E:\ByrdHouse)
+
+```powershell
+git clone https://github.com/redbooter0/Byrdhouse C:\src\Byrdhouse
+cd C:\src\Byrdhouse
+powershell -ExecutionPolicy Bypass -File scripts\setup-gaming.ps1
 ```
 
-## Features
+The setup script creates the `E:\ByrdHouse` directory map, installs the config template (edit the `CHANGE_ME` placeholders!), sets `BYRDHOUSE_ROOT`, reports missing tools (Tailscale, LM Studio CLI, nvidia-smi), and runs the first `byrd-status`.
 
-### Dashboard
-- [x] Real-time entity control (lights, switches, climate, etc.)
-- [x] Quick scenes (Good Morning, Good Night, Movie Mode, Away, Home)
-- [x] AI chat widget with model selection
-- [x] System stats (CPU, Memory, Disk, Uptime)
-- [x] Shell console for home server
-- [x] Ad rotation system withbacker priority
+For BYRD-MINI, same thing with `scripts\setup-mini.ps1` (roots at `D:\ByrdHouse`, hosts the ops database).
 
-### AI Integration
-- [x] Ollama gateway (OpenAI-compatible API)
-- [x] HuggingFace Inference API integration
-- [x] Multiple model support (Llama, Qwen, Gemma, Mistral, DeepSeek)
-- [x] Streaming responses
-- [x] Model switching via UI
+## What's in here
 
-### Monetization
-- [x] Ad rotation with refresh on completion
-- [x] Backer priority rotation
-- [x] Multiple ad slots (sidebar, interstitial, native)
-- [x] User data options (opt-in analytics)
+| Path | What |
+|------|------|
+| `byrdhouse.config.json` | ONE config: hosts (Tailscale names, never IPs), services, GPU modes, MCP roster, memory drift settings |
+| `scripts/byrd-status.ps1` | Green/yellow/red health report + `status.json` (hosts, services, VRAM, disk, Qdrant drift, MCP pings) |
+| `scripts/setup-gaming.ps1` / `setup-mini.ps1` | Idempotent machine bootstrap |
+| `scripts/use-image-mode.ps1` | GPU mode ritual: unload LLMs, verify VRAM free, `-Restore` reloads the operator model |
+| `scripts/rag_system.py` | Lightweight local RAG (document chunks + index on disk) |
+| `docs/STATE.md` | One page of current truth — update weekly |
+| `docs/DECISIONS.md` | Append-only decision log |
+| `docs/ROOM_MAP.md` | The 14 rooms, two lanes, MCP roster |
+| `docs/CLAUDE_CODE_TASKS.md` | U0 work orders to hand to Claude Code on each machine |
+| `recipes/` | Versioned image recipes: `yt_thumbnail` + the CareyRPG pack (tier list, build guide, shock reveal, vs matchup) |
+| `backend/` + `odysseus/` + `docker-compose.yml` | Auxiliary smart-home/AI-hub stack (Node Stripe backend + FastAPI HA/Ollama gateway) — see `docs/SMART_HOME_HUB.md`. Monetization surface **frozen** per Blueprint v2 §1.8 until real external demand |
 
-### API Endpoints
+## The operating rules (from the blueprints)
 
-#### ByrdHouse Backend (port 3001)
-- `POST /api/create-checkout-session` - Stripe checkout
-- `POST /api/create-portal-session` - Stripe billing portal
-- `POST /api/webhook` - Stripe webhooks
-- `POST /api/chat` - Non-streaming AI chat
-- `POST /api/chat/stream` - Streaming AI chat
-- `GET /api/models` - List available models
-- `POST /api/home/chat` - Smart home AI control
-- `GET /api/prices` - Get Stripe products
+- **One belt, three loops:** everything is a job → artifact → judged → learned from. Rooms are views onto the belt.
+- **Zero hardcoded IPs:** every script reads `byrdhouse.config.json`; hosts are Tailscale MagicDNS names.
+- **No artifact without a metadata card; no card without a purpose.**
+- **GPU modes are exclusive:** the 3070 is in OPERATOR, IMAGE, or VIDEO mode — transitions are verified rituals, not hope.
+- **Cash-gate law:** hardware is bought with cash after a measured bottleneck, never financed.
+- **Nothing public:** all cross-machine traffic rides the tailnet. Nothing is ever exposed to the internet.
 
-#### Odysseus (port 3000)
-- `GET /api/home/status` - HA connection status
-- `GET /api/home/ha/states` - All entity states
-- `POST /api/home/ha/services` - Call HA services
-- `POST /api/home/scene/{name}` - Trigger scenes
-- `POST /api/home/shell` - Execute shell commands
-- `GET /api/home/system/info` - System stats
-- `GET /v1/chat/completions` - OpenAI-compatible chat
-- `GET /v1/models` - List Ollama models
-- `POST /v1/embeddings` - Generate embeddings
+## Roadmap (unlocks)
 
-## Environment Variables
-
-```env
-# ByrdHouse Backend
-STRIPE_SECRET_KEY=sk_...
-STRIPE_WEBHOOK_SECRET=whsec_...
-FRONTEND_URL=http://localhost
-ODYSSEUS_URL=http://localhost:3000
-ODYSSEUS_MODEL=llama3.2:latest
-
-# Odysseus
-HOME_ASSISTANT_URL=http://homeassistant:8123
-HOME_ASSISTANT_TOKEN=your_token
-OLLAMA_BASE=http://localhost:11434
-OLLAMA_MODEL_DIR=E:/ollama-models
-```
-
-## Quick Start
-
-```bash
-# Start with Docker
-cd byrdhouse
-docker-compose up -d
-
-# Or manually
-cd backend && npm install && npm start
-cd odysseus && pip install -r requirements.txt && uvicorn main:app
-```
-
-## Recommended Models
-
-### For Smart Home Control (Low Latency)
-1. **Qwen 2.5** - Best for HA integration
-2. **Llama 3.2** - General purpose, good balance
-3. **Gemma 4** - Fast, good reasoning
-
-### For Conversational AI
-1. **DeepSeek-V4-Flash** - Best value, 1M context
-2. **Qwen3.5-397B** - Highest quality
-3. **Gemma-4-31B** - Google quality
-
-### For Tool Use/Function Calling
-1. **gpt-oss-120b** - Best structured output
-2. **Qwen3-235B** - Excellent tool use
-3. **Command-R+** - Built for RAG
-
-## HuggingFace Integration
-
-ByrdHouse supports HuggingFace Inference API for:
-- Cloud model access (DeepSeek, Qwen, Gemma via providers)
-- Embeddings generation
-- Model inference without local GPU
-
-Set `HUGGINGFACE_TOKEN` in environment to enable.
-
-## Ad System
-
-### Ad Types
-- **Sidebar Ads**: Fixed position, rotates every 60s or on completion
-- **Interstitial Ads**: Full-screen on scene triggers
-- **Native Ads**: Contextual, integrated into content
-
-### Backer Priority
-Backers get priority in ad rotation:
-1. Verified backers (Stripe subscription)
-2. Free tier users
-
-### Refresh Strategy
-- Sidebar: Refresh after 60s or ad completion
-- Interstitial: Trigger on scene activation
-- Native: Refresh every 5 items
-
-## License
-
-MIT
+U0 STABILIZE → U1 IMAGE LAB → U2 COMMAND SURFACE → U3 SPINE → U4 LEARN LOOP → U5 MOTION → U6 GAME LOOP. Definitions of Done in Blueprint v2 §12; live progress in `docs/STATE.md`.

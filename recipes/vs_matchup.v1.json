@@ -1,0 +1,15 @@
+{
+  "id": "vs_matchup",
+  "version": 1,
+  "kind": "image.generate",
+  "_note": "CareyRPG pack (v3.1 §3.1). Split composition, two subjects opposing, lightning seam — the Yu-Gi-Oh/Master Duel grammar.",
+  "template": "split composition: {subject_left} facing right on the left half, {subject_right} facing left on the right half, crackling lightning seam down the center, {game} themed, {palette} palette, {lighting}, confrontation energy",
+  "negative": "text, letters, words, watermark, blurry, low contrast, single subject, merged figures",
+  "vary": {
+    "palette": ["crimson-slate", "electric-blue", "black-gold"],
+    "lighting": ["rim light", "neon glow", "hard flash"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 30, "batch": 4 },
+  "compose": { "text_zone": "center-seam", "max_words": 3, "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "readability": "1-5", "contrast": "1-5", "duel_tension": "1-5", "hook": "1-5" }
+}

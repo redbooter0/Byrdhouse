@@ -1,0 +1,15 @@
+{
+  "id": "rpg_tier_list",
+  "version": 1,
+  "kind": "image.generate",
+  "_note": "CareyRPG pack — the proven 22x format (v3.1 Content Engine §3.1). Generates ART ONLY; title text is composited afterward as a real text layer, never diffused.",
+  "template": "{subject} from {game}, dark fantasy background, glowing skill icons arranged along the right side as rank bars, S A B tier framing, {palette} palette, {lighting}, dramatic depth, empty upper-left zone for composited text",
+  "negative": "text, letters, words, captions, watermark, blurry, low contrast, extra fingers",
+  "vary": {
+    "palette": ["gold-red", "electric-blue", "black-gold"],
+    "lighting": ["rim light", "neon glow", "ember backlight"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 30, "batch": 4 },
+  "compose": { "text_zone": "upper-left", "max_words": 5, "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "readability": "1-5", "contrast": "1-5", "subject_pop": "1-5", "tier_grammar": "1-5" }
+}
