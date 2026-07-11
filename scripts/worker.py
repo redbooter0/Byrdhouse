@@ -176,7 +176,7 @@ def run_content_thumbnail(job) -> None:
     title = p.get("title") or ""
     if not title:
         raise RuntimeError("content.thumbnail needs payload.title")
-    recipe_spec = byrdjudge._find_recipe_spec(ROOT, f"{p['recipe']}@999") or {}
+    recipe_spec = byrdimage.load_json(byrdimage.find_recipe(ROOT, p["recipe"]))
     _, saved = byrdimage.generate(
         ROOT, p["recipe"], p.get("slots", {}), p.get("project", "careyrpg"),
         p.get("purpose", "thumbnail"), batch=p.get("batch"),

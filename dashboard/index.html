@@ -236,12 +236,15 @@ async function imgOutHtml() {
 }
 V.image = async () => {
   const recipes = await jget('/recipes');
-  window._recipes = recipes.filter(r => r.kind === 'image.generate');
+  // newest version of each recipe first — and the value pins id@version so
+  // the version you pick is the version the worker runs
+  window._recipes = recipes.filter(r => r.kind === 'image.generate')
+    .sort((a, b) => a.id === b.id ? b.version - a.version : a.id.localeCompare(b.id));
   return `
   <div class="grid">
     <div class="panel" id="genForm"><h2>Generate (recipes over prompts)</h2>
       <label>Recipe</label><select id="recipe" onchange="slotFields()">${window._recipes.map(r =>
-        `<option value="${esc(r.id)}">${esc(r.id)} v${r.version}</option>`).join('')}</select>
+        `<option value="${esc(r.id)}@${r.version}">${esc(r.id)} v${r.version}</option>`).join('')}</select>
       <div id="slots"></div>
       <label>Thumbnail title (optional — real text composited on top, never diffused)</label>
       <input id="thumbTitle" placeholder="e.g. BEST BUILDS TIER LIST (leave empty for art only)">
@@ -255,7 +258,7 @@ V.image = async () => {
   </div>`;
 };
 function slotFields() {
-  const r = (window._recipes||[]).find(x => x.id === $('recipe').value);
+  const r = (window._recipes||[]).find(x => x.id + '@' + x.version === $('recipe').value);
   if (!r) return;
   const keep = {};  // survive a recipe change without losing typed slot values
   document.querySelectorAll('#slots input').forEach(i => { keep[i.dataset.slot] = i.value; });

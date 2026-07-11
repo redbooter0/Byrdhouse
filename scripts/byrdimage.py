@@ -59,12 +59,20 @@ def new_id(prefix: str) -> str:
 
 
 def find_recipe(root: Path, name: str) -> Path:
+    # 'name@N' pins that exact version (the dashboard sends this so the
+    # version you pick is the version that runs); bare 'name' = highest.
+    m = re.fullmatch(r"([\w-]+)@(\d+)", name)
+    if m:
+        p = root / "recipes" / f"{m.group(1)}.v{m.group(2)}.json"
+        if not p.exists():
+            die(f"no recipe '{m.group(1)}' v{m.group(2)} in {root / 'recipes'}")
+        return p
     candidates = sorted((root / "recipes").glob(f"{name}.v*.json"))
     if not candidates:
         die(f"no recipe '{name}' in {root / 'recipes'}")
     def version(p: Path) -> int:
-        m = re.search(r"\.v(\d+)\.json$", p.name)
-        return int(m.group(1)) if m else 0
+        vm = re.search(r"\.v(\d+)\.json$", p.name)
+        return int(vm.group(1)) if vm else 0
     return max(candidates, key=version)
 
 

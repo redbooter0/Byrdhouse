@@ -192,6 +192,14 @@ def main():
         card_meta = json.loads(timed[0]["meta"])
         check("card records requested slots", card_meta.get("slots", {}).get("game") == "Last Epoch")
 
+        # 'name@N' pins that recipe version; bare name resolves to the highest
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import byrdimage
+        check("recipe version pin honored",
+              byrdimage.find_recipe(ROOT, "rpg_tier_list@1").name == "rpg_tier_list.v1.json")
+        check("bare recipe name resolves to highest version",
+              byrdimage.find_recipe(ROOT, "rpg_tier_list").name == "rpg_tier_list.v2.json")
+
         # A retried job re-registers its artifacts — must upsert, not duplicate
         dupe_card = {"artifact_id": "art.dupetest.0", "job_id": "job_dupetest",
                      "kind": "image", "path": "/tmp/dupetest.png", "status": "draft"}
