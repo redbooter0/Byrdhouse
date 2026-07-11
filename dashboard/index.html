@@ -165,9 +165,11 @@ function artCard(a) {
   const meta = JSON.parse(a.meta || '{}');
   const img = a.kind === 'image' || a.kind === 'thumbnail'
     ? `<img src="/artifacts/${a.id}/file" loading="lazy" onerror="this.style.display='none'">` : '';
+  const when = (a.job_finished_at || a.created_at || '').slice(5, 16).replace('T', ' ');
   return `<div class="art">${img}<div class="m">
     <b>${esc(meta.recipe || a.kind)}</b> · ${esc(a.project_id)}<br>
     ${a.score != null ? 'score <b>'+a.score+'</b> · ' : ''}<span class="pill">${esc(a.status)}</span><br>
+    ${a.gen_seconds != null ? '⏱ '+fmtDur(a.gen_seconds)+' · ' : ''}<span class="muted">${esc(when)}</span><br>
     ${esc(meta.purpose || meta.title || '')}
     <div class="row">
       <button class="s ok" ${a.status==='approved'?'disabled':''} onclick="review(this,'${a.id}','approve')">${a.status==='approved'?'✓ approved':'approve'}</button>
@@ -213,52 +215,140 @@ V.command = async () => {
   </div>`;
 };
 
+function fmtDur(s) { return s >= 90 ? Math.floor(s/60)+'m '+(s%60)+'s' : s+'s'; }
+function ago(ts) {
+  if (!ts) return '';
+  const m = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 60000));
+  return m < 1 ? 'just now' : m + 'm ago';
+}
 function busyCards(jobs) {
   const gen = t => t==='image.generate'||t==='content.thumbnail';
   return jobs.filter(j => ['queued','claimed','running'].includes(j.status) && gen(j.type))
     .map(j => `<div class="busy"><b>${esc(j.status==='queued'?'queued':'generating…')}</b>
-      <span>${esc(j.type)}</span><span>${esc(j.id.slice(-8))}</span></div>`).join('');
+      <span>${esc(j.type)}</span><span>${esc(j.id.slice(-8))}</span>
+      <span>${esc(j.status==='queued' ? 'queued '+ago(j.created_at) : 'started '+ago(j.claimed_at))}</span></div>`).join('');
 }
-V.image = async () => {
-  const recipes = await jget('/recipes');
-  window._recipes = recipes.filter(r => r.kind === 'image.generate');
+async function imgOutHtml() {
   const jobs = await jget('/jobs?limit=30');
   const inflight = busyCards(jobs);
   const arts = (await jget('/artifacts?limit=18')).filter(a => a.kind==='image'||a.kind==='thumbnail');
+  return `${inflight}${arts.map(artCard).join('') || (inflight ? '' : '<span class="muted">no images yet</span>')}`;
+}
+V.image = async () => {
+  const recipes = await jget('/recipes');
+  // newest version of each recipe first — and the value pins id@version so
+  // the version you pick is the version the worker runs
+  window._recipes = recipes.filter(r => r.kind === 'image.generate')
+    .sort((a, b) => a.id === b.id ? b.version - a.version : a.id.localeCompare(b.id));
   return `
   <div class="grid">
-    <div class="panel"><h2>Generate (recipes over prompts)</h2>
+    <div class="panel" id="genForm"><h2>Generate (recipes over prompts)</h2>
       <label>Recipe</label><select id="recipe" onchange="slotFields()">${window._recipes.map(r =>
-        `<option value="${esc(r.id)}">${esc(r.id)} v${r.version}</option>`).join('')}</select>
+        `<option value="${esc(r.id)}@${r.version}">${esc(r.id)} v${r.version}</option>`).join('')}</select>
       <div id="slots"></div>
       <label>Thumbnail title (optional — real text composited on top, never diffused)</label>
       <input id="thumbTitle" placeholder="e.g. BEST BUILDS TIER LIST (leave empty for art only)">
+      <label>Source image (optional — path on the worker PC; composites the title onto YOUR screenshot, skips generation)</label>
+      <input id="srcImage" placeholder="E:\\captures\\palworld_base.png">
       <label>Project</label><input id="project" value="careyrpg">
       <label>Purpose (required)</label><input id="purpose" placeholder="why this batch exists">
+      <label>Checkpoint (optional — name of a .safetensors installed on the worker)</label>
+      <input id="ckpt" placeholder="leave empty for the recipe default">
       <div class="row"><button class="b" onclick="submitGen()">Queue generation</button></div>
       <div class="muted" style="margin-top:8px">Batch generates → auto-judged by Qwen-VL → approve here. Approved images are your thumbnail art.<br>
       GPU mode shifts automatically with the queue — the worker chip up top shows the live mode.</div>
     </div>
-    <div class="panel wide"><h2>Image Studio output</h2><div class="cards">${inflight}${arts.map(artCard).join('') || (inflight ? '' : '<span class="muted">no images yet</span>')}</div></div>
+    <div class="panel"><h2>Reference library — the bar to beat</h2>
+      <label>Tag (game or recipe family, e.g. palworld)</label><input id="refTag" placeholder="palworld">
+      <label>Add thumbnails you love (the judge grades new images against these)</label>
+      <input id="refFile" type="file" accept="image/*" multiple onchange="uploadRefs(this)">
+      <div class="cards" id="refList" style="margin-top:10px">${await refListHtml()}</div>
+    </div>
+    <div class="panel wide"><h2>Image Studio output</h2><div class="cards" id="imgOut">${await imgOutHtml()}</div></div>
   </div>`;
 };
+async function refListHtml() {
+  const refs = await jget('/references');
+  return refs.map(r => `<div class="art"><img src="/references/${esc(r.tag)}/${esc(r.name)}/file" loading="lazy">
+    <div class="m"><b>${esc(r.tag)}</b> · ${esc(r.name)}</div></div>`).join('')
+    || '<span class="muted">no references yet — add the thumbnails you wish you\'d made</span>';
+}
+async function uploadRefs(input) {
+  const tag = ($('refTag').value.trim().toLowerCase().replace(/[^\w-]+/g, '-')) || 'general';
+  try {
+    for (const f of input.files) {
+      const name = f.name.replace(/[^\w. -]+/g, '_');
+      const r = await fetch(`/references/${tag}/${name}`, {
+        method: 'POST', headers: { 'Authorization': 'Bearer ' + $('token').value, 'X-Actor': 'dashboard' },
+        body: f });
+      if (!r.ok) throw new Error((await r.json()).error || r.status);
+    }
+    say(`added ${input.files.length} reference(s) under "${tag}"`);
+    input.value = '';
+    $('refList').innerHTML = await refListHtml();
+  } catch (e) { say('reference upload error: ' + e.message); }
+}
 function slotFields() {
-  const r = (window._recipes||[]).find(x => x.id === $('recipe').value);
+  const r = (window._recipes||[]).find(x => x.id + '@' + x.version === $('recipe').value);
   if (!r) return;
+  const keep = {};  // survive a recipe change without losing typed slot values
+  document.querySelectorAll('#slots input').forEach(i => { keep[i.dataset.slot] = i.value; });
   $('slots').innerHTML = r.slots.filter(s => !r.vary.includes(s)).map(s =>
     `<label>${esc(s)}</label><input data-slot="${esc(s)}" placeholder="${esc(s)}">`).join('');
+  document.querySelectorAll('#slots input').forEach(i => { if (keep[i.dataset.slot]) i.value = keep[i.dataset.slot]; });
 }
+
+/* ── draft-persistence: the Image Studio form survives polling, room
+      changes, and reloads; cleared only after a successful queue ── */
+const DRAFT_KEY = 'bh_draft';
+function readForm() {
+  const slots = {};
+  document.querySelectorAll('#slots input').forEach(i => { if (i.value) slots[i.dataset.slot] = i.value; });
+  return { recipe: $('recipe') ? $('recipe').value : '', slots,
+           title: $('thumbTitle') ? $('thumbTitle').value : '',
+           src: $('srcImage') ? $('srcImage').value : '',
+           project: $('project') ? $('project').value : 'careyrpg',
+           purpose: $('purpose') ? $('purpose').value : '' };
+}
+function saveDraft() { localStorage.setItem(DRAFT_KEY, JSON.stringify(readForm())); }
+function loadDraft() {
+  try { return JSON.parse(localStorage.getItem(DRAFT_KEY)) || null; } catch (e) { return null; }
+}
+function clearDraft() { localStorage.removeItem(DRAFT_KEY); }
+function applyDraft(d) {
+  if (!d) return;
+  const sel = $('recipe');
+  if (d.recipe && [...sel.options].some(o => o.value === d.recipe)) sel.value = d.recipe;
+  slotFields();
+  document.querySelectorAll('#slots input').forEach(i => {
+    if (d.slots && d.slots[i.dataset.slot] != null) i.value = d.slots[i.dataset.slot]; });
+  $('thumbTitle').value = d.title || '';
+  $('srcImage').value = d.src || '';
+  $('project').value = d.project || 'careyrpg';
+  $('purpose').value = d.purpose || '';
+}
+/* ── end draft-persistence ── */
+
 async function submitGen() {
   try {
-    const slots = {};
-    document.querySelectorAll('#slots input').forEach(i => { if (i.value) slots[i.dataset.slot] = i.value; });
-    if (!$('purpose').value) throw new Error('purpose is required');
-    const title = $('thumbTitle').value.trim();
-    const payload = { recipe:$('recipe').value, slots, project:$('project').value, purpose:$('purpose').value };
+    const d = readForm();
+    if (!d.purpose) throw new Error('purpose is required');
+    const title = d.title.trim();
+    const src = d.src.trim();
+    if (src && !title) throw new Error('a source image needs a title to composite');
+    const payload = { recipe:d.recipe, slots:d.slots, project:d.project, purpose:d.purpose };
     if (title) payload.title = title;
+    if (src) payload.image_path = src;
+    const ckpt = $('ckpt') ? $('ckpt').value.trim() : '';
+    if (ckpt) payload.checkpoint = ckpt;
     const j = await jpost('/jobs', { type: title ? 'content.thumbnail' : 'image.generate',
-      project:$('project').value, required_mode:'IMAGE', required_caps:['comfyui'], payload });
-    say('queued '+j.id+(title?' (two-pass thumbnail)':''));
+      project:d.project,
+      required_mode: src ? 'ANY' : 'IMAGE',           // compositing needs no GPU shift
+      required_caps: src ? [] : ['comfyui'], payload });
+    say('queued '+j.id+(src?' (title onto your image)':title?' (two-pass thumbnail)':''));
+    clearDraft();                       // only a successful queue clears the draft
+    $('view').innerHTML = '';           // force a fresh (empty) form
+    render();
   } catch (e) { say('error: '+e.message); }
 }
 
@@ -334,9 +424,12 @@ V.events = async () => {
   const ev = await jget('/events?limit=60');
   const jobs = await jget('/jobs?limit=30');
   return `<div class="grid">
-    <div class="panel wide"><h2>Jobs</h2><table><tr><th>id</th><th>type</th><th>status</th><th>worker</th><th>error</th><th></th></tr>${
+    <div class="panel wide"><h2>Jobs</h2><table><tr><th>id</th><th>type</th><th>status</th><th>queued</th><th>took</th><th>worker</th><th>error</th><th></th></tr>${
       jobs.map(j => `<tr><td class="muted">${esc(j.id)}</td><td>${esc(j.type)}</td>
-        <td><span class="pill">${esc(j.status)}</span></td><td class="muted">${esc(j.worker_id||'')}</td>
+        <td><span class="pill">${esc(j.status)}</span></td>
+        <td class="muted">${esc((j.created_at||'').slice(5,16).replace('T',' '))}</td>
+        <td class="muted">${j.finished_at && j.claimed_at ? fmtDur(Math.round((new Date(j.finished_at)-new Date(j.claimed_at))/1000)) : ''}</td>
+        <td class="muted">${esc(j.worker_id||'')}</td>
         <td class="muted">${esc((j.error||'').slice(0,60))}</td>
         <td>${['dead','cancelled','claimed','running'].includes(j.status)
               ? `<button class="s ok" onclick="jobAct('${j.id}','requeue')">requeue</button>` : ''}
@@ -360,11 +453,33 @@ for (const [k, [title, text]] of Object.entries(LOCKED)) {
   V[k] = async () => `<div class="panel"><h2>${title}</h2><div class="note">${text}</div></div>`;
 }
 
-async function render() {
-  try { $('view').innerHTML = await V[room](); if (room==='image') slotFields(); }
-  catch (e) { say('render error: '+e.message); }
+function typingInView() {
+  const ae = document.activeElement;
+  return ae && $('view').contains(ae) && ['INPUT','TEXTAREA','SELECT'].includes(ae.tagName);
 }
-async function tick() { await chips(); await render(); }
+async function render() {
+  try {
+    if (room === 'image' && $('genForm')) {
+      // form already on screen: refresh only the output grid, never the form
+      $('imgOut').innerHTML = await imgOutHtml();
+      return;
+    }
+    if (typingInView()) return;  // never replace controls under the user's cursor
+    $('view').innerHTML = await V[room]();
+    if (room === 'image') {
+      slotFields();
+      applyDraft(loadDraft());
+      $('genForm').addEventListener('input', saveDraft);
+      $('genForm').addEventListener('change', saveDraft);
+    }
+  } catch (e) { say('render error: '+e.message); }
+}
+let _refreshing = false;
+async function tick() {
+  if (_refreshing) return;  // no overlapping refresh cycles
+  _refreshing = true;
+  try { await chips(); await render(); } finally { _refreshing = false; }
+}
 function activeJobs() {
   const q = (window._status||{}).queue || {};
   return (q.queued||0) + (q.claimed||0) + (q.running||0);

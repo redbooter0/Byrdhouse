@@ -59,12 +59,20 @@ def new_id(prefix: str) -> str:
 
 
 def find_recipe(root: Path, name: str) -> Path:
+    # 'name@N' pins that exact version (the dashboard sends this so the
+    # version you pick is the version that runs); bare 'name' = highest.
+    m = re.fullmatch(r"([\w-]+)@(\d+)", name)
+    if m:
+        p = root / "recipes" / f"{m.group(1)}.v{m.group(2)}.json"
+        if not p.exists():
+            die(f"no recipe '{m.group(1)}' v{m.group(2)} in {root / 'recipes'}")
+        return p
     candidates = sorted((root / "recipes").glob(f"{name}.v*.json"))
     if not candidates:
         die(f"no recipe '{name}' in {root / 'recipes'}")
     def version(p: Path) -> int:
-        m = re.search(r"\.v(\d+)\.json$", p.name)
-        return int(m.group(1)) if m else 0
+        vm = re.search(r"\.v(\d+)\.json$", p.name)
+        return int(vm.group(1)) if vm else 0
     return max(candidates, key=version)
 
 
@@ -125,6 +133,7 @@ def generate(root, recipe_name, slots, project, purpose,
 
     # ── Fill the template: explicit slots, then random picks from vary ───────
     slots = dict(slots)
+    user_slots = dict(slots)  # what the founder actually asked for, kept on the card
     vary_picks = {}
     for k, options in recipe.get("vary", {}).items():
         if k not in slots:
@@ -256,6 +265,7 @@ def generate(root, recipe_name, slots, project, purpose,
                 "seed": seed,
                 "checkpoint": checkpoint,
                 "workflow": workflow_rel,
+                "slots": user_slots,
                 "vary_picks": vary_picks,
                 "score": None,
                 "tags": [],

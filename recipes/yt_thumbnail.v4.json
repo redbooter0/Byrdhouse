@@ -1,0 +1,16 @@
+{
+  "id": "yt_thumbnail",
+  "version": 4,
+  "kind": "image.generate",
+  "_note": "v4: game-anchored like the other v2+ recipes, banner compose style for the viral text look. v3 had no game slot at all, so 'palworld' purposes produced gorgeous but game-less macros.",
+  "template": "{game} video game key art: {subject} from {game}, {emotion} expression, {composition}, signature {game} creatures and environment behind them, faithful {game} art style, {palette} palette, {lighting}, bold readable space for text",
+  "negative": "text, letters, words, watermark, blurry, low contrast, extra limbs, cropped body, generic setting, unrelated game",
+  "vary": {
+    "palette": ["black-gold", "gold-red", "electric-blue"],
+    "lighting": ["rim light", "hard flash", "golden hour"],
+    "composition": ["subject filling the left half", "extreme close-up with space on the right", "centered hero shot"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 30, "batch": 4 },
+  "compose": { "text_zone": "bottom", "max_words": 4, "style": "banner", "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "game_reference": "1-5 — is THIS game unmistakable (creatures, environment, art style)?", "readability": "1-5", "contrast": "1-5", "subject_pop": "1-5", "hook": "1-5" }
+}

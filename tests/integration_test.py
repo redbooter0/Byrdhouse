@@ -192,6 +192,32 @@ def main():
         card_meta = json.loads(timed[0]["meta"])
         check("card records requested slots", card_meta.get("slots", {}).get("game") == "Last Epoch")
 
+        # 'name@N' pins that recipe version; bare name resolves to the highest
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import byrdimage
+        check("recipe version pin honored",
+              byrdimage.find_recipe(ROOT, "rpg_tier_list@1").name == "rpg_tier_list.v1.json")
+        check("bare recipe name resolves to highest version",
+              byrdimage.find_recipe(ROOT, "rpg_tier_list").name == "rpg_tier_list.v2.json")
+
+        # content.thumbnail with image_path composites onto a provided image
+        # (no ComfyUI pass) and yields a 1280x720 final with a card
+        from PIL import Image
+        shot = ROOT / "inbox" / "myshot.png"
+        shot.parent.mkdir(exist_ok=True)
+        Image.new("RGB", (640, 360), (40, 90, 40)).save(shot)
+        api("/jobs", {"type": "content.thumbnail", "project": "careyrpg",
+                      "required_mode": "ANY",
+                      "payload": {"title": "MY OWN SHOT", "image_path": str(shot),
+                                  "project": "careyrpg", "purpose": "byo image"}})
+        run_worker()
+        byo = [a for a in api("/artifacts?limit=80")
+               if a["kind"] == "thumbnail" and "myshot" in (a["path"] or "")]
+        check("thumbnail composited from provided image", len(byo) == 1)
+        if byo:
+            check("provided-image final is 1280x720",
+                  Image.open(byo[0]["path"]).size == (1280, 720))
+
         # A retried job re-registers its artifacts — must upsert, not duplicate
         dupe_card = {"artifact_id": "art.dupetest.0", "job_id": "job_dupetest",
                      "kind": "image", "path": "/tmp/dupetest.png", "status": "draft"}
@@ -210,6 +236,19 @@ def main():
         urllib.request.urlopen(rq2, timeout=15).read()
         with urllib.request.urlopen(f"http://127.0.0.1:{RP}/artifacts/art.dupetest.0/file", timeout=15) as r:
             check("preview served from uploaded cache (file not on router host)", r.read() == png)
+
+        # Reference library: upload from the dashboard, list, serve to the judge
+        ref_png = b"\x89PNG-ref-bytes"
+        rq3 = urllib.request.Request(
+            f"http://127.0.0.1:{RP}/references/palworld/fave.png", data=ref_png, method="POST",
+            headers={"Content-Type": "image/png", "Authorization": f"Bearer {TOKEN}"})
+        urllib.request.urlopen(rq3, timeout=15).read()
+        refs = api("/references?tag=palworld")
+        check("reference listed under its tag",
+              len(refs) == 1 and refs[0]["name"] == "fave.png")
+        with urllib.request.urlopen(
+                f"http://127.0.0.1:{RP}/references/palworld/fave.png/file", timeout=15) as r:
+            check("reference file served", r.read() == ref_png)
 
         # PowerShell 5.1 writes status.json with a UTF-8 BOM — /status must tolerate it
         (ROOT / "status.json").write_bytes(

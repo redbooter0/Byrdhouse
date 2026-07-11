@@ -1,4 +1,4 @@
-﻿{
+{
     "_comment":  "ByrdHouse config v1 (Blueprint v2 Â§4). ONE copy at %BYRDHOUSE_ROOT% on each machine. Scripts read this file â€” no script may hardcode a host, port, or path. Use Tailscale MagicDNS names, never raw IPs.",
     "hosts":  {
                   "gaming":  "byrd-gaming",

@@ -1,0 +1,15 @@
+{
+  "id": "build_guide",
+  "version": 3,
+  "kind": "image.generate",
+  "_note": "v3: framing fix from real batches — v2's 'loot at their feet' + 'low-angle shot' made SDXL crop to boots. Full body demanded, crops banned in the negative.",
+  "template": "{game} video game key art: full-body armored {subject} visible head to toe, centered in a recognizable {game} landscape, signature {game} creatures and scenery in the background, faithful {game} art direction, glowing legendary loot beside them, {palette} palette, {lighting}, dynamic medium-wide shot, clean bottom band left empty for composited text",
+  "negative": "text, letters, words, watermark, blurry, low contrast, dull colors, extra limbs, generic fantasy setting, unrelated game, close-up, cropped body, feet only, legs only, headless",
+  "vary": {
+    "palette": ["gold-red", "crimson-slate", "electric-blue"],
+    "lighting": ["rim light", "golden hour", "ember backlight"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 30, "batch": 4 },
+  "compose": { "text_zone": "bottom", "max_words": 4, "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "game_reference": "1-5 — is THIS game unmistakable (creatures, environment, art style)?", "framing": "1-5 — full subject in frame, not a body-part crop?", "readability": "1-5", "contrast": "1-5", "hook": "1-5" }
+}
