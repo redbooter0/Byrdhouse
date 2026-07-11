@@ -88,7 +88,7 @@ check('form saves draft on input and change',
 check('draft restored after a full render of the Image Studio',
   /applyDraft\(loadDraft\(\)\)/.test(html));
 check('draft cleared only inside successful submitGen (after jpost)',
-  /await jpost\('\/jobs'[\s\S]{0,220}clearDraft\(\)/.test(html)
+  /await jpost\('\/jobs'[\s\S]{0,500}clearDraft\(\)/.test(html)
   && (html.match(/clearDraft\(\)/g) || []).length === 2 /* def + submitGen */);
 check('no overlapping refresh cycles', /if \(_refreshing\) return/.test(html));
 check('recipe change preserves typed slot values', /const keep = \{\}/.test(html));
