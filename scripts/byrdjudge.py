@@ -34,6 +34,27 @@ def _find_recipe_spec(root: Path, recipe_tag: str):
     return _load(p) if p.exists() else None
 
 
+def _pick_model(lms: str, preferred: str) -> str:
+    """Judge with whatever LM Studio actually has loaded. Preferred model wins
+    when it's loaded; otherwise the first loaded model steps in; the preferred
+    name is only returned blind (JIT-load) when nothing is loaded at all."""
+    try:
+        with urllib.request.urlopen(f"{lms}/models", timeout=8) as r:
+            loaded = [m["id"] for m in json.loads(r.read().decode()).get("data", [])]
+    except Exception:
+        loaded = []
+    preferred_ok = preferred and not preferred.startswith("CHANGE_ME")
+    if preferred_ok and preferred in loaded:
+        return preferred
+    if loaded:
+        if preferred_ok:
+            print(f"[judge] '{preferred}' not loaded — using loaded model '{loaded[0]}'")
+        return loaded[0]
+    if preferred_ok:
+        return preferred  # let LM Studio JIT-load it
+    raise RuntimeError("no model loaded in LM Studio and gpu.judge_model not set")
+
+
 def _fetch_references(cfg, card, limit=2):
     """Founder-loved thumbnails from the router's reference library (best-effort).
     Tag priority: the requested game, then the recipe family, then 'general'."""
@@ -68,10 +89,8 @@ def judge_card(root, card: dict, image_path) -> dict:
     """Returns {"score": float, "tags": [...], "caption": str}. Raises on failure."""
     root = Path(root)
     cfg = _load(root / "byrdhouse.config.json")
-    model = cfg["gpu"].get("judge_model", "")
-    if not model or model.startswith("CHANGE_ME"):
-        raise RuntimeError("gpu.judge_model not set in byrdhouse.config.json")
     lms = cfg["services"]["lmstudio"].rstrip("/")
+    model = _pick_model(lms, cfg["gpu"].get("judge_model", ""))
 
     recipe = _find_recipe_spec(root, card.get("recipe", "")) or {}
     rubric = recipe.get("rubric", {"quality": "1-5"})

@@ -76,37 +76,47 @@ def find_recipe(root: Path, name: str) -> Path:
     return max(candidates, key=version)
 
 
-def resolve_checkpoint(root: Path, requested: str) -> str:
+def _comfy_checkpoints(comfy: str) -> list:
+    """Ask ComfyUI itself what checkpoints it can load — works even when the
+    install lives outside the ByrdHouse root."""
+    try:
+        with urllib.request.urlopen(f"{comfy}/object_info/CheckpointLoaderSimple",
+                                    timeout=10) as r:
+            info = json.loads(r.read().decode())
+        return list(info["CheckpointLoaderSimple"]["input"]["required"]["ckpt_name"][0])
+    except Exception:
+        return []
+
+
+def resolve_checkpoint(root: Path, requested: str, comfy: str = "") -> str:
+    """Interchangeable by design: match the request against what is actually
+    installed (disk first, ComfyUI API as fallback); if nothing matches but
+    checkpoints exist, use the first installed one rather than failing."""
     requested = requested.strip()
     if not requested:
         die("no checkpoint")
 
-    if requested.lower().endswith(".safetensors"):
-        stem = requested[:-len(".safetensors")]
-    else:
-        stem = requested
+    stem = requested[:-len(".safetensors")] if requested.lower().endswith(".safetensors") else requested
 
-    checkpoints = sorted((root / "Generators" / "ComfyUI" / "models" / "checkpoints").glob("*.safetensors"))
-    if not checkpoints:
+    installed = [p.name for p in sorted(
+        (root / "Generators" / "ComfyUI" / "models" / "checkpoints").glob("*.safetensors"))]
+    if not installed and comfy:
+        installed = _comfy_checkpoints(comfy)
+    if not installed:
         return requested if requested.lower().endswith(".safetensors") else f"{requested}.safetensors"
 
     def norm(text: str) -> str:
         return re.sub(r"[^a-z0-9]+", "", text.lower())
 
-    requested_norm = norm(requested)
-    stem_norm = norm(stem)
-
-    exact = [p for p in checkpoints if norm(p.name) == requested_norm or norm(p.stem) == stem_norm]
+    requested_norm, stem_norm = norm(requested), norm(stem)
+    exact = [n for n in installed if norm(n) == requested_norm or norm(Path(n).stem) == stem_norm]
     if exact:
-        return exact[0].name
-
-    prefix_matches = [p for p in checkpoints if requested_norm in norm(p.name) or stem_norm in norm(p.stem)]
-    if len(prefix_matches) == 1:
-        return prefix_matches[0].name
-    if prefix_matches:
-        return min(prefix_matches, key=lambda p: len(p.name)).name
-
-    return requested if requested.lower().endswith(".safetensors") else f"{requested}.safetensors"
+        return exact[0]
+    partial = [n for n in installed if requested_norm in norm(n) or stem_norm in norm(Path(n).stem)]
+    if partial:
+        return min(partial, key=len)
+    print(f"[byrdimage] no checkpoint matches '{requested}' — using installed '{installed[0]}'")
+    return installed[0]
 
 
 # SDXL-native resolutions per aspect — off-grid sizes degrade SDXL badly,
@@ -226,7 +236,8 @@ def generate(root, recipe_name, slots, project, purpose,
         negative = f"{negative}, {negative_extra}" if negative else str(negative_extra)
 
     defaults = recipe.get("defaults", {})
-    checkpoint = resolve_checkpoint(root, checkpoint or defaults.get("checkpoint") or die("no checkpoint"))
+    checkpoint = resolve_checkpoint(root, checkpoint or defaults.get("checkpoint")
+                                    or die("no checkpoint"), comfy=comfy)
     batch = batch or defaults.get("batch", 1)
     steps = defaults.get("steps", 30)
 
@@ -389,7 +400,7 @@ def refine(root, source_path, project, purpose, prompt=None, negative=None,
     negative = negative if negative is not None else src_card.get(
         "negative", "text, letters, watermark, blurry, low contrast")
     checkpoint = resolve_checkpoint(
-        root, checkpoint or src_card.get("checkpoint") or "juggernautXL_v9")
+        root, checkpoint or src_card.get("checkpoint") or "juggernautXL_v9", comfy=comfy)
 
     job_id = job_id or new_id("job")
     seed = secrets.randbits(63)

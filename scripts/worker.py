@@ -190,8 +190,11 @@ def run_judge(job) -> None:
     image_path = Path(p["path"])
     card_path = image_path.with_suffix(image_path.suffix + ".json")
     card = json.loads(card_path.read_text(encoding="utf-8-sig")) if card_path.exists() else dict(p)
-    _lms_unload_all()
-    _lms_load(CFG["gpu"].get("judge_model", ""))
+    jm = CFG["gpu"].get("judge_model", "")
+    if jm and not jm.startswith("CHANGE_ME") and jm not in _loaded_models():
+        _lms_unload_all()
+        _lms_load(jm)
+    # else: judge with whatever is loaded — byrdjudge._pick_model resolves it
     verdict = byrdjudge.judge_card(ROOT, card, image_path)
     card.update(score=verdict["score"], tags=verdict["tags"], caption=verdict["caption"])
     card["rubric_scores"] = verdict["scores"]
@@ -268,12 +271,27 @@ def run_content_thumbnail(job) -> None:
     register_cards(job, cards)
 
 
+def _loaded_models() -> list:
+    try:
+        with urllib.request.urlopen(
+                CFG["services"]["lmstudio"].rstrip("/") + "/models", timeout=8) as r:
+            return [m["id"] for m in json.loads(r.read().decode()).get("data", [])]
+    except Exception:
+        return []
+
+
 def _lms_chat(prompt: str, max_tokens=900) -> str:
     model = CFG["gpu"].get("operator_model", "")
     if not model or model.startswith("CHANGE_ME"):
-        raise RuntimeError("gpu.operator_model not set in byrdhouse.config.json")
-    _lms_unload_all()
-    _lms_load(model)
+        # interchangeable: no configured operator -> use whatever is loaded
+        loaded = _loaded_models()
+        if not loaded:
+            raise RuntimeError("gpu.operator_model not set and nothing loaded in LM Studio")
+        model = loaded[0]
+        log(f"operator_model not set — using loaded model '{model}'")
+    elif model not in _loaded_models():
+        _lms_unload_all()
+        _lms_load(model)
     lms = CFG["services"]["lmstudio"].rstrip("/")
     req = urllib.request.Request(
         f"{lms}/chat/completions",

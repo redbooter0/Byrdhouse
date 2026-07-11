@@ -240,6 +240,21 @@ def main():
         # 'name@N' pins that recipe version; bare name resolves to the highest
         sys.path.insert(0, str(ROOT / "scripts"))
         import byrdimage
+        import byrdjudge
+
+        # Interchangeable models: judge falls back to whatever LM Studio has
+        # loaded; checkpoints fall back to whatever is actually installed
+        check("judge uses the loaded model when the configured one is absent",
+              byrdjudge._pick_model(f"http://127.0.0.1:{LP}/v1", "ghost-model") == "mock-vl")
+        ckpt_dir = ROOT / "Generators" / "ComfyUI" / "models" / "checkpoints"
+        ckpt_dir.mkdir(parents=True, exist_ok=True)
+        (ckpt_dir / "onlyInstalled_v1.safetensors").write_bytes(b"stub")
+        check("unmatched checkpoint request falls back to an installed one",
+              byrdimage.resolve_checkpoint(ROOT, "does-not-exist")
+              == "onlyInstalled_v1.safetensors")
+        check("matched checkpoint still resolves by loose name",
+              byrdimage.resolve_checkpoint(ROOT, "only installed")
+              == "onlyInstalled_v1.safetensors")
         check("recipe version pin honored",
               byrdimage.find_recipe(ROOT, "rpg_tier_list@1").name == "rpg_tier_list.v1.json")
         check("bare recipe name resolves to highest version",
