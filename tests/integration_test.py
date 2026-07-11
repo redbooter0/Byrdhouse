@@ -110,6 +110,15 @@ def main():
         check("approve flow", approved["status"] == "approved")
         api(f"/artifacts/{arts[1]['id']}/review", {"action": "reject"})
 
+        # Idempotency: the same key submitted twice yields one job, not two
+        k = "idem-test-key-1"
+        j1 = api("/jobs", {"type": "report.daily", "idempotency_key": k})
+        j2 = api("/jobs", {"type": "report.daily", "idempotency_key": k})
+        check("idempotency key dedupes job submits",
+              j1["id"] == j2["id"] and j2.get("idempotent") is True)
+        same = [x for x in api("/jobs?limit=200") if x["id"] == j1["id"]]
+        check("only one job exists for the key", len(same) == 1)
+
         # Learn loop: the belt projects its own approve/reject history into
         # an approval-rate ranking (reverse-engineered reinforcement signal)
         learn = api("/learn?by=recipe")
