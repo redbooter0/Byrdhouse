@@ -165,9 +165,11 @@ function artCard(a) {
   const meta = JSON.parse(a.meta || '{}');
   const img = a.kind === 'image' || a.kind === 'thumbnail'
     ? `<img src="/artifacts/${a.id}/file" loading="lazy" onerror="this.style.display='none'">` : '';
+  const when = (a.job_finished_at || a.created_at || '').slice(5, 16).replace('T', ' ');
   return `<div class="art">${img}<div class="m">
     <b>${esc(meta.recipe || a.kind)}</b> · ${esc(a.project_id)}<br>
     ${a.score != null ? 'score <b>'+a.score+'</b> · ' : ''}<span class="pill">${esc(a.status)}</span><br>
+    ${a.gen_seconds != null ? '⏱ '+fmtDur(a.gen_seconds)+' · ' : ''}<span class="muted">${esc(when)}</span><br>
     ${esc(meta.purpose || meta.title || '')}
     <div class="row">
       <button class="s ok" ${a.status==='approved'?'disabled':''} onclick="review(this,'${a.id}','approve')">${a.status==='approved'?'✓ approved':'approve'}</button>
@@ -213,11 +215,18 @@ V.command = async () => {
   </div>`;
 };
 
+function fmtDur(s) { return s >= 90 ? Math.floor(s/60)+'m '+(s%60)+'s' : s+'s'; }
+function ago(ts) {
+  if (!ts) return '';
+  const m = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 60000));
+  return m < 1 ? 'just now' : m + 'm ago';
+}
 function busyCards(jobs) {
   const gen = t => t==='image.generate'||t==='content.thumbnail';
   return jobs.filter(j => ['queued','claimed','running'].includes(j.status) && gen(j.type))
     .map(j => `<div class="busy"><b>${esc(j.status==='queued'?'queued':'generating…')}</b>
-      <span>${esc(j.type)}</span><span>${esc(j.id.slice(-8))}</span></div>`).join('');
+      <span>${esc(j.type)}</span><span>${esc(j.id.slice(-8))}</span>
+      <span>${esc(j.status==='queued' ? 'queued '+ago(j.created_at) : 'started '+ago(j.claimed_at))}</span></div>`).join('');
 }
 async function imgOutHtml() {
   const jobs = await jget('/jobs?limit=30');
@@ -372,9 +381,12 @@ V.events = async () => {
   const ev = await jget('/events?limit=60');
   const jobs = await jget('/jobs?limit=30');
   return `<div class="grid">
-    <div class="panel wide"><h2>Jobs</h2><table><tr><th>id</th><th>type</th><th>status</th><th>worker</th><th>error</th><th></th></tr>${
+    <div class="panel wide"><h2>Jobs</h2><table><tr><th>id</th><th>type</th><th>status</th><th>queued</th><th>took</th><th>worker</th><th>error</th><th></th></tr>${
       jobs.map(j => `<tr><td class="muted">${esc(j.id)}</td><td>${esc(j.type)}</td>
-        <td><span class="pill">${esc(j.status)}</span></td><td class="muted">${esc(j.worker_id||'')}</td>
+        <td><span class="pill">${esc(j.status)}</span></td>
+        <td class="muted">${esc((j.created_at||'').slice(5,16).replace('T',' '))}</td>
+        <td class="muted">${j.finished_at && j.claimed_at ? fmtDur(Math.round((new Date(j.finished_at)-new Date(j.claimed_at))/1000)) : ''}</td>
+        <td class="muted">${esc(j.worker_id||'')}</td>
         <td class="muted">${esc((j.error||'').slice(0,60))}</td>
         <td>${['dead','cancelled','claimed','running'].includes(j.status)
               ? `<button class="s ok" onclick="jobAct('${j.id}','requeue')">requeue</button>` : ''}

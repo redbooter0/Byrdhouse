@@ -1,0 +1,15 @@
+{
+  "id": "shock_reveal",
+  "version": 2,
+  "kind": "image.generate",
+  "_note": "v2: game-first anchoring + game_reference rubric (see build_guide.v2 note).",
+  "template": "{game} video game scene: shocked {subject} face on the left third, {money_object} glowing on the right, recognizable {game} setting and art style behind them, diagonal energy beam between them, {palette} palette, {lighting}, screaming contrast, clean zone for composited text",
+  "negative": "text, letters, words, watermark, blurry, low contrast, generic setting, unrelated game",
+  "vary": {
+    "palette": ["gold-red", "toxic-green", "electric-blue"],
+    "lighting": ["hard flash", "neon glow", "ember backlight"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 30, "batch": 4 },
+  "compose": { "text_zone": "bottom", "max_words": 4, "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "game_reference": "1-5 — is THIS game unmistakable (creatures, environment, art style)?", "readability": "1-5", "contrast": "1-5", "shock_factor": "1-5", "hook": "1-5" }
+}

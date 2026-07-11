@@ -47,10 +47,22 @@ def judge_card(root, card: dict, image_path) -> dict:
     rubric = recipe.get("rubric", {"quality": "1-5"})
     b64 = base64.b64encode(Path(image_path).read_bytes()).decode()
 
+    slots = card.get("slots") or {}
+    game = slots.get("game", "")
+    game_rule = ""
+    if game:
+        game_rule = (
+            f"\nHARD REQUIREMENT: the founder asked for the video game '{game}'. "
+            f"If the image does not clearly evoke {game} (its creatures, environment, "
+            f"or art style), set game_reference to 1-2, cap the overall score at 2.4, "
+            f"and include the tag \"off-game\". Generic fantasy that could be any game FAILS this."
+        )
     prompt = (
         "You are the ByrdHouse image judge. Score this generated image against its "
         f"recipe rubric: {json.dumps(rubric)}. The image's purpose: "
-        f"{card.get('purpose', 'unknown')}. Prompt used: {card.get('prompt', '')[:400]}\n"
+        f"{card.get('purpose', 'unknown')}. Requested slots: {json.dumps(slots)}. "
+        f"Prompt used: {card.get('prompt', '')[:400]}"
+        f"{game_rule}\n"
         "Reply with ONLY a JSON object: {\"score\": <overall 1-5, one decimal>, "
         "\"scores\": {<rubric key>: <1-5>, ...}, \"tags\": [3-6 short lowercase tags], "
         "\"caption\": \"<one vivid sentence>\"}"

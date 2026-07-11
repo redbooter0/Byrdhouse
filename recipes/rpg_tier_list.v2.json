@@ -1,0 +1,15 @@
+{
+  "id": "rpg_tier_list",
+  "version": 2,
+  "kind": "image.generate",
+  "_note": "v2: game-first anchoring + game_reference rubric (see build_guide.v2 note).",
+  "template": "{game} video game key art: {subject} from {game} in a recognizable {game} environment, signature {game} visual style, dark fantasy backdrop, glowing skill icons arranged along the right side as rank bars, S A B tier framing, {palette} palette, {lighting}, dramatic depth, empty upper-left zone for composited text",
+  "negative": "text, letters, words, watermark, blurry, low contrast, generic fantasy setting, unrelated game",
+  "vary": {
+    "palette": ["black-gold", "electric-blue", "blood-red"],
+    "lighting": ["rim light", "volumetric haze", "ember backlight"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 30, "batch": 4 },
+  "compose": { "text_zone": "upper-left", "max_words": 5, "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "game_reference": "1-5 — is THIS game unmistakable (creatures, environment, art style)?", "readability": "1-5", "contrast": "1-5", "subject_pop": "1-5", "tier_grammar": "1-5" }
+}
