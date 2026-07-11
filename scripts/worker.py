@@ -46,12 +46,29 @@ def api(path, payload=None, method=None):
         return json.loads(r.read().decode())
 
 
+def _preview_bytes(path, max_side=896):
+    """Downscale for the dashboard preview — the phone doesn't need the full
+    SDXL PNG; the original stays on this machine's disk untouched."""
+    try:
+        from PIL import Image
+        import io
+        im = Image.open(path)
+        if max(im.size) > max_side:
+            im.thumbnail((max_side, max_side), Image.LANCZOS)
+            buf = io.BytesIO()
+            im.convert("RGB").save(buf, "PNG", optimize=True)
+            return buf.getvalue()
+    except Exception:
+        pass
+    return Path(path).read_bytes()
+
+
 def upload_preview(artifact_id, path):
     """Push the image bytes to the router so the dashboard can preview it —
     artifact files live on this machine's disk, not the router's."""
     try:
         req = urllib.request.Request(
-            f"{ROUTER}/artifacts/{artifact_id}/file", data=Path(path).read_bytes(),
+            f"{ROUTER}/artifacts/{artifact_id}/file", data=_preview_bytes(path),
             method="POST",
             headers={"Content-Type": "image/png",
                      "Authorization": f"Bearer {TOKEN}", "X-Actor": WORKER_ID})
