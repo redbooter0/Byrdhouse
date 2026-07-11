@@ -108,3 +108,19 @@ They're heavier than this scale needs, they'd break the stdlib-only rule, and �
 the real reason — **the belt already is one.** Reverse-engineering the patterns
 keeps the whole system inspectable in one `router.py` a founder can read, which
 is worth more here than any feature a framework would add.
+
+## North star: one belt, many clients
+
+ByrdHouse is a private, local-first agent workspace. Dashboard, Cherry Studio,
+LM Studio, MCP clients, browser automation, and Godot are clients of one
+MINI-owned belt—not separate backends. GAMING owns GPU-bound execution.
+
+The write boundary is:
+
+request -> validate recipe/permissions -> durable job -> capable worker -> artifact -> judge -> human review -> learn
+
+No bot, MCP, browser automation, Python helper, Godot integration, or model may
+bypass the belt to drive ComfyUI or mutate files directly. New adapters need an
+audit event, explicit capability, allowlist, and failure-path test. Read-only is
+the default; writes need explicit permission, idempotency, project scope, and a
+bounded mutation budget. Long work returns a job id and is polled.

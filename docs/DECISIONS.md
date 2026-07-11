@@ -2,6 +2,12 @@
 
 *Append-only log. One line per decision: date · decision · why. Never edit old lines.*
 
+- 2026-07-11 · One belt, many clients: dashboard, Cherry Studio, LM Studio, MCP, browser, and automation adapters all submit to MINI; GAMING remains the capability worker.
+- 2026-07-11 · Recipe validation belongs at router enqueue, with byrdimage as the final safety boundary, so malformed jobs never consume worker attempts.
+- 2026-07-11 · MINI may run a measured small fallback model for orchestration only; it is not a judge, image model, or GPU replacement.
+- 2026-07-11 · Operator MCP defaults read-only and exposes belt, recipes, jobs, artifacts, and review before browser/Godot/Python write tools.
+- 2026-07-11 · Network evidence is ordinary Ethernet LAN, not verified Tailscale: GAMING is 15.2.2.4/24 and byrd-mini resolves to 15.2.2.5.
+
 - 2026-07-10 · Treat U0 as functionally complete and move active work to U1 Image Lab; setup/status commands are gated by anti-loop rules · prevents future sessions from re-running machine setup instead of using the working belt
 - 2026-07-10 · Built the full software side (U0–U3 + judge + dashboard) up front per founder request; unlocks still gate what gets USED and verified on hardware, but the code ships now so machines only need config + debugging · founder decision overrides build-in-order
 - 2026-07-10 · Router implemented with Python stdlib (http.server + sqlite3) instead of FastAPI — same v2 §6 contract, zero pip installs on the machines; can swap frameworks later without changing routes · fewer failure modes on fresh Windows boxes

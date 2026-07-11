@@ -201,6 +201,47 @@ def job_row(jid):
     return db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
 
 
+def recipe_contract(payload, job_type):
+    """Validate recipe-backed jobs before they enter the belt.
+
+    The router is the only shared boundary between dashboard, chat, MCP, and
+    the GAMING worker. Rejecting an invalid contract here prevents a job from
+    consuming a worker attempt before failing deep in byrdimage.
+    """
+    if job_type not in {"image.generate", "content.thumbnail"}:
+        return None, None, None
+    payload = payload or {}
+    recipe_name = str(payload.get("recipe") or "").strip()
+    # A thumbnail made from a real local/source artifact does not need recipe
+    # generation; it is validated by the worker's compose path instead.
+    if not recipe_name and (payload.get("image_path") or payload.get("source_artifact")):
+        return None, None, None
+    if not recipe_name:
+        return "recipe is required for this job", None, None
+    m = re.fullmatch(r"([\w-]+)(?:@(\d+))?", recipe_name)
+    if not m:
+        return f"invalid recipe '{recipe_name}'", None, None
+    candidates = sorted((ROOT / "recipes").glob(f"{m.group(1)}.v*.json"))
+    if m.group(2):
+        candidates = [ROOT / "recipes" / f"{m.group(1)}.v{m.group(2)}.json"]
+    if not candidates or not candidates[-1].exists():
+        return f"no recipe '{recipe_name}'", None, None
+    try:
+        spec = json.loads(candidates[-1].read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError) as e:
+        return f"recipe '{recipe_name}' cannot be loaded: {e}", None, None
+    vary = spec.get("vary") or {}
+    empty = sorted(k for k, options in vary.items() if not isinstance(options, list) or not options)
+    if empty:
+        return f"recipe authoring error: vary slot(s) have no options: {', '.join(empty)}", None, None
+    slots = payload.get("slots") or {}
+    template_slots = list(dict.fromkeys(re.findall(r"\{(\w+)\}", spec.get("template", ""))))
+    missing = sorted(k for k in template_slots if k not in vary and not str(slots.get(k, "")).strip())
+    if missing:
+        return f"missing required recipe slots: {', '.join(missing)}", None, None
+    return None, spec.get("id"), int(spec.get("version", 0))
+
+
 LEARN_DIMS = {  # dimension -> how to pull its value out of an artifact card
     "recipe":     lambda m: m.get("recipe"),
     "checkpoint": lambda m: m.get("checkpoint"),
@@ -674,6 +715,12 @@ class Handler(BaseHTTPRequestHandler):
             jtype = body.get("type", "")
             if jtype not in JOB_TYPES and not jtype.startswith("content."):
                 return self._send({"error": f"unknown job type '{jtype}'"}, 400)
+            job_payload = body.get("payload", {}) or {}
+            contract_error, recipe_id, recipe_version = recipe_contract(job_payload, jtype)
+            if contract_error:
+                event(self._actor(), "job.reject", body.get("idempotency_key", "unsubmitted"),
+                      {"type": jtype, "error": contract_error}, ok=False)
+                return self._send({"error": contract_error}, 400)
             # Idempotency: a double-tap or a network retry carrying the same key
             # returns the job already created instead of minting a duplicate.
             idem = body.get("idempotency_key")
@@ -689,8 +736,8 @@ class Handler(BaseHTTPRequestHandler):
                 "priority,required_mode,required_caps,status,max_attempts,created_at,idempotency_key)"
                 " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (jid, jtype, body.get("project", "sandbox"),
-                 body.get("recipe"), body.get("recipe_version"),
-                 json.dumps(body.get("payload", {})), int(body.get("priority", 5)),
+                 recipe_id or body.get("recipe"), recipe_version or body.get("recipe_version"),
+                 json.dumps(job_payload), int(body.get("priority", 5)),
                  body.get("required_mode", "ANY"),
                  json.dumps(body.get("required_caps", [])),
                  "queued", int(body.get("max_attempts", 2)), now(), idem))

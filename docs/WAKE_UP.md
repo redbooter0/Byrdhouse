@@ -1,5 +1,12 @@
 # Good morning — update prompts (2026-07-11)
 
+## Direction check
+
+The live folders are deployments, not Git clones. Update the repository clone,
+then run setup; do not reset D:\ByrdHouse or E:\ByrdHouse. MINI owns the belt
+and GAMING owns GPU work. Probe LM Studio before restarting it so Local
+Network/CORS settings survive wake-up.
+
 Both machines are behind main. Paste these exactly, in order.
 
 ## 1. BYRD-MINI (PowerShell)

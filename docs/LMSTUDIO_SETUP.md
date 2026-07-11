@@ -1,5 +1,16 @@
 # LM Studio — one-time setup so it boots reliably
 
+## Two-model direction
+
+GAMING remains the heavy model host. MINI may run a small CPU-friendly
+operator model for status, planning, recipe preflight, and queue management
+when GAMING is busy in IMAGE mode. It is never the image model or authoritative
+vision judge.
+
+Do not blindly run lms server start on every restart. First probe
+http://localhost:1234/v1/models; if it answers, preserve LM Studio's existing
+Local Network and CORS settings. Startup automation must not reset them.
+
 The "LM Studio fails on the first attempt / I have to re-enable the local
 connection" problem is LM Studio dropping its server settings when a model is
 swapped. Two halves: settings that must persist, and the belt not thrashing it.

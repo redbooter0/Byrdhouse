@@ -1,5 +1,11 @@
 # ByrdHouse ROOM MAP
 
+## Shared operating rule
+
+Rooms are views over one belt. The Bot/MCP room is a compatibility layer for
+Cherry Studio, LM Studio, browser automation, Godot, and future clients—not a
+new job system. Read-only discovery comes first, then explicit audited writes.
+
 *The rooms are the product. The unlocks are just the construction schedule. Reconciled 2026-07-09; committed to repo 2026-07-10.*
 
 ## The 14 Rooms

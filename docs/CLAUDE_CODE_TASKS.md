@@ -101,3 +101,12 @@ python tests\integration_test.py
 - U6 Godot belt integration.
 
 These can be discussed, but they should not interrupt U1 unless the founder explicitly changes priority.
+
+## Current operating direction
+
+The next product is a private open-source-compatible operator, not a second
+queue and not a direct ComfyUI controller. MINI owns router, SQLite/WAL,
+dashboard, memory, MCP gateway, audit/events, and an optional small fallback
+model. GAMING owns the worker, ComfyUI, LM Studio heavy models, and
+image/video/Godot execution. Every connector must call an audited belt endpoint,
+default to read-only, use an allowlist, and have an integration test.

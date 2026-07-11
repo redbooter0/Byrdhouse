@@ -1,5 +1,17 @@
 # BYRD-MINI Bring-Up — 2026-07-10
 
+## Role and network truth
+
+MINI is the always-on control plane: router, dashboard, queue database, event
+log, memory, MCP gateway, and optional small fallback model. It does not run
+ComfyUI or heavy image/video models. All clients reach the belt through the
+router.
+
+The hostnames in older notes are not proof of Tailscale. On 2026-07-11 GAMING
+reached BYRD-MINI.local at 15.2.2.5 over the 15.2.2.0/24 Ethernet LAN, and no
+Tailscale service/CLI was present on GAMING. Verify Tailscale on both hosts
+before documenting this as a tailnet deployment.
+
 *What got set up today, what state the mini is in, and the exact next fixes in order.*
 
 ## What we set up

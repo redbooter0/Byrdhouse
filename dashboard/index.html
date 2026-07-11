@@ -159,7 +159,7 @@ const jpost = async (p, body) => {
   const r = await fetch(p, { method:'POST', headers:hdrs(), body:JSON.stringify(body) });
   const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j;
 };
-const say = t => $('msg').textContent = t;
+const say = t => { $('msg').textContent = t; if ($('genMsg')) $('genMsg').textContent = t; };
 
 /* ── tooltips: clean labels + a ? that pops the description (tap or hover) ── */
 const qtip = text => `<span class="q" onclick="showTip(event)" data-tip="${esc(text)}">?</span>`;
@@ -341,6 +341,7 @@ V.image = async () => {
       <label>Thumbnail title ${qtip('Optional. Real text composited on top of the art in a second pass — never diffused, so it is always crisp and readable. Leave empty for art only.')}</label>
       <input id="thumbTitle" placeholder="e.g. BEST BUILDS TIER LIST">
       <div class="row" style="margin-top:10px"><button class="b" onclick="submitGen()">Queue generation</button></div>
+      <div id="genMsg" style="color:var(--yellow);font-size:12.5px;min-height:16px;margin-top:8px"></div>
       <details class="opts"><summary>More options</summary>
         <label>Project ${qtip('Which channel/project this belongs to — groups artifacts in the gallery and exports.')}</label>
         <input id="project" value="careyrpg">
@@ -395,13 +396,24 @@ async function uploadRefs(input) {
     $('refList').innerHTML = await refListHtml();
   } catch (e) { say('reference upload error: ' + e.message); }
 }
+function currentRecipe() {
+  return (window._recipes||[]).find(x => x.id + '@' + x.version === ($('recipe') ? $('recipe').value : ''));
+}
+function requiredSlots(r) {
+  r = r || currentRecipe();
+  return r ? r.slots.filter(s => !r.vary.includes(s)) : [];
+}
+function missingRequiredSlots(vals) {
+  return requiredSlots().filter(s => !String((vals && vals[s]) || '').trim());
+}
 function slotFields() {
-  const r = (window._recipes||[]).find(x => x.id + '@' + x.version === $('recipe').value);
+  const r = currentRecipe();
   if (!r) return;
   const keep = {};  // survive a recipe change without losing typed slot values
   document.querySelectorAll('#slots input').forEach(i => { keep[i.dataset.slot] = i.value; });
-  $('slots').innerHTML = r.slots.filter(s => !r.vary.includes(s)).map(s =>
-    `<label>${esc(s)}</label><input data-slot="${esc(s)}" placeholder="${esc(s)}">`).join('');
+  $('slots').innerHTML = requiredSlots(r).map(s =>
+    `<label>${esc(s)} <span style="color:var(--red)">*</span></label>` +
+    `<input data-slot="${esc(s)}" required placeholder="${esc(s)} — required">`).join('');
   document.querySelectorAll('#slots input').forEach(i => { if (keep[i.dataset.slot]) i.value = keep[i.dataset.slot]; });
 }
 
@@ -454,6 +466,10 @@ async function submitGen() {
     if (lora) payload.lora = lora;
     const enhance = $('enhance') && $('enhance').checked && !title && !src && payload.slots.prompt;
     const type = (src || title) ? 'content.thumbnail' : enhance ? 'content.enhance' : 'image.generate';
+    if (!src && type !== 'content.enhance') {
+      const missing = missingRequiredSlots(d.slots);
+      if (missing.length) throw new Error('Missing required fields: ' + missing.join(', '));
+    }
     const j = await jpost('/jobs', { type,
       project:d.project,
       required_mode: src ? 'ANY' : enhance ? 'OPERATOR' : 'IMAGE',

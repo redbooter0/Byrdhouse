@@ -1,5 +1,18 @@
 # ByrdHouse STATE
 
+## Direction update (2026-07-11)
+
+Current unlock is U1 Image Lab plus belt contract hardening. The next direction
+is a private operator compatibility layer: one MCP surface for the belt usable
+from Cherry Studio, LM Studio, and other open clients, with browser/Godot/
+automation adapters behind permissions. MINI can host a small fallback model;
+GAMING owns heavy models and GPU execution. The app must work without the bot,
+and the bot must never bypass the belt.
+
+Current network evidence is LAN, not confirmed Tailscale: byrd-mini resolved to
+15.2.2.5 and GAMING is 15.2.2.4/24; the Tailscale CLI/service was absent on
+GAMING during the last check.
+
 *One page of current truth. Update weekly or on any milestone. Paste this to any AI to resume work instantly.*
 
 **Last updated:** 2026-07-10 · **Current unlock: U1 IMAGE LAB**

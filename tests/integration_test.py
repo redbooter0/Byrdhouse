@@ -88,6 +88,46 @@ def main():
         except urllib.error.HTTPError as e:
             check("bad token rejected", e.code == 401)
 
+        print("== recipe contract boundary")
+        bad_payload = {"type": "image.generate", "project": "careyrpg",
+                       "required_mode": "IMAGE", "required_caps": ["comfyui"],
+                       "payload": {"recipe": "yt_thumbnail@4",
+                                   "slots": {"game": "Pokemon", "subject": "Pokemon"},
+                                   "purpose": "contract regression"}}
+        try:
+            api("/jobs", bad_payload)
+            check("router rejects missing emotion before worker claim", False)
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode()
+            check("router rejects missing emotion before worker claim",
+                  e.code == 400 and "emotion" in detail, detail)
+        good = dict(bad_payload)
+        good["payload"] = dict(bad_payload["payload"],
+                                slots={"game": "Pokemon", "subject": "Pokemon",
+                                       "emotion": "wide-eyed shock"})
+        accepted = api("/jobs", good)
+        check("router accepts filled emotion", accepted.get("status") == "queued")
+        if accepted.get("id"):
+            row = api("/jobs?limit=100")
+            job = next((j for j in row if j["id"] == accepted["id"]), {})
+            check("accepted job stores exact recipe version",
+                  job.get("recipe_id") == "yt_thumbnail" and job.get("recipe_version") == 4)
+            api(f"/jobs/{accepted['id']}/cancel", {})
+
+        # The private operator is an MCP client surface, not a second belt.
+        os.environ["BYRDHOUSE_ROOT"] = str(ROOT)
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import byrd_operator_mcp as operator_mcp
+        tools = {t["name"] for t in operator_mcp.handle(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})["result"]["tools"]}
+        check("operator MCP starts read-only", "queue_image" not in tools and
+              {"belt_status", "list_recipes", "validate_recipe", "job_status"} <= tools)
+        vr = operator_mcp.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                                  "params": {"name": "validate_recipe", "arguments": {
+                                      "recipe": "yt_thumbnail@4", "slots": {"game": "Pokemon"}}}})
+        check("operator MCP preflights recipe slots",
+              vr["result"]["isError"] is False and "emotion" in vr["result"]["content"][0]["text"])
+
         print("== image.generate -> auto-judge -> approve")
         j = api("/jobs", {"type": "image.generate", "project": "careyrpg",
                           "required_mode": "IMAGE", "required_caps": ["comfyui"],
@@ -182,12 +222,18 @@ def main():
         check("export artifact (auto-approved)", len(exp) == 1 and exp[0]["status"] == "approved")
 
         print("== failure -> retry -> dead")
-        api("/jobs", {"type": "image.generate", "required_mode": "IMAGE",
-                      "payload": {"recipe": "nope", "slots": {}, "purpose": "fail"}})
+        try:
+            api("/jobs", {"type": "image.generate", "required_mode": "IMAGE",
+                          "payload": {"recipe": "nope", "slots": {}, "purpose": "fail"}})
+            check("invalid recipe rejected at enqueue", False)
+        except urllib.error.HTTPError as e:
+            check("invalid recipe rejected at enqueue", e.code == 400)
+        api("/jobs", {"type": "content.research", "payload": {"top": 2,
+                                                                  "purpose": "fail"}})
         run_worker()
-        dead = [x for x in api("/jobs?type=image.generate") if x["status"] == "dead"]
+        dead = [x for x in api("/jobs?type=content.research") if x["status"] == "dead"]
         check("dead after retries", len(dead) == 1)
-        check("real error message recorded", dead and "no recipe 'nope'" in (dead[0]["error"] or ""))
+        check("real error message recorded", dead and "csv_path" in (dead[0]["error"] or ""))
 
         print("== requeue + cancel + worker liveness")
         rq = api(f"/jobs/{dead[0]['id']}/requeue", {})

@@ -92,6 +92,15 @@ check('draft cleared only inside successful submitGen (after jpost)',
   && (html.match(/clearDraft\(\)/g) || []).length === 2 /* def + submitGen */);
 check('no overlapping refresh cycles', /if \(_refreshing\) return/.test(html));
 check('recipe change preserves typed slot values', /const keep = \{\}/.test(html));
+check('vary slots are hidden and non-vary slots are required',
+  /function requiredSlots\(r\)/.test(html) &&
+  /requiredSlots\(r\)\.map\(s =>[\s\S]{0,180}required/.test(html));
+check('required fields are visibly marked',
+  /<span style="color:var\(--red\)"\>\*<\/span>/.test(html));
+check('submit blocks all missing fields before POST',
+  /Missing required fields: ' \+ missing\.join\(', '\)/.test(html) &&
+  /if \(!src && type !== 'content\.enhance'\)/.test(html));
+check('validation message is beside Queue', /id="genMsg"/.test(html));
 
 console.log(failures ? `\n${failures} FAILED` : '\nALL CHECKS PASSED');
 process.exit(failures ? 1 : 0);

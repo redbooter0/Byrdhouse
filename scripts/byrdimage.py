@@ -234,7 +234,9 @@ def generate(root, recipe_name, slots, project, purpose,
     user_slots = dict(slots)  # what the founder actually asked for, kept on the card
     vary_picks = {}
     for k, options in recipe.get("vary", {}).items():
-        if k not in slots:
+        if not isinstance(options, list) or not options:
+            die(f"recipe authoring error: vary slot '{k}' has no options")
+        if not str(slots.get(k, "")).strip():
             vary_picks[k] = random.choice(options)
     slots.update(vary_picks)
 

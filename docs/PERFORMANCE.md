@@ -1,5 +1,13 @@
 # ByrdHouse Performance — squeezing both machines
 
+## Performance policy
+
+Optimize the system boundary before buying hardware: MINI handles low-cost
+operator/status requests while GAMING serializes GPU work. Choose the MINI
+model by measured resident RAM, tokens/sec, and idle stability. Keep Image mode
+exclusive on the RTX 3070 and let the belt queue work rather than competing for
+VRAM.
+
 *BYRD-GAMING: i9-10850K · 32GB DDR4 · RTX 3070 8GB. BYRD-MINI: 8GB RAM, no GPU.*
 
 ## BYRD-GAMING (the muscle)
