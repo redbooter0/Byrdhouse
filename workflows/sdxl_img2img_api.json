@@ -1,0 +1,54 @@
+{
+  "_comment": "SDXL img2img graph for image.refine: LoadImage -> VAEEncode -> LatentUpscaleBy -> RepeatLatentBatch -> KSampler(denoise=strength) -> save. byrdimage.refine() fills image, checkpoint, prompt/negative, seed, denoise, scale, batch and prefix at submit time.",
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" }
+  },
+  "2": {
+    "class_type": "VAEEncode",
+    "inputs": { "pixels": ["1", 0], "vae": ["4", 2] }
+  },
+  "10": {
+    "class_type": "LatentUpscaleBy",
+    "inputs": { "upscale_method": "nearest-exact", "scale_by": 1.6, "samples": ["2", 0] }
+  },
+  "11": {
+    "class_type": "RepeatLatentBatch",
+    "inputs": { "amount": 1, "samples": ["10", 0] }
+  },
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0,
+      "steps": 30,
+      "cfg": 7.0,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "denoise": 0.4,
+      "model": ["4", 0],
+      "positive": ["6", 0],
+      "negative": ["7", 0],
+      "latent_image": ["11", 0]
+    }
+  },
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "juggernautXL_v9.safetensors" }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["3", 0], "vae": ["4", 2] }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "byrdhouse_refine", "images": ["8", 0] }
+  }
+}

@@ -133,7 +133,51 @@ def run_generate(job) -> None:
     job_id, saved = byrdimage.generate(
         ROOT, p["recipe"], p.get("slots", {}), p.get("project", "sandbox"),
         p.get("purpose", "unspecified"), batch=p.get("batch"),
-        checkpoint=p.get("checkpoint"), job_id=job["id"])
+        checkpoint=p.get("checkpoint"), job_id=job["id"],
+        aspect=p.get("aspect"), width=p.get("width"), height=p.get("height"),
+        negative_extra=p.get("negative"), lora=p.get("lora"),
+        lora_strength=float(p.get("lora_strength", 0.9)), seed=p.get("seed"))
+    cards = []
+    for png, card in saved:
+        card["path"] = str(png)
+        cards.append(card)
+    register_cards(job, cards)
+
+
+def run_content_enhance(job) -> None:
+    """OPERATOR-mode pass: the local model rewrites the founder's words into an
+    SDXL-engineered prompt, then enqueues the actual generation. Two jobs
+    because GPU modes are exclusive — the LLM isn't loaded while ComfyUI runs."""
+    p = json.loads(job["payload"])
+    original = (p.get("slots") or {}).get("prompt") or ""
+    if not original:
+        raise RuntimeError("content.enhance needs slots.prompt to rewrite")
+    answer = _lms_chat(
+        "You are the ByrdHouse prompt engineer for SDXL image generation. Rewrite "
+        "the request below into ONE vivid SDXL prompt: subject first, then setting, "
+        "composition, art style, lighting, color mood — comma-separated descriptors, "
+        "under 60 words, no quotes, no explanations, keep every specific game/brand/"
+        "person mentioned.\nRequest: " + original, max_tokens=200).strip()
+    enhanced = answer.splitlines()[-1].strip().strip('"') or original
+    log(f"enhanced prompt: {enhanced[:120]}")
+    gen_payload = dict(p, slots=dict(p.get("slots") or {}, prompt=enhanced),
+                       enhanced_from=original)
+    gen_payload.pop("enhance", None)
+    api("/jobs", {"type": "image.generate", "project": p.get("project", "sandbox"),
+                  "required_mode": "IMAGE", "required_caps": ["comfyui"],
+                  "payload": gen_payload})
+
+
+def run_refine(job) -> None:
+    """image.refine / image.upscale: img2img over an existing artifact —
+    low strength polishes and upscales, higher strength makes variations."""
+    p = json.loads(job["payload"])
+    _, saved = byrdimage.refine(
+        ROOT, p["source_path"], p.get("project", "sandbox"),
+        p.get("purpose", "refine"), prompt=p.get("prompt"),
+        negative=p.get("negative"), strength=float(p.get("strength", 0.4)),
+        scale=float(p.get("scale", 1.6)), checkpoint=p.get("checkpoint"),
+        lora=p.get("lora"), batch=int(p.get("batch", 1)), job_id=job["id"])
     cards = []
     for png, card in saved:
         card["path"] = str(png)
@@ -332,7 +376,9 @@ def run_export_csv(job) -> None:
 
 
 RUNNERS = {"image.generate": run_generate, "image.judge": run_judge,
+           "image.refine": run_refine, "image.upscale": run_refine,
            "report.daily": run_report,
+           "content.enhance": run_content_enhance,
            "content.thumbnail": run_content_thumbnail,
            "content.package": run_content_package,
            "content.research": run_content_research,

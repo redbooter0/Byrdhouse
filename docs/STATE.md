@@ -110,6 +110,8 @@ U2/U3 are already partially built, but they should be treated as usage/hardening
 
 ## Done log
 
+- 2026-07-11 · Image Studio capability sprint: aspect presets (16:9/9:16/1:1/2:3/3:2/21:9, SDXL-native snapping), image.refine runner (img2img: upscale at low strength, variations at high — POST /artifacts/id/refine + upscale/riff buttons on every card), LoRA support (loose-matched from models/loras, graph-spliced LoraLoader — the "any game accurately" unlock once game LoRAs are downloaded), content.enhance (operator model rewrites a freeform prompt in OPERATOR mode then auto-enqueues generation — GPU modes stay exclusive), negative/seed payload overrides, sdxl_img2img workflow + mock upload support. Integration test 44 checks
+
 - 2026-07-10 · U0 polish sprint (9 root-cause fixes, one commit each): charset=utf-8 on all responses; artifact dedupe via deterministic IDs + latest-per-(job,path) query; state-aware approve/reject buttons; adaptive auto-refresh (4s active / 15s idle / paused hidden); PNG previews via worker→router byte upload (files live on GAMING, router on MINI); manual GPU-mode buttons removed (worker self-schedules); in-flight job placeholders; mobile Safari cleanup; worker/router dedup refactor + live transition logging. Integration test now 29 checks
 
 - 2026-07-10 · U0 real-hardware belt completed: MINI router + memory home, GAMING worker online, ComfyUI image generated, Qwen-VL judge scored it, artifact approved, GitHub main pushed at `861ef4a`.

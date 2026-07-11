@@ -174,7 +174,16 @@ function artCard(a) {
     <div class="row">
       <button class="s ok" ${a.status==='approved'?'disabled':''} onclick="review(this,'${a.id}','approve')">${a.status==='approved'?'✓ approved':'approve'}</button>
       <button class="s no" ${a.status==='rejected'?'disabled':''} onclick="review(this,'${a.id}','reject')">${a.status==='rejected'?'✗ rejected':'reject'}</button>
+      <button class="s" onclick="refineArt('${a.id}',0.3,2.0)" title="hi-res polish">⬆ upscale</button>
+      <button class="s" onclick="refineArt('${a.id}',0.55,1.0)" title="variations near this image">≈ riff</button>
     </div></div></div>`;
+}
+async function refineArt(id, strength, scale) {
+  try {
+    const j = await jpost(`/artifacts/${id}/refine`, { strength, scale });
+    say(`queued ${j.id} (${strength <= 0.35 ? 'upscale' : 'riff'} of ${id})`);
+    render();
+  } catch (e) { say('error: '+e.message); }
 }
 async function review(btn, id, action) {
   btn.disabled = true; btn.textContent = '…';
@@ -254,6 +263,19 @@ V.image = async () => {
       <label>Purpose (required)</label><input id="purpose" placeholder="why this batch exists">
       <label>Checkpoint (optional — name of a .safetensors installed on the worker)</label>
       <input id="ckpt" placeholder="leave empty for the recipe default">
+      <label>Shape</label><select id="aspect">
+        <option value="">16:9 thumbnail (default)</option>
+        <option value="9:16">9:16 TikTok / Shorts</option>
+        <option value="1:1">1:1 square</option>
+        <option value="2:3">2:3 portrait / player model</option>
+        <option value="3:2">3:2 landscape photo</option>
+        <option value="21:9">21:9 banner</option>
+      </select>
+      <label>LoRA (optional — a .safetensors in the worker's models\\loras folder)</label>
+      <input id="lora" placeholder="e.g. palworld_style">
+      <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
+        <input type="checkbox" id="enhance" style="width:auto">
+        ✨ Let the operator model rewrite my prompt first (freeform recipe)</label>
       <div class="row"><button class="b" onclick="submitGen()">Queue generation</button></div>
       <div class="muted" style="margin-top:8px">Batch generates → auto-judged by Qwen-VL → approve here. Approved images are your thumbnail art.<br>
       GPU mode shifts automatically with the queue — the worker chip up top shows the live mode.</div>
@@ -341,11 +363,17 @@ async function submitGen() {
     if (src) payload.image_path = src;
     const ckpt = $('ckpt') ? $('ckpt').value.trim() : '';
     if (ckpt) payload.checkpoint = ckpt;
-    const j = await jpost('/jobs', { type: title ? 'content.thumbnail' : 'image.generate',
+    const aspect = $('aspect') ? $('aspect').value : '';
+    if (aspect) payload.aspect = aspect;
+    const lora = $('lora') ? $('lora').value.trim() : '';
+    if (lora) payload.lora = lora;
+    const enhance = $('enhance') && $('enhance').checked && !title && !src && payload.slots.prompt;
+    const type = (src || title) ? 'content.thumbnail' : enhance ? 'content.enhance' : 'image.generate';
+    const j = await jpost('/jobs', { type,
       project:d.project,
-      required_mode: src ? 'ANY' : 'IMAGE',           // compositing needs no GPU shift
-      required_caps: src ? [] : ['comfyui'], payload });
-    say('queued '+j.id+(src?' (title onto your image)':title?' (two-pass thumbnail)':''));
+      required_mode: src ? 'ANY' : enhance ? 'OPERATOR' : 'IMAGE',
+      required_caps: src ? [] : enhance ? ['lmstudio'] : ['comfyui'], payload });
+    say('queued '+j.id+(src?' (title onto your image)':title?' (two-pass thumbnail)':enhance?' (prompt enhancement first)':''));
     clearDraft();                       // only a successful queue clears the draft
     $('view').innerHTML = '';           // force a fresh (empty) form
     render();

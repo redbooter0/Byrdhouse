@@ -109,6 +109,80 @@ def resolve_checkpoint(root: Path, requested: str) -> str:
     return requested if requested.lower().endswith(".safetensors") else f"{requested}.safetensors"
 
 
+# SDXL-native resolutions per aspect — off-grid sizes degrade SDXL badly,
+# so requests snap to these. 16:9 stays the thumbnail default.
+ASPECTS = {
+    "16:9": (1344, 768), "9:16": (768, 1344), "1:1": (1024, 1024),
+    "4:3": (1152, 896), "3:4": (896, 1152), "3:2": (1216, 832),
+    "2:3": (832, 1216), "21:9": (1536, 640),
+}
+
+
+def pick_dims(aspect=None, width=None, height=None, img_cfg=None):
+    """Explicit width/height wins; else an aspect preset; else config default."""
+    if width and height:
+        return int(width), int(height)
+    if aspect:
+        if aspect not in ASPECTS:
+            die(f"unknown aspect '{aspect}' — pick one of {', '.join(ASPECTS)}")
+        return ASPECTS[aspect]
+    img_cfg = img_cfg or {}
+    return img_cfg.get("width", 1152), img_cfg.get("height", 768)
+
+
+def resolve_lora(root: Path, requested: str) -> str:
+    """Match a requested LoRA against models/loras the same loose way
+    checkpoints resolve — game-style LoRAs are the 'any game, accurately' key."""
+    loras = sorted((root / "Generators" / "ComfyUI" / "models" / "loras").glob("*.safetensors"))
+    def norm(t): return re.sub(r"[^a-z0-9]+", "", t.lower())
+    want = norm(requested)
+    exact = [p for p in loras if norm(p.stem) == want or norm(p.name) == want]
+    if exact:
+        return exact[0].name
+    partial = [p for p in loras if want in norm(p.name)]
+    if partial:
+        return min(partial, key=lambda p: len(p.name)).name
+    if loras:
+        die(f"no LoRA matching '{requested}' — installed: {', '.join(p.name for p in loras)}")
+    return requested if requested.lower().endswith(".safetensors") else f"{requested}.safetensors"
+
+
+def insert_lora(graph: dict, lora_name: str, strength: float = 0.9) -> None:
+    """Splice a LoraLoader between the checkpoint and everything that consumes
+    its model/clip outputs. Pure graph surgery — works on any of our workflows."""
+    ckpt_id = next((nid for nid, n in graph.items()
+                    if n.get("class_type") == "CheckpointLoaderSimple"), None)
+    if not ckpt_id:
+        die("workflow has no CheckpointLoaderSimple — cannot attach a LoRA")
+    lora_id = "byrd_lora"
+    for nid, node in graph.items():
+        if nid == lora_id:
+            continue
+        for key, ref in node.get("inputs", {}).items():
+            if isinstance(ref, list) and len(ref) == 2 and str(ref[0]) == str(ckpt_id) and ref[1] in (0, 1):
+                node["inputs"][key] = [lora_id, ref[1]]
+    graph[lora_id] = {"class_type": "LoraLoader",
+                      "inputs": {"lora_name": lora_name,
+                                 "strength_model": strength, "strength_clip": strength,
+                                 "model": [ckpt_id, 0], "clip": [ckpt_id, 1]}}
+
+
+def upload_image(comfy: str, path: Path) -> str:
+    """Push an image into ComfyUI's input store (multipart, stdlib only) so
+    img2img graphs can LoadImage it. Returns the stored name."""
+    boundary = f"----byrd{secrets.token_hex(8)}"
+    data = path.read_bytes()
+    body = (
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"image\"; "
+        f"filename=\"{path.name}\"\r\nContent-Type: image/png\r\n\r\n"
+    ).encode() + data + f"\r\n--{boundary}--\r\n".encode()
+    req = urllib.request.Request(
+        f"{comfy}/upload/image", data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read().decode()).get("name", path.name)
+
+
 def http_json(url: str, payload=None, timeout=30):
     data = json.dumps(payload).encode() if payload is not None else None
     req = urllib.request.Request(url, data=data,
@@ -118,7 +192,9 @@ def http_json(url: str, payload=None, timeout=30):
 
 
 def generate(root, recipe_name, slots, project, purpose,
-             batch=None, checkpoint=None, dry_run=False, job_id=None):
+             batch=None, checkpoint=None, dry_run=False, job_id=None,
+             aspect=None, width=None, height=None, negative_extra=None,
+             lora=None, lora_strength=0.9, seed=None):
     """Run one image.generate: recipe -> ComfyUI -> archived PNGs + cards.
     Returns (job_id, [(png_path, card_dict), ...]). Raises SystemExit on
     validation errors (via die) — callers that need exceptions can catch it."""
@@ -146,6 +222,8 @@ def generate(root, recipe_name, slots, project, purpose,
         die(f"unfilled slots {missing} — pass --set {missing[0]}=\"...\"")
     prompt = re.sub(r"\s+", " ", template.format(**slots)).strip()
     negative = recipe.get("negative", "")
+    if negative_extra:
+        negative = f"{negative}, {negative_extra}" if negative else str(negative_extra)
 
     defaults = recipe.get("defaults", {})
     checkpoint = resolve_checkpoint(root, checkpoint or defaults.get("checkpoint") or die("no checkpoint"))
@@ -158,8 +236,9 @@ def generate(root, recipe_name, slots, project, purpose,
     graph.pop("_comment", None)
 
     job_id = job_id or new_id("job")
-    seed = secrets.randbits(63)                      # fix 1: random per job
+    seed = int(seed) if seed else secrets.randbits(63)  # fix 1: random per job (or pinned for reruns)
     prefix = f"{datetime.now():%Y%m%d}_{recipe['id']}_{job_id}"  # fix 2: unique
+    gen_w, gen_h = pick_dims(aspect, width, height, img_cfg)
 
     clip_nodes = sampler_nodes = 0
     for node in graph.values():
@@ -178,8 +257,8 @@ def generate(root, recipe_name, slots, project, purpose,
         elif ct == "CheckpointLoaderSimple":
             inputs["ckpt_name"] = checkpoint          # fix 4 source of truth
         elif ct == "EmptyLatentImage":
-            inputs["width"] = img_cfg.get("width", 1152)
-            inputs["height"] = img_cfg.get("height", 768)
+            inputs["width"] = gen_w
+            inputs["height"] = gen_h
             inputs["batch_size"] = batch
         elif ct == "SaveImage":
             inputs["filename_prefix"] = prefix
@@ -205,7 +284,11 @@ def generate(root, recipe_name, slots, project, purpose,
     if sampler_nodes == 0:
         die("workflow has no KSampler node")
 
-    print(f"[byrdimage] job {job_id}  recipe {recipe_tag}  seed {seed}")
+    if lora:
+        insert_lora(graph, resolve_lora(root, lora), lora_strength)
+        print(f"[byrdimage] LoRA attached: {lora} @ {lora_strength}")
+
+    print(f"[byrdimage] job {job_id}  recipe {recipe_tag}  seed {seed}  {gen_w}x{gen_h}")
     print(f"[byrdimage] prompt: {prompt}")
     print(f"[byrdimage] vary picks: {vary_picks or '(none)'}")
     if dry_run:
@@ -214,12 +297,20 @@ def generate(root, recipe_name, slots, project, purpose,
         return job_id, []
 
     # ── Submit + poll ─────────────────────────────────────────────────────────
+    card_base = {
+        "recipe": recipe_tag, "purpose": purpose, "prompt": prompt,
+        "negative": negative, "seed": seed, "checkpoint": checkpoint,
+        "workflow": workflow_rel, "slots": user_slots, "vary_picks": vary_picks,
+        "size": f"{gen_w}x{gen_h}", **({"lora": lora} if lora else {}),
+    }
+    return job_id, run_graph(root, comfy, graph, job_id, project, card_base)
+
+
+def submit_and_wait(comfy: str, graph: dict, job_id: str) -> dict:
     resp = http_json(f"{comfy}/prompt", {"prompt": graph, "client_id": job_id})
     prompt_id = resp.get("prompt_id") or die(f"ComfyUI rejected the job: {resp}")
     print(f"[byrdimage] submitted, prompt_id {prompt_id} — waiting...")
-
     deadline = time.time() + 15 * 60
-    outputs = None
     while time.time() < deadline:
         hist = http_json(f"{comfy}/history/{prompt_id}", timeout=15)
         entry = hist.get(prompt_id)
@@ -228,13 +319,16 @@ def generate(root, recipe_name, slots, project, purpose,
             if status.get("status_str") == "error":
                 die(f"ComfyUI job failed: {json.dumps(status)[:500]}")
             if entry.get("outputs"):
-                outputs = entry["outputs"]
-                break
+                return entry["outputs"]
         time.sleep(3)
-    if outputs is None:
-        die("timed out after 15 min waiting for ComfyUI")
+    die("timed out after 15 min waiting for ComfyUI")
 
-    # ── Archive + metadata cards (v2 §8: no artifact without a card) ─────────
+
+def run_graph(root: Path, comfy: str, graph: dict, job_id: str, project: str,
+              card_base: dict):
+    """Submit a graph, archive every output PNG with its metadata card
+    (v2 §8: no artifact without a card). Shared by generate() and refine()."""
+    outputs = submit_and_wait(comfy, graph, job_id)
     month_dir = root / "artifacts" / project / f"{datetime.now():%Y-%m}"
     month_dir.mkdir(parents=True, exist_ok=True)
     now_iso = datetime.now(timezone.utc).isoformat()
@@ -258,20 +352,9 @@ def generate(root, recipe_name, slots, project, purpose,
                 "job_id": job_id,
                 "project": project,
                 "kind": "image",
-                "recipe": recipe_tag,
-                "purpose": purpose,
-                "prompt": prompt,
-                "negative": negative,
-                "seed": seed,
-                "checkpoint": checkpoint,
-                "workflow": workflow_rel,
-                "slots": user_slots,
-                "vary_picks": vary_picks,
-                "score": None,
-                "tags": [],
-                "caption": "",
-                "status": "draft",
-                "created_at": now_iso,
+                **card_base,
+                "score": None, "tags": [], "caption": "",
+                "status": "draft", "created_at": now_iso,
             }
             dest.with_suffix(dest.suffix + ".json").write_text(
                 json.dumps(card, indent=2), encoding="utf-8")
@@ -281,7 +364,81 @@ def generate(root, recipe_name, slots, project, purpose,
     if not saved:
         die("job finished but produced no images")
     print(f"[byrdimage] done — {len(saved)} image(s) in {month_dir}")
-    return job_id, saved
+    return saved
+
+
+def refine(root, source_path, project, purpose, prompt=None, negative=None,
+           strength=0.4, scale=1.6, checkpoint=None, lora=None,
+           lora_strength=0.9, batch=1, job_id=None):
+    """img2img pass over an existing image: low strength = hi-res polish
+    (upscale), higher strength = variations that stay 'near what's asked'.
+    Prompt defaults to the source's own card so refinement keeps its intent."""
+    root = Path(root)
+    cfg = load_json(root / "byrdhouse.config.json")
+    comfy = cfg["services"]["comfyui"].rstrip("/")
+    img_cfg = cfg.get("image", {})
+    source = Path(source_path)
+    if not source.exists():
+        die(f"source image not found: {source}")
+
+    src_card = {}
+    card_path = source.with_suffix(source.suffix + ".json")
+    if card_path.exists():
+        src_card = load_json(card_path)
+    prompt = prompt or src_card.get("prompt") or "high quality, sharp, detailed"
+    negative = negative if negative is not None else src_card.get(
+        "negative", "text, letters, watermark, blurry, low contrast")
+    checkpoint = resolve_checkpoint(
+        root, checkpoint or src_card.get("checkpoint") or "juggernautXL_v9")
+
+    job_id = job_id or new_id("job")
+    seed = secrets.randbits(63)
+    prefix = f"{datetime.now():%Y%m%d}_refine_{job_id}"
+    uploaded = upload_image(comfy, source)
+
+    workflow_rel = "workflows/sdxl_img2img_api.json"
+    graph = load_json(root / workflow_rel)
+    graph.pop("_comment", None)
+    for node in graph.values():
+        ct, inputs = node.get("class_type"), node.get("inputs", {})
+        if ct == "LoadImage":
+            inputs["image"] = uploaded
+        elif ct == "LatentUpscaleBy":
+            inputs["scale_by"] = float(scale)
+        elif ct == "RepeatLatentBatch":
+            inputs["amount"] = int(batch)
+        elif ct == "KSampler":
+            inputs["seed"] = seed
+            inputs["denoise"] = max(0.05, min(0.95, float(strength)))
+            inputs["cfg"] = img_cfg.get("cfg", 7.0)
+            inputs["sampler_name"] = img_cfg.get("sampler", "dpmpp_2m")
+            inputs["scheduler"] = img_cfg.get("scheduler", "karras")
+        elif ct == "CheckpointLoaderSimple":
+            inputs["ckpt_name"] = checkpoint
+        elif ct == "SaveImage":
+            inputs["filename_prefix"] = prefix
+    for node in graph.values():
+        if node.get("class_type") != "KSampler":
+            continue
+        for socket, text in (("positive", prompt), ("negative", negative)):
+            ref = node["inputs"].get(socket)
+            target = graph.get(str(ref[0])) if isinstance(ref, list) and ref else None
+            if not target or target.get("class_type") != "CLIPTextEncode":
+                die(f"img2img KSampler {socket} not wired to CLIPTextEncode")
+            target["inputs"]["text"] = text
+    if lora:
+        insert_lora(graph, resolve_lora(root, lora), lora_strength)
+
+    print(f"[byrdimage] refine {source.name}  strength {strength}  scale {scale}")
+    card_base = {
+        "recipe": src_card.get("recipe", "refine"), "purpose": purpose,
+        "prompt": prompt, "negative": negative, "seed": seed,
+        "checkpoint": checkpoint, "workflow": workflow_rel,
+        "slots": src_card.get("slots", {}), "vary_picks": {},
+        "refined_from": str(source), "strength": strength, "scale": scale,
+        **({"lora": lora} if lora else {}),
+    }
+    return job_id, run_graph(root, comfy, graph, job_id, project, card_base)
 
 
 def main() -> None:

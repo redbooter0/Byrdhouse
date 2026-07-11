@@ -26,6 +26,7 @@ Endpoints (v2 §6):                                          access
   GET  /artifacts/<id>/file image bytes (local or preview)  open
   POST /artifacts/<id>/file upload preview bytes (worker)   token
   POST /artifacts/<id>/review {action:approve|reject|judge} token
+  POST /artifacts/<id>/refine {strength,scale,prompt,lora}   token
   GET  /recipes             list recipe files               open
   POST /workers/heartbeat   {id,caps,mode,vram}             token
   GET  /mode                requested + worker modes        open
@@ -57,12 +58,12 @@ PREVIEWS = ROOT / "artifacts" / "_previews"  # worker-uploaded copies for the da
 REFERENCES = ROOT / "references"  # founder-loved thumbnails the judge scores against
 
 JOB_TYPES = {
-    "image.generate", "image.judge", "image.upscale", "video.i2v",
+    "image.generate", "image.judge", "image.refine", "image.upscale", "video.i2v",
     "memory.save", "memory.import", "report.daily",
     "export.csv", "export.zip", "backup.nightly",
     "game.godot_task", "code.task",
 }
-REVIEW_TYPES = {"image.generate", "image.upscale", "video.i2v"}  # done -> needs_review
+REVIEW_TYPES = {"image.generate", "image.refine", "image.upscale", "video.i2v"}  # done -> needs_review
 
 # Worker heartbeats pause while a job runs (the worker loop is synchronous and
 # a generation can take minutes), so liveness thresholds must be generous.
@@ -499,6 +500,40 @@ class Handler(BaseHTTPRequestHandler):
             db().commit()
             event(self._actor(), "artifact.register", jid, {"count": len(ids)})
             return self._send({"ids": ids}, 201)
+
+        m = re.fullmatch(r"/artifacts/([\w.-]+)/refine", path)
+        if m:
+            aid = m.group(1)
+            art = db().execute("SELECT * FROM artifacts WHERE id=?", (aid,)).fetchone()
+            if not art:
+                return self._send({"error": "no such artifact"}, 404)
+            if not art["path"]:
+                return self._send({"error": "artifact has no file path to refine"}, 400)
+            meta = json.loads(art["meta"] or "{}")
+            jid = new_id("job")
+            payload = {
+                "source_artifact": aid, "source_path": art["path"],
+                "project": art["project_id"] or "sandbox",
+                "purpose": body.get("purpose") or f"refine of {aid}",
+                "strength": float(body.get("strength", 0.4)),
+                "scale": float(body.get("scale", 1.6)),
+                "batch": int(body.get("batch", 1)),
+            }
+            for k in ("prompt", "negative", "checkpoint", "lora"):
+                if body.get(k):
+                    payload[k] = body[k]
+            db().execute(
+                "INSERT INTO jobs(id,type,project_id,payload,priority,required_mode,"
+                "required_caps,status,max_attempts,created_at)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (jid, "image.refine", payload["project"], json.dumps(payload), 5,
+                 "IMAGE", json.dumps(["comfyui"]), "queued", 2, now()))
+            db().commit()
+            event(self._actor(), "job.create", jid,
+                  {"type": "image.refine", "source": aid,
+                   "strength": payload["strength"], "scale": payload["scale"]})
+            return self._send({"id": jid, "status": "queued",
+                               "source": aid, "recipe": meta.get("recipe")}, 201)
 
         m = re.fullmatch(r"/artifacts/([\w.-]+)/review", path)
         if m:
