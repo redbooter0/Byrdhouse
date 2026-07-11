@@ -1,0 +1,15 @@
+{
+  "id": "game_ref",
+  "version": 1,
+  "kind": "image.generate",
+  "_note": "Reference-driven (IP-Adapter). Pair with an uploaded source screenshot / official key art (payload.reference_artifact) and the base checkpoint borrows THAT game's look — the real answer to 'never got the game I wanted', with no per-game LoRA and no training. The REFERENCE carries the game's identity (creatures, palette, style); the PROMPT carries the subject, emotion and shot. Needs the ComfyUI IP-Adapter nodes + h94/IP-Adapter SDXL models on the worker. Swap the checkpoint (docs/MODELS.md) to match the game's style family.",
+  "template": "{subject}, {emotion} expression, {composition}, YouTube thumbnail key art that matches the reference game's art style, palette and creatures, {lighting}, ultra-detailed, crisp high contrast, punchy saturated colors, bold readable space left for a title",
+  "negative": "text, letters, words, watermark, blurry, soft, low contrast, washed out, extra limbs, cropped body, generic stock fantasy, unrelated game",
+  "vary": {
+    "lighting": ["dramatic rim light", "hard flash with deep shadows", "warm golden-hour key light", "vibrant neon glow"],
+    "composition": ["subject filling the left third, face large", "extreme close-up with space on the right", "centered heroic low-angle pose"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 30, "batch": 4 },
+  "compose": { "text_zone": "bottom", "max_words": 4, "style": "banner", "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "reference_match": "1-5 — does it read as the SAME game as the reference?", "readability": "1-5", "contrast": "1-5", "subject_pop": "1-5", "hook": "1-5 — would it stop a scroll?" }
+}

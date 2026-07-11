@@ -1,0 +1,58 @@
+# Goose config for the BYRD operator — TEMPLATE.
+#
+# Goose (github.com/aaif-goose/goose, Apache-2.0) is the bot RUNTIME: MCP-native,
+# runs on your local Qwen via LM Studio, headless CLI so it lives on both PCs.
+# You do not write agent code — you configure this file and add extensions (MCP servers).
+#
+# Install on each machine (Windows):  winget install Block.Goose   (or the CLI)
+# Then copy this file to  %USERPROFILE%\.config\goose\config.yaml  and adjust
+# BYRDHOUSE_ROOT per machine (D:/ByrdHouse on MINI, E:/ByrdHouse on GAMING).
+#
+# IMPORTANT: provider key names drift between Goose versions. The robust path is
+# to run `goose configure` once (pick "OpenAI compatible", host = your LM Studio,
+# model = qwen/qwen3.5-9b) so Goose writes the correct provider keys itself, then
+# paste the `extensions:` block below. The provider block here is a known-good
+# starting point for LM Studio.
+
+GOOSE_PROVIDER: openai
+GOOSE_MODEL: qwen/qwen3.5-9b
+# LM Studio is OpenAI-compatible. On MINI, point at GAMING's LM Studio:
+OPENAI_HOST: http://byrd-gaming:1234
+OPENAI_BASE_PATH: v1/chat/completions
+OPENAI_API_KEY: lm-studio   # LM Studio ignores the value but Goose wants one
+
+extensions:
+  # The belt — the bot's audited hands (queue_image, compose_thumbnail, status,
+  # review, what_works…). Proxies to the router; never touches the GPU directly.
+  byrd-belt:
+    enabled: true
+    type: stdio
+    cmd: python
+    args:
+      - D:/ByrdHouse/scripts/byrd_belt_mcp.py
+    envs:
+      BYRDHOUSE_ROOT: D:/ByrdHouse
+      # Set to "1" for the A0/A1 read-only pilot (write tools vanish):
+      BYRD_BELT_MCP_READONLY: "0"
+    timeout: 300
+
+  # The browser — research, find viral thumbnails, grab real screenshots/key art.
+  playwright:
+    enabled: true
+    type: stdio
+    cmd: npx
+    args:
+      - "@playwright/mcp@latest"
+    timeout: 300
+
+  # Memory — who we are and what we've been building (your existing memory MCP).
+  memory:
+    enabled: true
+    type: builtin
+    name: memory
+
+  # Files — read/write on the local box.
+  developer:
+    enabled: true
+    type: builtin
+    name: developer

@@ -216,7 +216,7 @@ def http_json(url: str, payload=None, timeout=30):
 def generate(root, recipe_name, slots, project, purpose,
              batch=None, checkpoint=None, dry_run=False, job_id=None,
              aspect=None, width=None, height=None, negative_extra=None,
-             lora=None, lora_strength=0.9, seed=None):
+             lora=None, lora_strength=0.9, seed=None, reference=None):
     """Run one image.generate: recipe -> ComfyUI -> archived PNGs + cards.
     Returns (job_id, [(png_path, card_dict), ...]). Raises SystemExit on
     validation errors (via die) — callers that need exceptions can catch it."""
@@ -258,7 +258,13 @@ def generate(root, recipe_name, slots, project, purpose,
     steps = defaults.get("steps", 30)
 
     # ── Build the graph ───────────────────────────────────────────────────────
-    workflow_rel = img_cfg.get("workflow", "workflows/sdxl_base_api.json")
+    # A reference image routes through the IP-Adapter graph: the base checkpoint
+    # borrows the reference's look (the 'make it look like THIS game' path) — no
+    # per-game LoRA, no training. Everything else about generation is unchanged.
+    if reference:
+        workflow_rel = img_cfg.get("reference_workflow", "workflows/sdxl_ipadapter_api.json")
+    else:
+        workflow_rel = img_cfg.get("workflow", "workflows/sdxl_base_api.json")
     graph = load_json(root / workflow_rel)
     graph.pop("_comment", None)
 
@@ -315,6 +321,17 @@ def generate(root, recipe_name, slots, project, purpose,
         insert_lora(graph, resolve_lora(root, lora), lora_strength)
         print(f"[byrdimage] LoRA attached: {lora} @ {lora_strength}")
 
+    if reference and not dry_run:
+        ref_name = upload_image(comfy, Path(reference))
+        wired = False
+        for node in graph.values():
+            if node.get("class_type") == "LoadImage":
+                node["inputs"]["image"] = ref_name
+                wired = True
+        if not wired:
+            die("reference given but the workflow has no LoadImage node")
+        print(f"[byrdimage] reference wired: {Path(reference).name} -> IP-Adapter")
+
     print(f"[byrdimage] job {job_id}  recipe {recipe_tag}  seed {seed}  {gen_w}x{gen_h}")
     print(f"[byrdimage] prompt: {prompt}")
     print(f"[byrdimage] vary picks: {vary_picks or '(none)'}")
@@ -329,6 +346,7 @@ def generate(root, recipe_name, slots, project, purpose,
         "negative": negative, "seed": seed, "checkpoint": checkpoint,
         "workflow": workflow_rel, "slots": user_slots, "vary_picks": vary_picks,
         "size": f"{gen_w}x{gen_h}", **({"lora": lora} if lora else {}),
+        **({"reference": str(reference)} if reference else {}),
         # honest checkpoint record: what was asked vs what actually ran
         **({"checkpoint_requested": ckpt_requested, "checkpoint_fallback": True}
            if not ckpt_matched else {}),
