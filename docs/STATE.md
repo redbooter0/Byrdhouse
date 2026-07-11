@@ -110,6 +110,8 @@ U2/U3 are already partially built, but they should be treated as usage/hardening
 
 ## Done log
 
+- 2026-07-11 · Image Studio precision pass (from Palworld feedback): recipe v2s anchor the game FIRST in the template (v1 buried it as a trailing "style" hint CLIP ignored) + game_reference rubric key; cards record requested slots; judge now receives the slots and must cap off-game images at ≤2.4 with an "off-game" tag; GET /artifacts joins job timing (queued/claimed/finished/gen_seconds) and the dashboard shows duration on every card, live age on in-flight placeholders, queued/took columns in System Room. Integration test 31 checks
+
 - 2026-07-10 · U0 polish sprint (9 root-cause fixes, one commit each): charset=utf-8 on all responses; artifact dedupe via deterministic IDs + latest-per-(job,path) query; state-aware approve/reject buttons; adaptive auto-refresh (4s active / 15s idle / paused hidden); PNG previews via worker→router byte upload (files live on GAMING, router on MINI); manual GPU-mode buttons removed (worker self-schedules); in-flight job placeholders; mobile Safari cleanup; worker/router dedup refactor + live transition logging. Integration test now 29 checks
 
 - 2026-07-10 · U0 real-hardware belt completed: MINI router + memory home, GAMING worker online, ComfyUI image generated, Qwen-VL judge scored it, artifact approved, GitHub main pushed at `861ef4a`.

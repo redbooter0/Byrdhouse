@@ -1,0 +1,15 @@
+{
+  "id": "build_guide",
+  "version": 2,
+  "kind": "image.generate",
+  "_note": "v2: the game is the anchor, not a style suffix. CLIP weights early tokens hardest, so {game} leads the prompt and repeats mid-prompt; rubric now scores game_reference and the judge caps off-game images.",
+  "template": "{game} video game key art: armored {subject} centered in a recognizable {game} landscape, signature {game} creatures and scenery in the background, faithful {game} art direction, legendary loot glowing at their feet, {palette} palette, {lighting}, heroic low-angle shot, clean bottom band left empty for composited text",
+  "negative": "text, letters, words, watermark, blurry, low contrast, dull colors, extra limbs, generic fantasy setting, unrelated game",
+  "vary": {
+    "palette": ["gold-red", "crimson-slate", "electric-blue"],
+    "lighting": ["rim light", "golden hour", "ember backlight"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 30, "batch": 4 },
+  "compose": { "text_zone": "bottom", "max_words": 4, "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "game_reference": "1-5 — is THIS game unmistakable (creatures, environment, art style)?", "readability": "1-5", "contrast": "1-5", "subject_pop": "1-5", "hook": "1-5" }
+}

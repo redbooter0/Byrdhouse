@@ -183,6 +183,15 @@ def main():
         check("workers report computed liveness",
               st["workers"] and all(w.get("status") in ("online", "offline") for w in st["workers"]))
 
+        # Cards carry job timing (queued/claimed/finished + duration) and the
+        # founder's requested slots, so the dashboard can show both
+        timed = [a for a in api("/artifacts?limit=50") if a["kind"] == "image"]
+        check("artifacts expose job timing", timed and all(
+            a["job_queued_at"] and a["job_claimed_at"] and a["job_finished_at"]
+            and isinstance(a["gen_seconds"], int) and a["gen_seconds"] >= 0 for a in timed))
+        card_meta = json.loads(timed[0]["meta"])
+        check("card records requested slots", card_meta.get("slots", {}).get("game") == "Last Epoch")
+
         # A retried job re-registers its artifacts — must upsert, not duplicate
         dupe_card = {"artifact_id": "art.dupetest.0", "job_id": "job_dupetest",
                      "kind": "image", "path": "/tmp/dupetest.png", "status": "draft"}
