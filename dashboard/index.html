@@ -219,15 +219,18 @@ function busyCards(jobs) {
     .map(j => `<div class="busy"><b>${esc(j.status==='queued'?'queued':'generating…')}</b>
       <span>${esc(j.type)}</span><span>${esc(j.id.slice(-8))}</span></div>`).join('');
 }
-V.image = async () => {
-  const recipes = await jget('/recipes');
-  window._recipes = recipes.filter(r => r.kind === 'image.generate');
+async function imgOutHtml() {
   const jobs = await jget('/jobs?limit=30');
   const inflight = busyCards(jobs);
   const arts = (await jget('/artifacts?limit=18')).filter(a => a.kind==='image'||a.kind==='thumbnail');
+  return `${inflight}${arts.map(artCard).join('') || (inflight ? '' : '<span class="muted">no images yet</span>')}`;
+}
+V.image = async () => {
+  const recipes = await jget('/recipes');
+  window._recipes = recipes.filter(r => r.kind === 'image.generate');
   return `
   <div class="grid">
-    <div class="panel"><h2>Generate (recipes over prompts)</h2>
+    <div class="panel" id="genForm"><h2>Generate (recipes over prompts)</h2>
       <label>Recipe</label><select id="recipe" onchange="slotFields()">${window._recipes.map(r =>
         `<option value="${esc(r.id)}">${esc(r.id)} v${r.version}</option>`).join('')}</select>
       <div id="slots"></div>
@@ -239,26 +242,61 @@ V.image = async () => {
       <div class="muted" style="margin-top:8px">Batch generates → auto-judged by Qwen-VL → approve here. Approved images are your thumbnail art.<br>
       GPU mode shifts automatically with the queue — the worker chip up top shows the live mode.</div>
     </div>
-    <div class="panel wide"><h2>Image Studio output</h2><div class="cards">${inflight}${arts.map(artCard).join('') || (inflight ? '' : '<span class="muted">no images yet</span>')}</div></div>
+    <div class="panel wide"><h2>Image Studio output</h2><div class="cards" id="imgOut">${await imgOutHtml()}</div></div>
   </div>`;
 };
 function slotFields() {
   const r = (window._recipes||[]).find(x => x.id === $('recipe').value);
   if (!r) return;
+  const keep = {};  // survive a recipe change without losing typed slot values
+  document.querySelectorAll('#slots input').forEach(i => { keep[i.dataset.slot] = i.value; });
   $('slots').innerHTML = r.slots.filter(s => !r.vary.includes(s)).map(s =>
     `<label>${esc(s)}</label><input data-slot="${esc(s)}" placeholder="${esc(s)}">`).join('');
+  document.querySelectorAll('#slots input').forEach(i => { if (keep[i.dataset.slot]) i.value = keep[i.dataset.slot]; });
 }
+
+/* ── draft-persistence: the Image Studio form survives polling, room
+      changes, and reloads; cleared only after a successful queue ── */
+const DRAFT_KEY = 'bh_draft';
+function readForm() {
+  const slots = {};
+  document.querySelectorAll('#slots input').forEach(i => { if (i.value) slots[i.dataset.slot] = i.value; });
+  return { recipe: $('recipe') ? $('recipe').value : '', slots,
+           title: $('thumbTitle') ? $('thumbTitle').value : '',
+           project: $('project') ? $('project').value : 'careyrpg',
+           purpose: $('purpose') ? $('purpose').value : '' };
+}
+function saveDraft() { localStorage.setItem(DRAFT_KEY, JSON.stringify(readForm())); }
+function loadDraft() {
+  try { return JSON.parse(localStorage.getItem(DRAFT_KEY)) || null; } catch (e) { return null; }
+}
+function clearDraft() { localStorage.removeItem(DRAFT_KEY); }
+function applyDraft(d) {
+  if (!d) return;
+  const sel = $('recipe');
+  if (d.recipe && [...sel.options].some(o => o.value === d.recipe)) sel.value = d.recipe;
+  slotFields();
+  document.querySelectorAll('#slots input').forEach(i => {
+    if (d.slots && d.slots[i.dataset.slot] != null) i.value = d.slots[i.dataset.slot]; });
+  $('thumbTitle').value = d.title || '';
+  $('project').value = d.project || 'careyrpg';
+  $('purpose').value = d.purpose || '';
+}
+/* ── end draft-persistence ── */
+
 async function submitGen() {
   try {
-    const slots = {};
-    document.querySelectorAll('#slots input').forEach(i => { if (i.value) slots[i.dataset.slot] = i.value; });
-    if (!$('purpose').value) throw new Error('purpose is required');
-    const title = $('thumbTitle').value.trim();
-    const payload = { recipe:$('recipe').value, slots, project:$('project').value, purpose:$('purpose').value };
+    const d = readForm();
+    if (!d.purpose) throw new Error('purpose is required');
+    const title = d.title.trim();
+    const payload = { recipe:d.recipe, slots:d.slots, project:d.project, purpose:d.purpose };
     if (title) payload.title = title;
     const j = await jpost('/jobs', { type: title ? 'content.thumbnail' : 'image.generate',
-      project:$('project').value, required_mode:'IMAGE', required_caps:['comfyui'], payload });
+      project:d.project, required_mode:'IMAGE', required_caps:['comfyui'], payload });
     say('queued '+j.id+(title?' (two-pass thumbnail)':''));
+    clearDraft();                       // only a successful queue clears the draft
+    $('view').innerHTML = '';           // force a fresh (empty) form
+    render();
   } catch (e) { say('error: '+e.message); }
 }
 
@@ -360,11 +398,33 @@ for (const [k, [title, text]] of Object.entries(LOCKED)) {
   V[k] = async () => `<div class="panel"><h2>${title}</h2><div class="note">${text}</div></div>`;
 }
 
-async function render() {
-  try { $('view').innerHTML = await V[room](); if (room==='image') slotFields(); }
-  catch (e) { say('render error: '+e.message); }
+function typingInView() {
+  const ae = document.activeElement;
+  return ae && $('view').contains(ae) && ['INPUT','TEXTAREA','SELECT'].includes(ae.tagName);
 }
-async function tick() { await chips(); await render(); }
+async function render() {
+  try {
+    if (room === 'image' && $('genForm')) {
+      // form already on screen: refresh only the output grid, never the form
+      $('imgOut').innerHTML = await imgOutHtml();
+      return;
+    }
+    if (typingInView()) return;  // never replace controls under the user's cursor
+    $('view').innerHTML = await V[room]();
+    if (room === 'image') {
+      slotFields();
+      applyDraft(loadDraft());
+      $('genForm').addEventListener('input', saveDraft);
+      $('genForm').addEventListener('change', saveDraft);
+    }
+  } catch (e) { say('render error: '+e.message); }
+}
+let _refreshing = false;
+async function tick() {
+  if (_refreshing) return;  // no overlapping refresh cycles
+  _refreshing = true;
+  try { await chips(); await render(); } finally { _refreshing = false; }
+}
 function activeJobs() {
   const q = (window._status||{}).queue || {};
   return (q.queued||0) + (q.claimed||0) + (q.running||0);
