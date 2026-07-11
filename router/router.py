@@ -50,7 +50,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 ROOT = Path(os.environ.get("BYRDHOUSE_ROOT") or sys.exit("BYRDHOUSE_ROOT not set"))
 CFG = json.loads((ROOT / "byrdhouse.config.json").read_text(encoding="utf-8-sig"))
@@ -292,6 +292,15 @@ CHAT_TOOLS = [
         "description": "Tail of the belt event log (what happened lately).",
         "parameters": {"type": "object", "properties": {
             "limit": {"type": "integer", "description": "max rows, default 12"}}}}},
+    {"type": "function", "function": {
+        "name": "web_search",
+        "description": "Search the web for references, viral thumbnails, or facts "
+                       "about a game before generating. Returns title/url/snippet rows. "
+                       "(In-app equivalent of the brave-search MCP the bot uses in Cherry Studio.)",
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string", "description": "what to search for"},
+            "limit": {"type": "integer", "description": "max results, default 5"}},
+            "required": ["query"]}}},
 ]
 
 
@@ -341,6 +350,25 @@ def run_chat_tool(name, args, actor):
         return [dict(r) for r in db().execute(
             "SELECT ts,actor,action,subject FROM events ORDER BY id DESC LIMIT ?",
             (min(int(args.get("limit", 12)), 20),))]
+    if name == "web_search":
+        search = (CFG.get("services", {}).get("search") or "").rstrip("/")
+        if not search or search.startswith("CHANGE_ME"):
+            return {"error": "web_search not configured — set services.search to a JSON "
+                             "search endpoint (e.g. a local SearXNG or a brave-search proxy) "
+                             "returning {\"results\":[{title,url,snippet}]}. In Cherry Studio "
+                             "the bot uses the brave-search MCP for this instead."}
+        query = str(args.get("query", "")).strip()
+        if not query:
+            return {"error": "web_search needs a query"}
+        n = min(int(args.get("limit", 5)), 10)
+        try:
+            url = f"{search}?q={quote(query)}&n={n}"
+            with urllib.request.urlopen(url, timeout=15) as r:
+                data = json.loads(r.read().decode())
+            results = data.get("results", data) if isinstance(data, dict) else data
+            return results[:n] if isinstance(results, list) else results
+        except Exception as e:
+            return {"error": f"web_search failed: {e}"}
     return {"error": f"unknown tool {name}"}
 
 

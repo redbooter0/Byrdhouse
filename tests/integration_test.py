@@ -387,6 +387,49 @@ def main():
             check("uploaded-source final is 1280x720",
                   Image.open(composed[0]["path"]).size == (1280, 720))
 
+        # ── Belt-as-MCP: the bot's audited hands on the belt (byrd_belt_mcp) ──
+        # Same 2-machine setup, one shared tool surface: any MCP client drives
+        # the belt through the router, never ComfyUI/GPU directly.
+        os.environ["BYRDHOUSE_ROOT"] = str(ROOT)
+        import byrd_belt_mcp as belt
+        init = belt.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
+        check("belt-MCP initialize returns a protocol version",
+              init["result"]["protocolVersion"] == belt.PROTOCOL_VERSION)
+        tools = {t["name"] for t in belt.handle(
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]}
+        check("belt-MCP exposes the belt tools",
+              {"belt_status", "list_artifacts", "queue_image", "compose_thumbnail",
+               "review_artifact"} <= tools)
+        st = belt.handle({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                          "params": {"name": "belt_status", "arguments": {}}})
+        check("belt-MCP belt_status proxies to the router",
+              st["result"]["isError"] is False
+              and "queue" in st["result"]["content"][0]["text"])
+        before = len(api("/jobs?limit=200"))
+        qr = belt.handle({"jsonrpc": "2.0", "id": 4, "method": "tools/call",
+                          "params": {"name": "queue_image",
+                                     "arguments": {"prompt": "a bot-queued test image"}}})
+        check("belt-MCP queue_image creates a real audited job",
+              qr["result"]["isError"] is False
+              and len(api("/jobs?limit=200")) == before + 1)
+        # autonomy ladder is literally a permission filter — no separate build
+        belt.READONLY = True
+        ro = {t["name"] for t in belt.handle(
+            {"jsonrpc": "2.0", "id": 5, "method": "tools/list"})["result"]["tools"]}
+        blocked = belt.handle({"jsonrpc": "2.0", "id": 6, "method": "tools/call",
+                               "params": {"name": "queue_image", "arguments": {"prompt": "x"}}})
+        check("read-only mode hides + blocks write tools (autonomy = a permission)",
+              "queue_image" not in ro and "belt_status" in ro
+              and blocked["result"]["isError"] is True)
+        belt.READONLY = False
+
+        # web_search: the in-app chat's research tool — config-driven, graceful
+        sys.path.insert(0, str(ROOT / "router"))
+        import router as router_mod
+        ws = router_mod.run_chat_tool("web_search", {"query": "viral palworld thumbnail"}, "test")
+        check("web_search reports clearly when unconfigured",
+              isinstance(ws, dict) and "not configured" in ws.get("error", ""))
+
         # A retried job re-registers its artifacts — must upsert, not duplicate
         dupe_card = {"artifact_id": "art.dupetest.0", "job_id": "job_dupetest",
                      "kind": "image", "path": "/tmp/dupetest.png", "status": "draft"}

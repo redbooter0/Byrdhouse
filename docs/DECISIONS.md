@@ -15,3 +15,4 @@
 - 2026-07-08 · 5080 order: let expire — kept $1,456; hardware rule: cash only, no financing · Blueprint v3 Layer 0
 - 2026-07-08 · Phases collapsed into unlocks U0–U6 + Frozen Backlog; numbered-phase prose retired · Blueprint v2
 - 2026-07-08 · No new model downloads (freeze stands); no Redis/broker — SQLite WAL is the queue at this scale · Blueprint v2
+- 2026-07-11 · Belt exposed as an MCP server (byrd_belt_mcp.py) so one shared tool roster drives it from any client on either machine; bot NEVER drives ComfyUI directly (mode ritual); autonomy = BYRD_BELT_MCP_READONLY permission flag, not a new build · founder dream: always-on operator on both PCs

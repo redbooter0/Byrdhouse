@@ -10,7 +10,8 @@
     "lmstudio": "http://byrd-gaming:1234/v1",
     "lmstudio_fallback": "CHANGE_ME_optional_e.g._http://byrd-mini:1234/v1_small_cpu_model_for_always-on_chat",
     "qdrant": "http://byrd-mini:6333",
-    "router": "http://byrd-mini:8787"
+    "router": "http://byrd-mini:8787",
+    "search": "CHANGE_ME_optional_JSON_search_endpoint_for_in-app_chat_web_search_e.g._http://byrd-mini:8888/search_returning_{results:[{title,url,snippet}]}"
   },
   "paths": {
     "mini_root": "D:/ByrdHouse",
