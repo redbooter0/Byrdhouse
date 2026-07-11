@@ -1,0 +1,12 @@
+﻿{
+    "prompt":  "Create a futuristic ByrdHouse operator poster with blue neon UI and a local AI command center theme.",
+    "type":  "image",
+    "target_machine":  "BYRD-GAMING",
+    "requested_by":  "ByrdHouse",
+    "job_id":  "20260626_080927-ByrdHouse-poster-test",
+    "created":  "2026-06-26 08:09:27",
+    "output_folder_videos":  "E:\\ByrdHouse\\Outputs\\Videos",
+    "status":  "pending",
+    "output_folder_images":  "E:\\ByrdHouse\\Outputs\\Images",
+    "title":  "ByrdHouse-poster-test"
+}

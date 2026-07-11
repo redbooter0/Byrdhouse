@@ -1,0 +1,24 @@
+﻿BYRDHOUSE VIDEO BASELINE V1
+
+Phase: 16D
+Status: Locked baseline
+Winner Runtime: 67.51 sec
+
+Engine: LTX-Video
+Source Style: sideline_reporter
+Motion Style: no-talking, subtle motion, slight push-in
+Subject Framing: tight medium close-up
+Hands: out of frame
+Mouth: relaxed / closed
+Environment: rainy sports sideline
+
+Result:
+- 16A first proof = success, but mouth off
+- 16B improved = candidate
+- 16C improved = candidate
+- 16D selection winner = 67.51 sec
+- later 63.85 sec run = rejected
+
+Rule:
+Do not overwrite this workflow.
+Use this as the stable starting point for future ByrdHouse video tests.

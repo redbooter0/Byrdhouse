@@ -1,65 +1,89 @@
 {
-  "_comment": "ByrdHouse config v1 (Blueprint v2 §4). ONE copy at %BYRDHOUSE_ROOT% on each machine. Scripts read this file — no script may hardcode a host, port, or path. Use Tailscale MagicDNS names, never raw IPs.",
-  "hosts": {
-    "gaming": "byrd-gaming",
-    "mini": "byrd-mini",
-    "vault": "byrd-vault"
-  },
-  "services": {
-    "comfyui": "http://byrd-gaming:8188",
-    "lmstudio": "http://byrd-gaming:1234/v1",
-    "qdrant": "http://byrd-mini:6333",
-    "router": "http://byrd-gaming:8787"
-  },
-  "paths": {
-    "mini_root": "D:/ByrdHouse",
-    "gaming_root": "E:/ByrdHouse"
-  },
-  "startup": {
-    "_comment": "Used by start-byrdhouse.ps1. comfyui_dir holds your ComfyUI launcher (portable installs: run_nvidia_gpu.bat). run_router=true hosts the belt API on THIS machine — true on GAMING until BYRD-MINI is set up, then flip it to false here, true on MINI, and point services.router at byrd-mini. run_worker=true runs the job daemon (GAMING only).",
-    "comfyui_dir": "CHANGE_ME_e.g._E:/ComfyUI_windows_portable",
-    "comfyui_cmd": "run_nvidia_gpu.bat",
-    "python_exe": "CHANGE_ME_e.g._E:/ByrdHouse/Generators/ComfyUI/.venv/Scripts/python.exe",
-    "run_router": true,
-    "run_worker": true
-  },
-  "backup": {
-    "_comment": "backup-nightly.ps1 mirrors db/, artifacts/, recipes/, docs/, workflows/ + config here. Point at BYRD-VAULT's share or any second physical disk.",
-    "dest": "CHANGE_ME_e.g._\\\\byrd-vault\\ByrdHouseBackup_or_F:/ByrdHouseBackup"
-  },
-  "image": {
-    "_comment": "Defaults for the byrdimage submit layer (scripts/byrdimage.py).",
-    "workflow": "workflows/sdxl_base_api.json",
-    "width": 1152,
-    "height": 768,
-    "cfg": 7.0,
-    "sampler": "dpmpp_2m",
-    "scheduler": "karras"
-  },
-  "gpu": {
-    "vram_free_threshold_mb": 1024,
-    "default_mode": "OPERATOR",
-    "operator_model": "CHANGE_ME_e.g._qwen/qwen3.5-9b (Gemma = fast chat only; Qwen for tools/MCP)",
-    "judge_model": "CHANGE_ME_a_vision_model_key_e.g._qwen3.5-vl"
-  },
-  "memory": {
-    "_comment": "Used by byrd-status for the SQLite-vs-Qdrant drift check. Fill in real values on BYRD-MINI; leave placeholders elsewhere and the check reports 'not configured' (yellow).",
-    "sqlite_db": "CHANGE_ME_e.g._D:/ByrdHouse/SQLite/byrdhouse_memory.db",
-    "sqlite_table": "CHANGE_ME_memories",
-    "qdrant_collection": "CHANGE_ME_collection"
-  },
-  "mcp": {
-    "_comment": "Active MCP roster (ROOM_MAP rules: max 8, every server earns a room, adding #9 retires one). byrd-status pings every entry that has a 'ping' URL.",
-    "byrdhouse-memory": { "room": "Memory", "ping": "" },
-    "filesystem": { "room": "Files", "ping": "" },
-    "fetch": { "room": "Research", "ping": "" },
-    "brave-search": { "room": "Research", "ping": "" },
-    "sqlite": { "room": "Generated Items", "ping": "" },
-    "lmstudio-bridge": { "room": "Model delegation", "ping": "" },
-    "godot": { "room": "Realms (weekend)", "ping": "" },
-    "godot-docs": { "room": "Realms (weekend)", "ping": "" }
-  },
-  "auth": {
-    "admin_token": "CHANGE_ME_LONG_RANDOM"
-  }
+    "_comment":  "ByrdHouse config v1 (Blueprint v2 Â§4). ONE copy at %BYRDHOUSE_ROOT% on each machine. Scripts read this file â€” no script may hardcode a host, port, or path. Use Tailscale MagicDNS names, never raw IPs.",
+    "hosts":  {
+                  "gaming":  "byrd-gaming",
+                  "mini":  "byrd-mini",
+                  "vault":  "byrd-vault"
+              },
+    "services":  {
+                     "comfyui":  "http://byrd-gaming:8188",
+                     "lmstudio":  "http://localhost:1234/v1",
+                     "qdrant":  "http://byrd-mini:6333",
+                     "router":  "http://byrd-mini:8787"
+                 },
+    "paths":  {
+                  "mini_root":  "D:/ByrdHouse",
+                  "gaming_root":  "E:/ByrdHouse"
+              },
+    "startup":  {
+                    "_comment":  "Used by start-byrdhouse.ps1. comfyui_dir holds your ComfyUI launcher (portable installs: run_nvidia_gpu.bat). run_router=true hosts the belt API on THIS machine â€” true on GAMING until BYRD-MINI is set up, then flip it to false here, true on MINI, and point services.router at byrd-mini. run_worker=true runs the job daemon (GAMING only).",
+                    "comfyui_dir":  "E:/ByrdHouse/Generators",
+                    "comfyui_cmd":  "start-comfyui-rtx3070-optimized.ps1",
+                    "python_exe":  "E:/ByrdHouse/Generators/ComfyUI/.venv/Scripts/python.exe",
+                    "run_router":  false,
+                    "run_worker":  true
+                },
+    "backup":  {
+                   "_comment":  "backup-nightly.ps1 mirrors db/, artifacts/, recipes/, docs/, workflows/ + config here. Point at BYRD-VAULT\u0027s share or any second physical disk.",
+                   "dest":  "CHANGE_ME_e.g._\\\\byrd-vault\\ByrdHouseBackup_or_F:/ByrdHouseBackup"
+               },
+    "image":  {
+                  "_comment":  "Defaults for the byrdimage submit layer (scripts/byrdimage.py).",
+                  "workflow":  "workflows/sdxl_base_api.json",
+                  "width":  1152,
+                  "height":  768,
+                  "cfg":  7.0,
+                  "sampler":  "dpmpp_2m",
+                  "scheduler":  "karras"
+              },
+    "gpu":  {
+                "vram_free_threshold_mb":  1024,
+                "default_mode":  "OPERATOR",
+                "operator_model":  "qwen/qwen3.5-9b",
+                "judge_model":  "qwen/qwen3-vl-4b"
+            },
+    "memory":  {
+                   "_comment":  "Used by byrd-status for the SQLite-vs-Qdrant drift check. Fill in real values on BYRD-MINI; leave placeholders elsewhere and the check reports \u0027not configured\u0027 (yellow).",
+                   "sqlite_db":  "CHANGE_ME_e.g._D:/ByrdHouse/SQLite/byrdhouse_memory.db",
+                   "sqlite_table":  "CHANGE_ME_memories",
+                   "qdrant_collection":  "CHANGE_ME_collection"
+               },
+    "mcp":  {
+                "_comment":  "Active MCP roster (ROOM_MAP rules: max 8, every server earns a room, adding #9 retires one). byrd-status pings every entry that has a \u0027ping\u0027 URL.",
+                "byrdhouse-memory":  {
+                                         "room":  "Memory",
+                                         "ping":  ""
+                                     },
+                "filesystem":  {
+                                   "room":  "Files",
+                                   "ping":  ""
+                               },
+                "fetch":  {
+                              "room":  "Research",
+                              "ping":  ""
+                          },
+                "brave-search":  {
+                                     "room":  "Research",
+                                     "ping":  ""
+                                 },
+                "sqlite":  {
+                               "room":  "Generated Items",
+                               "ping":  ""
+                           },
+                "lmstudio-bridge":  {
+                                        "room":  "Model delegation",
+                                        "ping":  ""
+                                    },
+                "godot":  {
+                              "room":  "Realms (weekend)",
+                              "ping":  ""
+                          },
+                "godot-docs":  {
+                                   "room":  "Realms (weekend)",
+                                   "ping":  ""
+                               }
+            },
+    "auth":  {
+                 "admin_token":  "186DE9B5972078485B86A4281CA92138D9C03A641A3FEF96DEDA0D2226A695DE"
+             }
 }

@@ -1,28 +1,81 @@
-# Secrets — never commit real keys
+﻿# Secrets
 .env
-*.env
-!.env.example
-
-# Node
-node_modules/
-npm-debug.log*
+.env.*
+*.key
+*.pem
+secrets/
+credentials/
 
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
 .venv/
 venv/
 
-# ByrdHouse runtime state (lives on the machines, not in git)
-db/*.db
-db/*.db-*
-status.json
-artifacts/
+# Node
+node_modules/
+dist/
+build/
+
+# Logs and runtime output
 logs/
+*.log
+*.out.log
+*.err.log
+temp/
+tmp/
+cache/
+runtime/
 
-# Caddy runtime state
-config/caddy_data/
-config/caddy_config/
+# Databases and vector storage
+*.db
+*.sqlite
+*.sqlite3
+qdrant_storage/
+storage/
 
-# OS / editor
-.DS_Store
+# AI models
+models/
+Models/
+checkpoints/
+loras/
+vae/
+controlnet/
+*.safetensors
+*.ckpt
+*.gguf
+*.pth
+*.pt
+*.onnx
+
+# ComfyUI installation
+Generators/ComfyUI/
+ComfyUI/
+
+# Generated media and archives
+Images/Archive/
+Images/Output/
+Video/Output/
+outputs/
+output/
+generated/
+*.mp4
+*.mov
+*.webm
+
+# Backups
+*.bak
+*.bak-*
+*_backup/
+Backups/
+*.zip
+*.7z
+
+# Local verification and temporary reports
+_verification/
+
+# Windows and editors
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
