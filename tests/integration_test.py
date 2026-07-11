@@ -192,6 +192,41 @@ def main():
         card_meta = json.loads(timed[0]["meta"])
         check("card records requested slots", card_meta.get("slots", {}).get("game") == "Last Epoch")
 
+        # image.refine: img2img over an existing artifact via /artifacts/<id>/refine
+        src_art = [a for a in api("/artifacts?limit=50")
+                   if a["kind"] == "image" and a["path"]][0]
+        rj = api(f"/artifacts/{src_art['id']}/refine", {"strength": 0.5, "scale": 1.5})
+        check("refine endpoint queues an image.refine job", rj["status"] == "queued")
+        run_worker()
+        refined = [a for a in api("/artifacts?limit=80")
+                   if a["job_id"] == rj["id"] and a["kind"] == "image"]
+        check("refined artifact registered with lineage", len(refined) >= 1 and
+              json.loads(refined[0]["meta"]).get("refined_from") == src_art["path"])
+
+        # content.enhance: operator model rewrites the prompt, then generation runs
+        api("/jobs", {"type": "content.enhance", "project": "sandbox",
+                      "required_mode": "OPERATOR", "required_caps": ["lmstudio"],
+                      "payload": {"recipe": "freeform@1",
+                                  "slots": {"prompt": "cool palworld thumbnail"},
+                                  "project": "sandbox", "purpose": "enhance test"}})
+        run_worker()  # enhance (OPERATOR) enqueues generate; --once drains both
+        enhanced = [a for a in api("/artifacts?limit=100") if a["kind"] == "image"
+                    and json.loads(a["meta"]).get("recipe", "").startswith("freeform")]
+        check("enhanced prompt flowed into a freeform generation",
+              enhanced and json.loads(enhanced[0]["meta"])["prompt"] != "")
+
+        # aspect presets snap to SDXL-native dims; LoRA splices into the graph
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import byrdimage
+        check("aspect preset resolves SDXL dims", byrdimage.pick_dims("9:16") == (768, 1344))
+        g = json.loads((ROOT / "workflows" / "sdxl_base_api.json").read_text())
+        g.pop("_comment", None)
+        byrdimage.insert_lora(g, "test_lora.safetensors", 0.8)
+        lora_ok = (g["byrd_lora"]["class_type"] == "LoraLoader"
+                   and g["3"]["inputs"]["model"] == ["byrd_lora", 0]
+                   and g["6"]["inputs"]["clip"] == ["byrd_lora", 1])
+        check("LoRA splices between checkpoint and consumers", lora_ok)
+
         # 'name@N' pins that recipe version; bare name resolves to the highest
         sys.path.insert(0, str(ROOT / "scripts"))
         import byrdimage

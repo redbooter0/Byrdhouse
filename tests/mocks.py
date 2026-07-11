@@ -45,6 +45,9 @@ class Comfy(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_POST(self):
+        if self.path.startswith("/upload/image"):
+            self.rfile.read(int(self.headers["Content-Length"]))  # multipart body, discarded
+            return self._json({"name": "mock-upload.png"})
         payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         pid = f"mock-{len(Comfy.graphs)}"
         Comfy.graphs[pid] = payload["prompt"]
@@ -57,7 +60,10 @@ class Comfy(BaseHTTPRequestHandler):
             if not graph:
                 return self._json({})
             batch = next((n["inputs"]["batch_size"] for n in graph.values()
-                          if n.get("class_type") == "EmptyLatentImage"), 1)
+                          if n.get("class_type") == "EmptyLatentImage"), None)
+            if batch is None:  # img2img graph: batch comes from RepeatLatentBatch
+                batch = next((n["inputs"]["amount"] for n in graph.values()
+                              if n.get("class_type") == "RepeatLatentBatch"), 1)
             prefix = next(n["inputs"]["filename_prefix"] for n in graph.values()
                           if n.get("class_type") == "SaveImage")
             images = [{"filename": f"{prefix}_{i:05d}_.png", "subfolder": "", "type": "output"}
