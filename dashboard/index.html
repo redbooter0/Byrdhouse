@@ -159,7 +159,8 @@ const jpost = async (p, body) => {
   const r = await fetch(p, { method:'POST', headers:hdrs(), body:JSON.stringify(body) });
   const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j;
 };
-const say = t => $('msg').textContent = t;
+const say = t => { $('msg').textContent = t;
+  const g = $('genMsg'); if (g) g.textContent = t; };  // mirror status next to the button
 
 /* ── tooltips: clean labels + a ? that pops the description (tap or hover) ── */
 const qtip = text => `<span class="q" onclick="showTip(event)" data-tip="${esc(text)}">?</span>`;
@@ -341,6 +342,8 @@ V.image = async () => {
       <label>Thumbnail title ${qtip('Optional. Real text composited on top of the art in a second pass — never diffused, so it is always crisp and readable. Leave empty for art only.')}</label>
       <input id="thumbTitle" placeholder="e.g. BEST BUILDS TIER LIST">
       <div class="row" style="margin-top:10px"><button class="b" onclick="submitGen()">Queue generation</button></div>
+      <div id="genMsg" style="color:var(--yellow);font-size:12.5px;min-height:16px;margin-top:8px"></div>
+      <div class="cards" id="genActivity" style="margin-top:6px"></div>
       <details class="opts"><summary>More options</summary>
         <label>Project ${qtip('Which channel/project this belongs to — groups artifacts in the gallery and exports.')}</label>
         <input id="project" value="careyrpg">
@@ -353,8 +356,9 @@ V.image = async () => {
           <option value="3:2">3:2 landscape photo</option>
           <option value="21:9">21:9 banner</option>
         </select>
-        <label>Source image ${qtip('Optional path to an image ALREADY on the worker PC (a real screenshot, box art). Composites your title onto it and skips generation — real pixels beat diffused lookalikes.')}</label>
-        <input id="srcImage" placeholder="E:\\captures\\palworld_base.png">
+        <label>Source image ${qtip('Upload a real screenshot or box art from your phone. It is saved, recorded in the gallery at top grade (real pixels beat diffused lookalikes), and your title is composited onto it — no generation needed. Add a Thumbnail title above, then Queue.')}</label>
+        <input id="srcFile" type="file" accept="image/*" onchange="uploadSource(this)">
+        <div id="srcPreview" class="muted" style="margin-top:6px"></div>
         <label>Checkpoint ${qtip('Optional. Name of a .safetensors model installed on the worker. Leave empty for the recipe default. Swap in a stylized model (e.g. Animagine) for anime/game looks.')}</label>
         <input id="ckpt" placeholder="leave empty for the recipe default">
         <label>LoRA ${qtip('Optional. A .safetensors LoRA in the worker models/loras folder — game-style LoRAs are the key to nailing a specific game accurately.')}</label>
@@ -395,13 +399,61 @@ async function uploadRefs(input) {
     $('refList').innerHTML = await refListHtml();
   } catch (e) { say('reference upload error: ' + e.message); }
 }
+/* Upload a real source image straight from the phone: the router saves it,
+   records it in the gallery at top grade, and hands back an artifact id the
+   belt composites the title onto. Endpoint-first — the operator model will
+   call this same /sources endpoint once its tool roster is unlocked. */
+async function uploadSource(input) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  const name = f.name.replace(/[^\w. -]+/g, '_');
+  const project = $('project') ? $('project').value.trim() || 'careyrpg' : 'careyrpg';
+  say('uploading source image…');
+  try {
+    const r = await fetch(`/sources/${encodeURIComponent(name)}?project=${encodeURIComponent(project)}`, {
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + $('token').value, 'X-Actor': 'dashboard' },
+      body: f });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    window._srcArtifact = { id: j.id, name };
+    $('srcPreview').innerHTML =
+      `<span style="color:var(--green)">✓ saved &amp; recorded · grade A (score 5)</span> ${esc(name)}`
+      + `<br><img src="/artifacts/${esc(j.id)}/file" style="height:52px;border-radius:6px;margin-top:4px">`
+      + `<br><button class="s" onclick="clearSource()" style="margin-top:4px">remove</button>`;
+    say('source saved — add a Thumbnail title above, then Queue to composite onto it');
+    saveDraft();
+  } catch (e) { say('source upload error: ' + e.message); }
+}
+function clearSource() {
+  window._srcArtifact = null;
+  if ($('srcFile')) $('srcFile').value = '';
+  if ($('srcPreview')) $('srcPreview').innerHTML = '';
+  saveDraft();
+}
+/* The recipe currently selected in the form (id@version pinned). */
+function currentRecipe() {
+  return (window._recipes||[]).find(
+    x => x.id + '@' + x.version === ($('recipe') ? $('recipe').value : ''));
+}
+/* Slots the recipe needs but does NOT vary — the founder must supply these.
+   These are exactly the fields rendered as required inputs. */
+function requiredSlots(r) {
+  r = r || currentRecipe();
+  return r ? r.slots.filter(s => !r.vary.includes(s)) : [];
+}
+/* Required slots left blank in the given values map. */
+function missingRequiredSlots(vals) {
+  return requiredSlots().filter(s => !String((vals && vals[s]) || '').trim());
+}
 function slotFields() {
-  const r = (window._recipes||[]).find(x => x.id + '@' + x.version === $('recipe').value);
+  const r = currentRecipe();
   if (!r) return;
   const keep = {};  // survive a recipe change without losing typed slot values
   document.querySelectorAll('#slots input').forEach(i => { keep[i.dataset.slot] = i.value; });
-  $('slots').innerHTML = r.slots.filter(s => !r.vary.includes(s)).map(s =>
-    `<label>${esc(s)}</label><input data-slot="${esc(s)}" placeholder="${esc(s)}">`).join('');
+  // every non-vary slot is a REQUIRED input (vary slots byrdimage fills itself)
+  $('slots').innerHTML = requiredSlots(r).map(s =>
+    `<label>${esc(s)} <span style="color:var(--red)">*</span></label>` +
+    `<input data-slot="${esc(s)}" required placeholder="${esc(s)} — required">`).join('');
   document.querySelectorAll('#slots input').forEach(i => { if (keep[i.dataset.slot]) i.value = keep[i.dataset.slot]; });
 }
 
@@ -413,7 +465,7 @@ function readForm() {
   document.querySelectorAll('#slots input').forEach(i => { if (i.value) slots[i.dataset.slot] = i.value; });
   return { recipe: $('recipe') ? $('recipe').value : '', slots,
            title: $('thumbTitle') ? $('thumbTitle').value : '',
-           src: $('srcImage') ? $('srcImage').value : '',
+           srcArtifact: window._srcArtifact || null,
            project: $('project') ? $('project').value : 'careyrpg',
            purpose: $('purpose') ? $('purpose').value : '' };
 }
@@ -430,9 +482,15 @@ function applyDraft(d) {
   document.querySelectorAll('#slots input').forEach(i => {
     if (d.slots && d.slots[i.dataset.slot] != null) i.value = d.slots[i.dataset.slot]; });
   $('thumbTitle').value = d.title || '';
-  $('srcImage').value = d.src || '';
   $('project').value = d.project || 'careyrpg';
   $('purpose').value = d.purpose || '';
+  // restore a previously-uploaded source image (survives reload/room switches)
+  window._srcArtifact = d.srcArtifact || null;
+  if (window._srcArtifact && $('srcPreview'))
+    $('srcPreview').innerHTML =
+      `<span style="color:var(--green)">✓ saved &amp; recorded · grade A</span> ${esc(window._srcArtifact.name || '')}`
+      + `<br><img src="/artifacts/${esc(window._srcArtifact.id)}/file" style="height:52px;border-radius:6px;margin-top:4px">`
+      + `<br><button class="s" onclick="clearSource()" style="margin-top:4px">remove</button>`;
 }
 /* ── end draft-persistence ── */
 
@@ -441,24 +499,34 @@ async function submitGen() {
     const d = readForm();
     if (!d.purpose) throw new Error('purpose is required');
     const title = d.title.trim();
-    const src = d.src.trim();
-    if (src && !title) throw new Error('a source image needs a title to composite');
+    const srcArt = d.srcArtifact && d.srcArtifact.id ? d.srcArtifact : null;
+    if (srcArt && !title) throw new Error('a source image needs a title to composite');
     const payload = { recipe:d.recipe, slots:d.slots, project:d.project, purpose:d.purpose };
     if (title) payload.title = title;
-    if (src) payload.image_path = src;
+    if (srcArt) payload.source_artifact = srcArt.id;
     const ckpt = $('ckpt') ? $('ckpt').value.trim() : '';
     if (ckpt) payload.checkpoint = ckpt;
     const aspect = $('aspect') ? $('aspect').value : '';
     if (aspect) payload.aspect = aspect;
     const lora = $('lora') ? $('lora').value.trim() : '';
     if (lora) payload.lora = lora;
-    const enhance = $('enhance') && $('enhance').checked && !title && !src && payload.slots.prompt;
-    const type = (src || title) ? 'content.thumbnail' : enhance ? 'content.enhance' : 'image.generate';
+    const enhance = $('enhance') && $('enhance').checked && !title && !srcArt && payload.slots.prompt;
+    const type = (srcArt || title) ? 'content.thumbnail' : enhance ? 'content.enhance' : 'image.generate';
+    // The dashboard is the recipe's first gate. Every required (non-vary) slot
+    // must be filled HERE, or the job dies deep in byrdimage with
+    // "unfilled slots [...]". Skip only when a source image composites directly
+    // (no recipe generation) or the enhance path substitutes the freeform recipe.
+    if (!srcArt && type !== 'content.enhance') {
+      const missing = missingRequiredSlots(d.slots);
+      if (missing.length)
+        throw new Error('fill the required slot(s): ' + missing.join(', '));
+    }
     const j = await jpost('/jobs', { type,
       project:d.project,
-      required_mode: src ? 'ANY' : enhance ? 'OPERATOR' : 'IMAGE',
-      required_caps: src ? [] : enhance ? ['lmstudio'] : ['comfyui'], payload });
-    say('queued '+j.id+(src?' (title onto your image)':title?' (two-pass thumbnail)':enhance?' (prompt enhancement first)':''));
+      required_mode: srcArt ? 'ANY' : enhance ? 'OPERATOR' : 'IMAGE',
+      required_caps: srcArt ? [] : enhance ? ['lmstudio'] : ['comfyui'], payload });
+    say('queued '+j.id+(srcArt?' (title onto your uploaded image)':title?' (two-pass thumbnail)':enhance?' (prompt enhancement first)':''));
+    window._srcArtifact = null;         // consumed — next batch starts clean
     clearDraft();                       // only a successful queue clears the draft
     $('view').innerHTML = '';           // force a fresh (empty) form
     render();
@@ -623,8 +691,15 @@ function typingInView() {
 async function render() {
   try {
     if (room === 'image' && $('genForm')) {
-      // form already on screen: refresh only the output grid, never the form
-      $('imgOut').innerHTML = await imgOutHtml();
+      // form already on screen: refresh only the outputs, never the form.
+      // In-flight jobs surface right under the Queue button (#genActivity) AND
+      // in the wide output panel, so activity is visible from the button that
+      // started it — not stranded at the bottom of the page.
+      const jobs = await jget('/jobs?limit=30');
+      const inflight = busyCards(jobs);
+      if ($('genActivity')) $('genActivity').innerHTML = inflight;
+      const arts = (await jget('/artifacts?limit=18')).filter(a => a.kind==='image'||a.kind==='thumbnail');
+      $('imgOut').innerHTML = `${inflight}${arts.map(artCard).join('') || (inflight ? '' : '<span class="muted">no images yet</span>')}`;
       return;
     }
     if (typingInView()) return;  // never replace controls under the user's cursor

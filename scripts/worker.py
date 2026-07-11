@@ -78,6 +78,21 @@ def upload_preview(artifact_id, path):
         log(f"preview upload failed for {artifact_id}: {e}")  # non-fatal: card still registers
 
 
+def fetch_artifact_file(artifact_id, dest_dir):
+    """Pull an uploaded source image's bytes from the router to local disk so
+    the compositor (which runs on this machine) can read the real pixels the
+    dashboard sent — the file was saved on the router host, not here."""
+    req = urllib.request.Request(
+        f"{ROUTER}/artifacts/{artifact_id}/file",
+        headers={"Authorization": f"Bearer {TOKEN}", "X-Actor": WORKER_ID})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        data = r.read()
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / f"{artifact_id}.png"
+    dest.write_bytes(data)
+    return dest
+
+
 def log(msg):
     print(f"[worker {datetime.now():%H:%M:%S}] {msg}", flush=True)
 
@@ -262,11 +277,18 @@ def run_content_thumbnail(job) -> None:
     if not title:
         raise RuntimeError("content.thumbnail needs payload.title")
 
+    # A source can arrive two ways: a path already on this worker (image_path)
+    # or a real image the founder uploaded through the dashboard, saved on the
+    # router and referenced by artifact id (source_artifact) — fetch that here.
     src = p.get("image_path")
-    if src:
-        png = Path(src)
-        if not png.exists():
-            raise RuntimeError(f"image_path not found on this worker: {png}")
+    src_art = p.get("source_artifact")
+    if src or src_art:
+        if src_art and not src:
+            png = fetch_artifact_file(src_art, ROOT / "artifacts" / "_sources")
+        else:
+            png = Path(src)
+            if not png.exists():
+                raise RuntimeError(f"image_path not found on this worker: {png}")
         month_dir = ROOT / "artifacts" / p.get("project", "careyrpg") / f"{datetime.now():%Y-%m}"
         final = month_dir / f"{png.stem}_{job['id']}_final.png"
         compose_thumbnail.compose(
@@ -275,6 +297,7 @@ def run_content_thumbnail(job) -> None:
         card = {"artifact_id": f"art.{job['id']}.0", "job_id": job["id"],
                 "project": p.get("project", "careyrpg"), "kind": "thumbnail",
                 "path": str(final), "title": title, "source_image": str(png),
+                "source_artifact": src_art,
                 "purpose": p.get("purpose", "thumbnail"), "prompt": "",
                 "slots": {}, "score": None, "tags": [], "caption": "",
                 "status": "draft",

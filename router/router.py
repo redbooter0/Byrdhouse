@@ -50,7 +50,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 ROOT = Path(os.environ.get("BYRDHOUSE_ROOT") or sys.exit("BYRDHOUSE_ROOT not set"))
 CFG = json.loads((ROOT / "byrdhouse.config.json").read_text(encoding="utf-8-sig"))
@@ -59,6 +59,7 @@ DB_PATH = ROOT / "db" / "byrdhouse.db"
 DASHBOARD = Path(__file__).resolve().parent.parent / "dashboard"
 PREVIEWS = ROOT / "artifacts" / "_previews"  # worker-uploaded copies for the dashboard
 REFERENCES = ROOT / "references"  # founder-loved thumbnails the judge scores against
+SOURCES = ROOT / "artifacts" / "_sources"  # dashboard-uploaded real source images
 
 JOB_TYPES = {
     "image.generate", "image.judge", "image.refine", "image.upscale", "video.i2v",
@@ -291,6 +292,15 @@ CHAT_TOOLS = [
         "description": "Tail of the belt event log (what happened lately).",
         "parameters": {"type": "object", "properties": {
             "limit": {"type": "integer", "description": "max rows, default 12"}}}}},
+    {"type": "function", "function": {
+        "name": "web_search",
+        "description": "Search the web for references, viral thumbnails, or facts "
+                       "about a game before generating. Returns title/url/snippet rows. "
+                       "(In-app equivalent of the brave-search MCP the bot uses in Cherry Studio.)",
+        "parameters": {"type": "object", "properties": {
+            "query": {"type": "string", "description": "what to search for"},
+            "limit": {"type": "integer", "description": "max results, default 5"}},
+            "required": ["query"]}}},
 ]
 
 
@@ -340,6 +350,25 @@ def run_chat_tool(name, args, actor):
         return [dict(r) for r in db().execute(
             "SELECT ts,actor,action,subject FROM events ORDER BY id DESC LIMIT ?",
             (min(int(args.get("limit", 12)), 20),))]
+    if name == "web_search":
+        search = (CFG.get("services", {}).get("search") or "").rstrip("/")
+        if not search or search.startswith("CHANGE_ME"):
+            return {"error": "web_search not configured — set services.search to a JSON "
+                             "search endpoint (e.g. a local SearXNG or a brave-search proxy) "
+                             "returning {\"results\":[{title,url,snippet}]}. In Cherry Studio "
+                             "the bot uses the brave-search MCP for this instead."}
+        query = str(args.get("query", "")).strip()
+        if not query:
+            return {"error": "web_search needs a query"}
+        n = min(int(args.get("limit", 5)), 10)
+        try:
+            url = f"{search}?q={quote(query)}&n={n}"
+            with urllib.request.urlopen(url, timeout=15) as r:
+                data = json.loads(r.read().decode())
+            results = data.get("results", data) if isinstance(data, dict) else data
+            return results[:n] if isinstance(results, list) else results
+        except Exception as e:
+            return {"error": f"web_search failed: {e}"}
     return {"error": f"unknown tool {name}"}
 
 
@@ -664,6 +693,37 @@ class Handler(BaseHTTPRequestHandler):
             (PREVIEWS / f"{m.group(1)}.png").write_bytes(self.rfile.read(n))
             event(self._actor(), "artifact.preview", m.group(1), {"bytes": n})
             return self._send({"ok": True}, 201)
+
+        m = re.fullmatch(r"/sources/([\w. -]+)", path)
+        if m:  # real source image uploaded from the dashboard (body is bytes)
+            n = int(self.headers.get("Content-Length") or 0)
+            if not 0 < n <= 20_000_000:
+                return self._send({"error": "bad upload size"}, 400)
+            name = m.group(1)
+            project = {k: v[0] for k, v in
+                       parse_qs(urlparse(self.path).query).items()}.get("project", "careyrpg")
+            aid = new_id("src")
+            SOURCES.mkdir(parents=True, exist_ok=True)
+            dest = SOURCES / f"{aid}_{name}"
+            dest.write_bytes(self.rfile.read(n))
+            # A real source image is highest grade by definition — real pixels
+            # beat diffused lookalikes (v3.1). Record it approved at top score so
+            # it lands in the gallery and the belt can composite onto it later.
+            card = {"artifact_id": aid, "job_id": None, "project": project,
+                    "kind": "source", "path": str(dest), "name": name, "source": True,
+                    "purpose": "uploaded source image (real pixels)",
+                    "prompt": "", "slots": {}, "score": 5.0,
+                    "tags": ["source"], "caption": "", "status": "approved",
+                    "created_at": now()}
+            db().execute(
+                "INSERT OR REPLACE INTO artifacts(id,job_id,project_id,kind,path,meta,"
+                "score,tags,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (aid, None, project, "source", str(dest), json.dumps(card),
+                 5.0, json.dumps(["source"]), "approved", now()))
+            db().commit()
+            event(self._actor(), "source.upload", aid, {"bytes": n, "name": name})
+            return self._send({"id": aid, "name": name, "path": str(dest),
+                               "status": "approved", "score": 5.0}, 201)
 
         try:
             body = self._body()

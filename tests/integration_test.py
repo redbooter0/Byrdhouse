@@ -299,6 +299,38 @@ def main():
         check("bare recipe name resolves to highest version",
               byrdimage.find_recipe(ROOT, "rpg_tier_list").name == "rpg_tier_list.v2.json")
 
+        # ── Regression: the dashboard→recipe slot contract (yt_thumbnail v4) ──
+        # job_19f525b23183s9na6 & siblings died twice with
+        # "unfilled slots ['emotion']": the form let a required, non-vary slot
+        # through empty. Lock every side of the contract with the EXACT recipe.
+        yt = [r for r in api("/recipes") if r["file"] == "yt_thumbnail.v4.json"][0]
+        yt_vary = set(yt["vary"])
+        yt_required = [s for s in yt["slots"] if s not in yt_vary]
+        # (1) /recipes exposes emotion as a required slot the form must render
+        check("yt_thumbnail.v4 exposes emotion as a required (non-vary) slot",
+              "emotion" in yt_required and "emotion" not in yt_vary)
+        # (2) byrdimage rejects a generate that is missing a required slot —
+        #     the exact failure the three dead jobs hit
+        try:
+            byrdimage.generate(ROOT, "yt_thumbnail@4",
+                               {"game": "Palworld", "subject": "a Pal trainer"},
+                               "careyrpg", "regression: missing emotion", dry_run=True)
+            check("byrdimage rejects a generate missing the emotion slot", False)
+        except SystemExit as e:
+            check("byrdimage rejects a generate missing the emotion slot",
+                  "emotion" in str(e), str(e))
+        # (3) a vary slot must ALWAYS be filled by byrdimage: emotion supplied,
+        #     every vary slot (palette/lighting/composition) omitted -> no raise
+        try:
+            byrdimage.generate(ROOT, "yt_thumbnail@4",
+                               {"game": "Palworld", "subject": "a Pal trainer",
+                                "emotion": "wide-eyed shock"},
+                               "careyrpg", "regression: vary auto-fill", dry_run=True)
+            check("byrdimage fills vary slots so a complete recipe submits", True)
+        except SystemExit as e:
+            check("byrdimage fills vary slots so a complete recipe submits",
+                  False, str(e))
+
         # content.thumbnail with image_path composites onto a provided image
         # (no ComfyUI pass) and yields a 1280x720 final with a card
         from PIL import Image
@@ -316,6 +348,87 @@ def main():
         if byo:
             check("provided-image final is 1280x720",
                   Image.open(byo[0]["path"]).size == (1280, 720))
+
+        # ── Uploaded source image: saved on the router, recorded at top grade,
+        #    then composited onto by the worker (which fetches it back). This is
+        #    the endpoint the operator model will call once its tools unlock. ──
+        import io
+        buf = io.BytesIO()
+        Image.new("RGB", (800, 450), (120, 40, 160)).save(buf, "PNG")
+        src_bytes = buf.getvalue()
+        rqs = urllib.request.Request(
+            f"http://127.0.0.1:{RP}/sources/palworld_base.png?project=careyrpg",
+            data=src_bytes, method="POST",
+            headers={"Content-Type": "image/png", "Authorization": f"Bearer {TOKEN}"})
+        src_resp = json.loads(urllib.request.urlopen(rqs, timeout=15).read().decode())
+        src_id = src_resp.get("id")
+        check("source upload returns a recorded artifact id", bool(src_id), str(src_resp))
+        src_art = [a for a in api("/artifacts?limit=100") if a["id"] == src_id]
+        check("uploaded source is recorded, approved, top grade",
+              len(src_art) == 1 and src_art[0]["kind"] == "source"
+              and src_art[0]["status"] == "approved" and src_art[0]["score"] == 5.0,
+              str(src_art))
+        with urllib.request.urlopen(
+                f"http://127.0.0.1:{RP}/artifacts/{src_id}/file", timeout=15) as r:
+            check("uploaded source served from the router host", r.read() == src_bytes)
+        # compose a title onto the uploaded source by artifact id (no local path)
+        api("/jobs", {"type": "content.thumbnail", "project": "careyrpg",
+                      "required_mode": "ANY",
+                      "payload": {"title": "SOURCE UPLOAD WORKS",
+                                  "source_artifact": src_id,
+                                  "project": "careyrpg", "purpose": "uploaded source compose"}})
+        run_worker()
+        composed = [a for a in api("/artifacts?limit=100")
+                    if a["kind"] == "thumbnail"
+                    and json.loads(a["meta"] or "{}").get("source_artifact") == src_id]
+        check("worker fetched the uploaded source and composited onto it",
+              len(composed) == 1)
+        if composed:
+            check("uploaded-source final is 1280x720",
+                  Image.open(composed[0]["path"]).size == (1280, 720))
+
+        # ── Belt-as-MCP: the bot's audited hands on the belt (byrd_belt_mcp) ──
+        # Same 2-machine setup, one shared tool surface: any MCP client drives
+        # the belt through the router, never ComfyUI/GPU directly.
+        os.environ["BYRDHOUSE_ROOT"] = str(ROOT)
+        import byrd_belt_mcp as belt
+        init = belt.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
+        check("belt-MCP initialize returns a protocol version",
+              init["result"]["protocolVersion"] == belt.PROTOCOL_VERSION)
+        tools = {t["name"] for t in belt.handle(
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]["tools"]}
+        check("belt-MCP exposes the belt tools",
+              {"belt_status", "list_artifacts", "queue_image", "compose_thumbnail",
+               "review_artifact"} <= tools)
+        st = belt.handle({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+                          "params": {"name": "belt_status", "arguments": {}}})
+        check("belt-MCP belt_status proxies to the router",
+              st["result"]["isError"] is False
+              and "queue" in st["result"]["content"][0]["text"])
+        before = len(api("/jobs?limit=200"))
+        qr = belt.handle({"jsonrpc": "2.0", "id": 4, "method": "tools/call",
+                          "params": {"name": "queue_image",
+                                     "arguments": {"prompt": "a bot-queued test image"}}})
+        check("belt-MCP queue_image creates a real audited job",
+              qr["result"]["isError"] is False
+              and len(api("/jobs?limit=200")) == before + 1)
+        # autonomy ladder is literally a permission filter — no separate build
+        belt.READONLY = True
+        ro = {t["name"] for t in belt.handle(
+            {"jsonrpc": "2.0", "id": 5, "method": "tools/list"})["result"]["tools"]}
+        blocked = belt.handle({"jsonrpc": "2.0", "id": 6, "method": "tools/call",
+                               "params": {"name": "queue_image", "arguments": {"prompt": "x"}}})
+        check("read-only mode hides + blocks write tools (autonomy = a permission)",
+              "queue_image" not in ro and "belt_status" in ro
+              and blocked["result"]["isError"] is True)
+        belt.READONLY = False
+
+        # web_search: the in-app chat's research tool — config-driven, graceful
+        sys.path.insert(0, str(ROOT / "router"))
+        import router as router_mod
+        ws = router_mod.run_chat_tool("web_search", {"query": "viral palworld thumbnail"}, "test")
+        check("web_search reports clearly when unconfigured",
+              isinstance(ws, dict) and "not configured" in ws.get("error", ""))
 
         # A retried job re-registers its artifacts — must upsert, not duplicate
         dupe_card = {"artifact_id": "art.dupetest.0", "job_id": "job_dupetest",
