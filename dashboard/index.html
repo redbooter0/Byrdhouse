@@ -84,6 +84,13 @@
   .bubble.user { align-self:flex-end; background:linear-gradient(90deg,#7c3aed,#6d28d9); color:#fff; }
   .bubble.assistant { align-self:flex-start; background:var(--panel2); border:1px solid var(--line); }
   .bubble.tool { align-self:flex-start; background:none; border:1px dashed var(--line); color:var(--dim); font-size:12px; }
+  .bubble .who { display:block; font-size:10px; color:var(--dim); margin-top:5px; }
+  .art img { cursor:zoom-in; }
+  .lightbox { position:fixed; inset:0; background:rgba(6,4,14,.92); z-index:50;
+              display:flex; align-items:center; justify-content:center; cursor:zoom-out;
+              padding:max(16px, env(safe-area-inset-top)); }
+  .lightbox img { max-width:96vw; max-height:92vh; border-radius:10px;
+                  box-shadow:0 0 60px rgba(124,58,237,.35); }
   @media (max-width:820px){
     body{flex-direction:column}
     /* horizontal room strip instead of a stacked wall of buttons */
@@ -182,7 +189,7 @@ async function chips() {
 function artCard(a) {
   const meta = JSON.parse(a.meta || '{}');
   const img = a.kind === 'image' || a.kind === 'thumbnail'
-    ? `<img src="/artifacts/${a.id}/file" loading="lazy" onerror="this.style.display='none'">` : '';
+    ? `<img src="/artifacts/${a.id}/file" loading="lazy" onclick="zoom(this.src)" onerror="this.style.display='none'">` : '';
   const when = (a.job_finished_at || a.created_at || '').slice(5, 16).replace('T', ' ');
   return `<div class="art">${img}<div class="m">
     <b>${esc(meta.recipe || a.kind)}</b> · ${esc(a.project_id)}<br>
@@ -195,6 +202,13 @@ function artCard(a) {
       <button class="s" onclick="refineArt('${a.id}',0.3,2.0)" title="hi-res polish">⬆ upscale</button>
       <button class="s" onclick="refineArt('${a.id}',0.55,1.0)" title="variations near this image">≈ riff</button>
     </div></div></div>`;
+}
+function zoom(src) {
+  const o = document.createElement('div');
+  o.className = 'lightbox';
+  o.innerHTML = `<img src="${src}">`;
+  o.onclick = () => o.remove();
+  document.body.appendChild(o);
 }
 async function refineArt(id, strength, scale) {
   try {
@@ -404,7 +418,8 @@ function chatLog() {
 }
 function chatBubbles() {
   const msgs = chatLog();
-  return msgs.map(m => `<div class="bubble ${m.role}">${esc(m.content)}</div>`).join('')
+  return msgs.map(m => `<div class="bubble ${m.role}">${esc(m.content)}${
+      m.model ? `<span class="who">${esc(m.model)}</span>` : ''}</div>`).join('')
     || '<span class="muted">Ask the operator anything — it sees the live queue. '
      + 'If the GPU is mid-generation, chat resumes when it finishes.</span>';
 }
@@ -436,7 +451,7 @@ async function sendChat() {
     if (j.actions && j.actions.length)
       msgs.push({ role: 'tool', content: '🔧 ' + j.actions.map(a =>
         a.tool + (a.args && a.args.prompt ? ': ' + a.args.prompt.slice(0, 60) : '')).join(' · ') });
-    msgs.push({ role: 'assistant', content: j.reply });
+    msgs.push({ role: 'assistant', content: j.reply, model: j.model });
   } catch (e) {
     msgs.push({ role: 'assistant', content: '[' + e.message + ']' });
   }

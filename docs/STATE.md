@@ -18,7 +18,22 @@ The system is local-first:
 
 Odysseus/smart-home/Stripe is removed from this repo. Cherry Studio remains the local model GUI; ByrdHouse owns the router/worker/dashboard belt.
 
-## What works now
+## What works now (snapshot refreshed 2026-07-11)
+
+- **Image Studio**: versioned recipes (game-anchored v3/v4 + freeform), aspect
+  presets, LoRA field, checkpoint override, ✨ LLM prompt enhancement, seed pin,
+  BYO-screenshot thumbnails, viral compositor (banner/accent), reference
+  library (judge grades against founder-loved thumbnails), ⬆ upscale / ≈ riff
+  on every card, tap-to-zoom, in-flight placeholders with ages, ⏱ durations
+- **Operator Chat**: agent with belt tools (status, artifacts, queue_image,
+  refine_image, events), model interchangeability, mini-fallback slot for
+  always-on chat, answering model shown per reply
+- **Belt**: reaper, worker liveness, requeue/cancel, previews (downscaled,
+  worker→router upload), job timing joins, deterministic artifact dedupe
+- **Guardrails**: 52-check integration suite + 13-check dashboard suite in CI,
+  BOM enforcement, judge fidelity/off-game caps
+
+## What worked before (U0 foundation)
 
 - Dashboard/router are served from BYRD-MINI at `http://byrd-mini:8787`.
 - Memory/Qdrant live on BYRD-MINI and drift check is green there.

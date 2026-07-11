@@ -196,6 +196,15 @@ CHAT_TOOLS = [
             "aspect": {"type": "string", "description": "16:9|9:16|1:1|2:3|3:2|21:9"}},
             "required": ["prompt"]}}},
     {"type": "function", "function": {
+        "name": "refine_image",
+        "description": "Refine an existing artifact: mode 'upscale' = hi-res "
+                       "polish of a good image, 'riff' = variations near it. "
+                       "Use list_artifacts first to get the artifact id.",
+        "parameters": {"type": "object", "properties": {
+            "artifact_id": {"type": "string"},
+            "mode": {"type": "string", "description": "upscale | riff"}},
+            "required": ["artifact_id"]}}},
+    {"type": "function", "function": {
         "name": "recent_events",
         "description": "Tail of the belt event log (what happened lately).",
         "parameters": {"type": "object", "properties": {
@@ -237,11 +246,52 @@ def run_chat_tool(name, args, actor):
         db().commit()
         event(actor, "job.create", jid, {"type": "image.generate", "via": "chat-tool"})
         return {"queued": jid, "note": "it will appear in the Image Studio when done"}
+    if name == "refine_image":
+        mode = args.get("mode", "upscale")
+        opts = ({"strength": 0.3, "scale": 2.0} if mode == "upscale"
+                else {"strength": 0.55, "scale": 1.0, "batch": 4})
+        result, code = create_refine_job(str(args.get("artifact_id", "")), opts, actor)
+        return result
     if name == "recent_events":
         return [dict(r) for r in db().execute(
             "SELECT ts,actor,action,subject FROM events ORDER BY id DESC LIMIT ?",
             (min(int(args.get("limit", 12)), 20),))]
     return {"error": f"unknown tool {name}"}
+
+
+def create_refine_job(aid, body, actor):
+    """One path for refine jobs, shared by POST /artifacts/<id>/refine and
+    the chat refine_image tool. Returns (response_dict, http_code)."""
+    art = db().execute("SELECT * FROM artifacts WHERE id=?", (aid,)).fetchone()
+    if not art:
+        return {"error": "no such artifact"}, 404
+    if not art["path"]:
+        return {"error": "artifact has no file path to refine"}, 400
+    meta = json.loads(art["meta"] or "{}")
+    jid = new_id("job")
+    payload = {
+        "source_artifact": aid, "source_path": art["path"],
+        "project": art["project_id"] or "sandbox",
+        "purpose": body.get("purpose") or f"refine of {aid}",
+        "strength": float(body.get("strength", 0.4)),
+        "scale": float(body.get("scale", 1.6)),
+        "batch": int(body.get("batch", 1)),
+    }
+    for k in ("prompt", "negative", "checkpoint", "lora"):
+        if body.get(k):
+            payload[k] = body[k]
+    db().execute(
+        "INSERT INTO jobs(id,type,project_id,payload,priority,required_mode,"
+        "required_caps,status,max_attempts,created_at)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (jid, "image.refine", payload["project"], json.dumps(payload), 5,
+         "IMAGE", json.dumps(["comfyui"]), "queued", 2, now()))
+    db().commit()
+    event(actor, "job.create", jid,
+          {"type": "image.refine", "source": aid,
+           "strength": payload["strength"], "scale": payload["scale"]})
+    return {"id": jid, "status": "queued", "source": aid,
+            "recipe": meta.get("recipe")}, 201
 
 
 def chat_tool_loop(lms, model, convo, actor, max_rounds=4):
@@ -618,37 +668,8 @@ class Handler(BaseHTTPRequestHandler):
 
         m = re.fullmatch(r"/artifacts/([\w.-]+)/refine", path)
         if m:
-            aid = m.group(1)
-            art = db().execute("SELECT * FROM artifacts WHERE id=?", (aid,)).fetchone()
-            if not art:
-                return self._send({"error": "no such artifact"}, 404)
-            if not art["path"]:
-                return self._send({"error": "artifact has no file path to refine"}, 400)
-            meta = json.loads(art["meta"] or "{}")
-            jid = new_id("job")
-            payload = {
-                "source_artifact": aid, "source_path": art["path"],
-                "project": art["project_id"] or "sandbox",
-                "purpose": body.get("purpose") or f"refine of {aid}",
-                "strength": float(body.get("strength", 0.4)),
-                "scale": float(body.get("scale", 1.6)),
-                "batch": int(body.get("batch", 1)),
-            }
-            for k in ("prompt", "negative", "checkpoint", "lora"):
-                if body.get(k):
-                    payload[k] = body[k]
-            db().execute(
-                "INSERT INTO jobs(id,type,project_id,payload,priority,required_mode,"
-                "required_caps,status,max_attempts,created_at)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?)",
-                (jid, "image.refine", payload["project"], json.dumps(payload), 5,
-                 "IMAGE", json.dumps(["comfyui"]), "queued", 2, now()))
-            db().commit()
-            event(self._actor(), "job.create", jid,
-                  {"type": "image.refine", "source": aid,
-                   "strength": payload["strength"], "scale": payload["scale"]})
-            return self._send({"id": jid, "status": "queued",
-                               "source": aid, "recipe": meta.get("recipe")}, 201)
+            result, code = create_refine_job(m.group(1), body, self._actor())
+            return self._send(result, code)
 
         m = re.fullmatch(r"/artifacts/([\w.-]+)/review", path)
         if m:
