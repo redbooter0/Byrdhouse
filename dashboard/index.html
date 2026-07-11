@@ -248,6 +248,8 @@ V.image = async () => {
       <div id="slots"></div>
       <label>Thumbnail title (optional — real text composited on top, never diffused)</label>
       <input id="thumbTitle" placeholder="e.g. BEST BUILDS TIER LIST (leave empty for art only)">
+      <label>Source image (optional — path on the worker PC; composites the title onto YOUR screenshot, skips generation)</label>
+      <input id="srcImage" placeholder="E:\\captures\\palworld_base.png">
       <label>Project</label><input id="project" value="careyrpg">
       <label>Purpose (required)</label><input id="purpose" placeholder="why this batch exists">
       <div class="row"><button class="b" onclick="submitGen()">Queue generation</button></div>
@@ -275,6 +277,7 @@ function readForm() {
   document.querySelectorAll('#slots input').forEach(i => { if (i.value) slots[i.dataset.slot] = i.value; });
   return { recipe: $('recipe') ? $('recipe').value : '', slots,
            title: $('thumbTitle') ? $('thumbTitle').value : '',
+           src: $('srcImage') ? $('srcImage').value : '',
            project: $('project') ? $('project').value : 'careyrpg',
            purpose: $('purpose') ? $('purpose').value : '' };
 }
@@ -291,6 +294,7 @@ function applyDraft(d) {
   document.querySelectorAll('#slots input').forEach(i => {
     if (d.slots && d.slots[i.dataset.slot] != null) i.value = d.slots[i.dataset.slot]; });
   $('thumbTitle').value = d.title || '';
+  $('srcImage').value = d.src || '';
   $('project').value = d.project || 'careyrpg';
   $('purpose').value = d.purpose || '';
 }
@@ -301,11 +305,16 @@ async function submitGen() {
     const d = readForm();
     if (!d.purpose) throw new Error('purpose is required');
     const title = d.title.trim();
+    const src = d.src.trim();
+    if (src && !title) throw new Error('a source image needs a title to composite');
     const payload = { recipe:d.recipe, slots:d.slots, project:d.project, purpose:d.purpose };
     if (title) payload.title = title;
+    if (src) payload.image_path = src;
     const j = await jpost('/jobs', { type: title ? 'content.thumbnail' : 'image.generate',
-      project:d.project, required_mode:'IMAGE', required_caps:['comfyui'], payload });
-    say('queued '+j.id+(title?' (two-pass thumbnail)':''));
+      project:d.project,
+      required_mode: src ? 'ANY' : 'IMAGE',           // compositing needs no GPU shift
+      required_caps: src ? [] : ['comfyui'], payload });
+    say('queued '+j.id+(src?' (title onto your image)':title?' (two-pass thumbnail)':''));
     clearDraft();                       // only a successful queue clears the draft
     $('view').innerHTML = '';           // force a fresh (empty) form
     render();

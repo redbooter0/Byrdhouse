@@ -171,11 +171,36 @@ def run_report(job) -> None:
 
 
 def run_content_thumbnail(job) -> None:
-    """v3.1 §3 two-pass: generate the ART (no text), then composite REAL text."""
+    """v3.1 §3 two-pass: generate the ART (no text), then composite REAL text.
+    payload.image_path skips pass 1 entirely — real screenshots and box art
+    beat diffused lookalikes for virality, so bring-your-own-image is first-class."""
     p = json.loads(job["payload"])
     title = p.get("title") or ""
     if not title:
         raise RuntimeError("content.thumbnail needs payload.title")
+
+    src = p.get("image_path")
+    if src:
+        png = Path(src)
+        if not png.exists():
+            raise RuntimeError(f"image_path not found on this worker: {png}")
+        month_dir = ROOT / "artifacts" / p.get("project", "careyrpg") / f"{datetime.now():%Y-%m}"
+        final = month_dir / f"{png.stem}_{job['id']}_final.png"
+        compose_thumbnail.compose(
+            png, title, final, zone=p.get("zone", "bottom"),
+            palette=p.get("palette", "black-gold"), style=p.get("style", "banner"))
+        card = {"artifact_id": f"art.{job['id']}.0", "job_id": job["id"],
+                "project": p.get("project", "careyrpg"), "kind": "thumbnail",
+                "path": str(final), "title": title, "source_image": str(png),
+                "purpose": p.get("purpose", "thumbnail"), "prompt": "",
+                "slots": {}, "score": None, "tags": [], "caption": "",
+                "status": "draft",
+                "created_at": datetime.now(timezone.utc).isoformat()}
+        final.with_suffix(".png.json").write_text(json.dumps(card, indent=2),
+                                                  encoding="utf-8")
+        register_cards(job, [card])
+        return
+
     recipe_spec = byrdimage.load_json(byrdimage.find_recipe(ROOT, p["recipe"]))
     _, saved = byrdimage.generate(
         ROOT, p["recipe"], p.get("slots", {}), p.get("project", "careyrpg"),
@@ -189,7 +214,8 @@ def run_content_thumbnail(job) -> None:
             png, title, final,
             zone=compose_cfg.get("text_zone", "upper-left"),
             palette=card.get("vary_picks", {}).get("palette", "default"),
-            max_words=compose_cfg.get("max_words", 5))
+            max_words=compose_cfg.get("max_words", 5),
+            style=compose_cfg.get("style", "accent"))
         card = dict(card, kind="thumbnail", path=str(final), title=title,
                     artifact_id=card["artifact_id"] + "f")
         final.with_suffix(".png.json").write_text(json.dumps(card, indent=2),

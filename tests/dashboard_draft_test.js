@@ -31,7 +31,7 @@ const localStorage = {
 function makeInput(v = '') { return { value: v, dataset: {} }; }
 const fields = {
   recipe: { value: 'rpg_tier_list', options: [{ value: 'rpg_tier_list' }, { value: 'build_guide' }] },
-  thumbTitle: makeInput(), project: makeInput('careyrpg'), purpose: makeInput(),
+  thumbTitle: makeInput(), srcImage: makeInput(), project: makeInput('careyrpg'), purpose: makeInput(),
 };
 let slotInputs = [];
 const $ = id => fields[id];
@@ -43,23 +43,25 @@ eval(m[0].replace(/\/\* ── end draft-persistence ── \*\//, ''));
 // save -> load roundtrip
 slotInputs = [Object.assign(makeInput('S TIER SORCERER'), { dataset: { slot: 'subject' } })];
 fields.thumbTitle.value = 'BEST BUILDS';
+fields.srcImage.value = 'E:\\captures\\shot.png';
 fields.purpose.value = 'U1 batch 1';
 fields.recipe.value = 'build_guide';
 saveDraft();
 let d = loadDraft();
-check('draft saves recipe/slots/title/project/purpose',
+check('draft saves recipe/slots/title/src/project/purpose',
   d && d.recipe === 'build_guide' && d.slots.subject === 'S TIER SORCERER'
-  && d.title === 'BEST BUILDS' && d.project === 'careyrpg' && d.purpose === 'U1 batch 1');
+  && d.title === 'BEST BUILDS' && d.src === 'E:\\captures\\shot.png'
+  && d.project === 'careyrpg' && d.purpose === 'U1 batch 1');
 
 // apply restores into a fresh form (reload / room-change path)
 fields.recipe.value = 'rpg_tier_list';
-fields.thumbTitle.value = ''; fields.purpose.value = ''; fields.project.value = '';
+fields.thumbTitle.value = ''; fields.srcImage.value = ''; fields.purpose.value = ''; fields.project.value = '';
 slotInputs = [Object.assign(makeInput(), { dataset: { slot: 'subject' } })];
 applyDraft(loadDraft());
 check('applyDraft restores every field',
   fields.recipe.value === 'build_guide' && slotInputs[0].value === 'S TIER SORCERER'
-  && fields.thumbTitle.value === 'BEST BUILDS' && fields.purpose.value === 'U1 batch 1'
-  && fields.project.value === 'careyrpg');
+  && fields.thumbTitle.value === 'BEST BUILDS' && fields.srcImage.value === 'E:\\captures\\shot.png'
+  && fields.purpose.value === 'U1 batch 1' && fields.project.value === 'careyrpg');
 
 // a recipe that no longer exists is ignored, everything else still applies
 localStorage.setItem('bh_draft', JSON.stringify({ recipe: 'gone', slots: {}, title: 't', project: 'p', purpose: 'x' }));

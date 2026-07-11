@@ -200,6 +200,24 @@ def main():
         check("bare recipe name resolves to highest version",
               byrdimage.find_recipe(ROOT, "rpg_tier_list").name == "rpg_tier_list.v2.json")
 
+        # content.thumbnail with image_path composites onto a provided image
+        # (no ComfyUI pass) and yields a 1280x720 final with a card
+        from PIL import Image
+        shot = ROOT / "inbox" / "myshot.png"
+        shot.parent.mkdir(exist_ok=True)
+        Image.new("RGB", (640, 360), (40, 90, 40)).save(shot)
+        api("/jobs", {"type": "content.thumbnail", "project": "careyrpg",
+                      "required_mode": "ANY",
+                      "payload": {"title": "MY OWN SHOT", "image_path": str(shot),
+                                  "project": "careyrpg", "purpose": "byo image"}})
+        run_worker()
+        byo = [a for a in api("/artifacts?limit=80")
+               if a["kind"] == "thumbnail" and "myshot" in (a["path"] or "")]
+        check("thumbnail composited from provided image", len(byo) == 1)
+        if byo:
+            check("provided-image final is 1280x720",
+                  Image.open(byo[0]["path"]).size == (1280, 720))
+
         # A retried job re-registers its artifacts — must upsert, not duplicate
         dupe_card = {"artifact_id": "art.dupetest.0", "job_id": "job_dupetest",
                      "kind": "image", "path": "/tmp/dupetest.png", "status": "draft"}
