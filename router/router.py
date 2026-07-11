@@ -173,6 +173,114 @@ def job_row(jid):
     return db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
 
 
+# ── chat tools: the operator model can act on the belt through its own
+#    audited operations (bot-ladder rung A1 — same endpoints, same events).
+#    The coming MCP roster plugs into this same loop. ─────────────────────────
+CHAT_TOOLS = [
+    {"type": "function", "function": {
+        "name": "get_status", "description": "Live queue counts and worker liveness.",
+        "parameters": {"type": "object", "properties": {}}}},
+    {"type": "function", "function": {
+        "name": "list_artifacts",
+        "description": "Recent artifacts with id, kind, score, status, purpose.",
+        "parameters": {"type": "object", "properties": {
+            "status": {"type": "string", "description": "optional filter: draft|needs_review|approved|rejected"},
+            "limit": {"type": "integer", "description": "max rows, default 8"}}}}},
+    {"type": "function", "function": {
+        "name": "queue_image",
+        "description": "Queue an image generation on the belt (freeform recipe). "
+                       "Use when the founder asks for an image to be made.",
+        "parameters": {"type": "object", "properties": {
+            "prompt": {"type": "string", "description": "what to generate"},
+            "project": {"type": "string", "description": "default careyrpg"},
+            "aspect": {"type": "string", "description": "16:9|9:16|1:1|2:3|3:2|21:9"}},
+            "required": ["prompt"]}}},
+    {"type": "function", "function": {
+        "name": "recent_events",
+        "description": "Tail of the belt event log (what happened lately).",
+        "parameters": {"type": "object", "properties": {
+            "limit": {"type": "integer", "description": "max rows, default 12"}}}}},
+]
+
+
+def run_chat_tool(name, args, actor):
+    if name == "get_status":
+        counts = {r["status"]: r["n"] for r in db().execute(
+            "SELECT status, COUNT(*) n FROM jobs GROUP BY status")}
+        return {"queue": counts, "workers": live_workers("id,mode,last_heartbeat")}
+    if name == "list_artifacts":
+        sql, a = ("SELECT id,kind,score,status,project_id,meta FROM artifacts"
+                  " WHERE rowid IN (SELECT MAX(rowid) FROM artifacts"
+                  " GROUP BY job_id, COALESCE(path, id))"), []
+        if args.get("status"):
+            sql += " AND status=?"; a.append(args["status"])
+        sql += " ORDER BY created_at DESC LIMIT ?"
+        a.append(min(int(args.get("limit", 8)), 15))
+        out = []
+        for r in db().execute(sql, a):
+            meta = json.loads(r["meta"] or "{}")
+            out.append({"id": r["id"], "kind": r["kind"], "score": r["score"],
+                        "status": r["status"], "purpose": meta.get("purpose", "")[:80]})
+        return out
+    if name == "queue_image":
+        jid = new_id("job")
+        payload = {"recipe": "freeform", "slots": {"prompt": str(args["prompt"])[:500]},
+                   "project": args.get("project", "careyrpg"),
+                   "purpose": f"chat request: {str(args['prompt'])[:80]}"}
+        if args.get("aspect"):
+            payload["aspect"] = args["aspect"]
+        db().execute(
+            "INSERT INTO jobs(id,type,project_id,payload,priority,required_mode,"
+            "required_caps,status,max_attempts,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (jid, "image.generate", payload["project"], json.dumps(payload), 5,
+             "IMAGE", json.dumps(["comfyui"]), "queued", 2, now()))
+        db().commit()
+        event(actor, "job.create", jid, {"type": "image.generate", "via": "chat-tool"})
+        return {"queued": jid, "note": "it will appear in the Image Studio when done"}
+    if name == "recent_events":
+        return [dict(r) for r in db().execute(
+            "SELECT ts,actor,action,subject FROM events ORDER BY id DESC LIMIT ?",
+            (min(int(args.get("limit", 12)), 20),))]
+    return {"error": f"unknown tool {name}"}
+
+
+def chat_tool_loop(lms, model, convo, actor, max_rounds=4):
+    """OpenAI-style function-calling loop against LM Studio. Models without
+    tool support just answer normally (tools retried off on rejection)."""
+    actions, use_tools = [], True
+    for _ in range(max_rounds):
+        payload = {"model": model, "temperature": 0.7, "max_tokens": 700,
+                   "messages": convo}
+        if use_tools:
+            payload["tools"] = CHAT_TOOLS
+        try:
+            req = urllib.request.Request(
+                f"{lms}/chat/completions", data=json.dumps(payload).encode(),
+                headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=180) as r:
+                msg = json.loads(r.read().decode())["choices"][0]["message"]
+        except Exception as e:
+            if use_tools:  # model/server rejects the tools param — go plain
+                use_tools = False
+                continue
+            return "", actions, f"operator model failed: {e}"
+        calls = msg.get("tool_calls") or []
+        if not calls:
+            return msg.get("content") or "", actions, None
+        convo.append(msg)
+        for call in calls[:4]:
+            fn = call.get("function", {})
+            try:
+                args = json.loads(fn.get("arguments") or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            result = run_chat_tool(fn.get("name", ""), args, actor)
+            actions.append({"tool": fn.get("name", ""), "args": args})
+            convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                          "content": json.dumps(result)[:4000]})
+    return "(stopped after several tool rounds)", actions, None
+
+
 def event(actor, action, subject, detail=None, ok=True):
     db().execute(
         "INSERT INTO events(ts,actor,action,subject,detail,ok) VALUES(?,?,?,?,?,?)",
@@ -589,24 +697,21 @@ class Handler(BaseHTTPRequestHandler):
                                             "small model on this machine for always-on chat"}, 503)
             counts = {r["status"]: r["n"] for r in db().execute(
                 "SELECT status, COUNT(*) n FROM jobs GROUP BY status")}
-            system = ("You are the ByrdHouse operator — the local model on BYRD-GAMING that "
-                      "also judges the image belt. Be direct and useful; short answers unless "
-                      "asked to go deep. Live belt state right now: "
+            system = ("You are the ByrdHouse operator — the local model that also judges the "
+                      "image belt. Be direct and useful; short answers unless asked to go deep. "
+                      "You have TOOLS over the belt: use them to check real state or queue image "
+                      "generations when the founder asks for an image. Live belt state: "
                       f"queue={json.dumps(counts)}, workers="
                       f"{[w['id'] + ':' + w['status'] for w in live_workers('id,last_heartbeat')]}.")
-            payload = {"model": models[0], "temperature": 0.7, "max_tokens": 700,
-                       "messages": [{"role": "system", "content": system}] + msgs[-12:]}
-            try:
-                req = urllib.request.Request(
-                    f"{lms}/chat/completions", data=json.dumps(payload).encode(),
-                    headers={"Content-Type": "application/json"})
-                with urllib.request.urlopen(req, timeout=180) as r:
-                    reply = json.loads(r.read().decode())["choices"][0]["message"]["content"]
-            except Exception as e:
-                return self._send({"error": f"operator model failed: {e}"}, 502)
-            event(self._actor(), "chat.ask", models[0],
-                  {"chars_in": len(msgs[-1].get("content", "")), "chars_out": len(reply)})
-            return self._send({"reply": reply, "model": models[0]})
+            convo = [{"role": "system", "content": system}] + msgs[-12:]
+            actor = self._actor()
+            reply, actions, err = chat_tool_loop(lms, models[0], convo, actor)
+            if err:
+                return self._send({"error": err}, 502)
+            event(actor, "chat.ask", models[0],
+                  {"chars_in": len(msgs[-1].get("content", "")), "chars_out": len(reply),
+                   "tools_used": [a["tool"] for a in actions]})
+            return self._send({"reply": reply, "model": models[0], "actions": actions})
 
         if path == "/workers/heartbeat":
             db().execute(

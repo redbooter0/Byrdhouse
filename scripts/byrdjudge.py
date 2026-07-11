@@ -150,6 +150,8 @@ def judge_card(root, card: dict, image_path) -> dict:
         body = e.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"LM Studio judge request failed: HTTP {e.code} {body[:1000]}") from e
 
+    if not content:
+        raise RuntimeError("judge model returned empty content")
     m = re.search(r"\{.*\}", content, re.DOTALL)
     if not m:
         raise RuntimeError(f"judge returned no JSON: {content[:200]}")
