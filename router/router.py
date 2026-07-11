@@ -28,6 +28,7 @@ Endpoints (v2 §6):                                          access
   POST /artifacts/<id>/review {action:approve|reject|judge} token
   POST /artifacts/<id>/refine {strength,scale,prompt,lora}   token
   GET  /recipes             list recipe files               open
+  POST /chat                {messages:[...]} -> operator    token
   POST /workers/heartbeat   {id,caps,mode,vram}             token
   GET  /mode                requested + worker modes        open
   POST /mode                {mode} request a shift          token
@@ -44,6 +45,7 @@ import string
 import sys
 import threading
 import time
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -556,6 +558,43 @@ class Handler(BaseHTTPRequestHandler):
             event(self._actor(), f"artifact.{action}", aid,
                   {"score": body.get("score")} if action == "judge" else None)
             return self._send(dict(db().execute("SELECT * FROM artifacts WHERE id=?", (aid,)).fetchone()))
+
+        if path == "/chat":
+            # Live line to the operator model (LM Studio on the worker PC).
+            # The dashboard has no logic: this endpoint owns model discovery,
+            # the system prompt, and the GPU-mode failure story.
+            msgs = body.get("messages") or []
+            if not msgs:
+                return self._send({"error": "messages required"}, 400)
+            lms = CFG["services"]["lmstudio"].rstrip("/")
+            try:
+                with urllib.request.urlopen(f"{lms}/models", timeout=8) as r:
+                    models = [m["id"] for m in json.loads(r.read().decode()).get("data", [])]
+            except Exception:
+                return self._send({"error": "LM Studio unreachable — is BYRD-GAMING up?"}, 503)
+            if not models:
+                return self._send({"error": "no model loaded — the GPU is probably in IMAGE "
+                                            "mode generating; chat returns when it finishes"}, 503)
+            counts = {r["status"]: r["n"] for r in db().execute(
+                "SELECT status, COUNT(*) n FROM jobs GROUP BY status")}
+            system = ("You are the ByrdHouse operator — the local model on BYRD-GAMING that "
+                      "also judges the image belt. Be direct and useful; short answers unless "
+                      "asked to go deep. Live belt state right now: "
+                      f"queue={json.dumps(counts)}, workers="
+                      f"{[w['id'] + ':' + w['status'] for w in live_workers('id,last_heartbeat')]}.")
+            payload = {"model": models[0], "temperature": 0.7, "max_tokens": 700,
+                       "messages": [{"role": "system", "content": system}] + msgs[-12:]}
+            try:
+                req = urllib.request.Request(
+                    f"{lms}/chat/completions", data=json.dumps(payload).encode(),
+                    headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=180) as r:
+                    reply = json.loads(r.read().decode())["choices"][0]["message"]["content"]
+            except Exception as e:
+                return self._send({"error": f"operator model failed: {e}"}, 502)
+            event(self._actor(), "chat.ask", models[0],
+                  {"chars_in": len(msgs[-1].get("content", "")), "chars_out": len(reply)})
+            return self._send({"reply": reply, "model": models[0]})
 
         if path == "/workers/heartbeat":
             db().execute(

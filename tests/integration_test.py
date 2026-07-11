@@ -192,6 +192,16 @@ def main():
         card_meta = json.loads(timed[0]["meta"])
         check("card records requested slots", card_meta.get("slots", {}).get("game") == "Last Epoch")
 
+        # Operator chat: router proxies to LM Studio with live belt context
+        ch = api("/chat", {"messages": [{"role": "user", "content": "what is queued?"}]})
+        check("chat replies through the operator model",
+              bool(ch.get("reply")) and ch.get("model") == "mock-vl")
+        try:
+            api("/chat", {})
+            check("chat rejects empty messages", False)
+        except urllib.error.HTTPError as e:
+            check("chat rejects empty messages", e.code == 400)
+
         # image.refine: img2img over an existing artifact via /artifacts/<id>/refine
         src_art = [a for a in api("/artifacts?limit=50")
                    if a["kind"] == "image" and a["path"]][0]
