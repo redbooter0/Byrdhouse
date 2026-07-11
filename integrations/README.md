@@ -32,6 +32,11 @@ For LM Studio itself to call servers from mcp.json, enable its
 Allow calling servers from mcp.json setting. Keep file-system and browser
 servers out of this first belt test; expose only byrdhouse-belt.
 
+LM Studio documents that API clients using this setting also require server
+authentication. Do not enable Require Authentication on the GAMING API until
+the optional LM API token is configured for the ByrdHouse worker; the current
+worker intentionally assumes the existing unauthenticated private-LAN API.
+
 ## Cherry Studio settings
 
 Use the same mcpServers entry from the appropriate JSON file as a STDIO
