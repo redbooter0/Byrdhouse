@@ -243,22 +243,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/artifacts":
             # One card per output: retried jobs used to register duplicate rows
             # for the same PNG, so show only the latest row per (job_id, path).
-            # Joined job timing rides along so cards can show queue->done times.
-            sql, args = (
-                "SELECT a.*, j.created_at AS job_queued_at, j.claimed_at AS job_claimed_at,"
-                " j.finished_at AS job_finished_at,"
-                " CAST(ROUND((julianday(j.finished_at) - julianday(j.claimed_at)) * 86400)"
-                "   AS INTEGER) AS gen_seconds"
-                " FROM artifacts a LEFT JOIN jobs j ON j.id = a.job_id"
-                " WHERE a.rowid IN"
-                " (SELECT MAX(rowid) FROM artifacts GROUP BY job_id, COALESCE(path, id))"), []
+            sql, args = ("SELECT * FROM artifacts WHERE rowid IN"
+                         " (SELECT MAX(rowid) FROM artifacts GROUP BY job_id, COALESCE(path, id))"), []
             conds = []
-            for col, key in (("a.status", "status"), ("a.project_id", "project"), ("a.id", "id")):
+            for col, key in (("status", "status"), ("project_id", "project"), ("id", "id")):
                 if key in q:
                     conds.append(f"{col}=?"); args.append(q[key])
             if conds:
                 sql += " AND " + " AND ".join(conds)
-            sql += " ORDER BY a.created_at DESC LIMIT ?"
+            sql += " ORDER BY created_at DESC LIMIT ?"
             args.append(int(q.get("limit", 50)))
             return self._send([dict(r) for r in db().execute(sql, args)])
 

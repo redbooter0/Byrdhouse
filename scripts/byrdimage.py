@@ -125,7 +125,6 @@ def generate(root, recipe_name, slots, project, purpose,
 
     # ── Fill the template: explicit slots, then random picks from vary ───────
     slots = dict(slots)
-    user_slots = dict(slots)  # what the founder actually asked for, kept on the card
     vary_picks = {}
     for k, options in recipe.get("vary", {}).items():
         if k not in slots:
@@ -257,7 +256,6 @@ def generate(root, recipe_name, slots, project, purpose,
                 "seed": seed,
                 "checkpoint": checkpoint,
                 "workflow": workflow_rel,
-                "slots": user_slots,
                 "vary_picks": vary_picks,
                 "score": None,
                 "tags": [],
