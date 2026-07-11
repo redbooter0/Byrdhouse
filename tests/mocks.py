@@ -94,6 +94,15 @@ class Lms(BaseHTTPRequestHandler):
 
     def do_POST(self):
         body = self.rfile.read(int(self.headers.get("Content-Length") or 0)).decode()
+        # tool-loop simulation: first sight of TOOLTEST returns a tool call;
+        # once a tool result is in the transcript, answer normally
+        if "TOOLTEST" in body and '"tools"' in body and '"role": "tool"' not in body:
+            return self._json({"choices": [{"message": {
+                "content": None,
+                "tool_calls": [{"id": "t1", "type": "function",
+                                "function": {"name": "queue_image",
+                                             "arguments": json.dumps(
+                                                 {"prompt": "TOOLTEST palworld art"})}}]}}]})
         vision = "image_url" in body
         content = JUDGE_VERDICT if vision else PACKAGE
         self._json({"choices": [{"message": {"content": content}}]})

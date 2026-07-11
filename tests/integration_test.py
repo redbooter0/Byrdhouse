@@ -202,6 +202,16 @@ def main():
         except urllib.error.HTTPError as e:
             check("chat rejects empty messages", e.code == 400)
 
+        # Chat tools: the operator model can queue a generation from chat
+        ch2 = api("/chat", {"messages": [{"role": "user",
+                                          "content": "TOOLTEST make me palworld art"}]})
+        check("chat tool loop executes and answers",
+              bool(ch2.get("reply")) and ch2.get("actions")
+              and ch2["actions"][0]["tool"] == "queue_image")
+        chat_jobs = [j for j in api("/jobs?type=image.generate&status=queued")
+                     if "chat request" in j["payload"]]
+        check("chat-queued job is a real belt job", len(chat_jobs) >= 1)
+
         # image.refine: img2img over an existing artifact via /artifacts/<id>/refine
         src_art = [a for a in api("/artifacts?limit=50")
                    if a["kind"] == "image" and a["path"]][0]

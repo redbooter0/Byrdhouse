@@ -73,6 +73,7 @@
   .bubble { max-width:82%; padding:9px 12px; border-radius:12px; font-size:13.5px; white-space:pre-wrap; word-break:break-word; }
   .bubble.user { align-self:flex-end; background:linear-gradient(90deg,#7c3aed,#6d28d9); color:#fff; }
   .bubble.assistant { align-self:flex-start; background:var(--panel2); border:1px solid var(--line); }
+  .bubble.tool { align-self:flex-start; background:none; border:1px dashed var(--line); color:var(--dim); font-size:12px; }
   @media (max-width:820px){
     body{flex-direction:column}
     /* horizontal room strip instead of a stacked wall of buttons */
@@ -417,7 +418,10 @@ async function sendChat() {
   $('chatLogView').innerHTML = chatBubbles() + '<div class="bubble assistant">…</div>';
   $('chatLogView').scrollTop = 1e9;
   try {
-    const j = await jpost('/chat', { messages: msgs.slice(-12) });
+    const j = await jpost('/chat', { messages: msgs.filter(m => m.role !== 'tool').slice(-12) });
+    if (j.actions && j.actions.length)
+      msgs.push({ role: 'tool', content: '🔧 ' + j.actions.map(a =>
+        a.tool + (a.args && a.args.prompt ? ': ' + a.args.prompt.slice(0, 60) : '')).join(' · ') });
     msgs.push({ role: 'assistant', content: j.reply });
   } catch (e) {
     msgs.push({ role: 'assistant', content: '[' + e.message + ']' });
