@@ -15,7 +15,7 @@ Port: from services.router in byrdhouse.config.json (default 8787).
 Endpoints (v2 §6):                                          access
   GET  /health                                              open
   GET  /status              status.json + live queue counts open
-  POST /jobs                create job                      token
+  POST /jobs                create job {idempotency_key?}    token
   GET  /jobs?status=&project=&type=                         open
   POST /jobs/claim          {worker_id,caps,mode}           token
   POST /jobs/<id>/status    {status:running|done|failed}    token
@@ -105,6 +105,32 @@ CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, value TEXT);
 _local = threading.local()
 
 
+# Additive migrations for DBs that already exist on the machines. Each entry is
+# idempotent (guarded by a column/index check) so re-running is a no-op — the
+# belt can evolve its schema without a wipe. New columns/indexes go here.
+MIGRATIONS = [
+    ("jobs", "idempotency_key", "ALTER TABLE jobs ADD COLUMN idempotency_key TEXT"),
+    ("jobs", "parent_id",       "ALTER TABLE jobs ADD COLUMN parent_id TEXT"),
+    ("jobs", "run_after",       "ALTER TABLE jobs ADD COLUMN run_after TEXT"),
+]
+INDEXES = [
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_idem ON jobs(idempotency_key)"
+    " WHERE idempotency_key IS NOT NULL",
+    "CREATE INDEX IF NOT EXISTS idx_jobs_parent ON jobs(parent_id)",
+    "CREATE INDEX IF NOT EXISTS idx_art_job ON artifacts(job_id)",
+]
+
+
+def migrate(conn):
+    for table, col, ddl in MIGRATIONS:
+        cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if col not in cols:
+            conn.execute(ddl)
+    for ddl in INDEXES:
+        conn.execute(ddl)
+    conn.commit()
+
+
 def db() -> sqlite3.Connection:
     if not hasattr(_local, "conn"):
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -112,6 +138,7 @@ def db() -> sqlite3.Connection:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")
         conn.executescript(SCHEMA)
+        migrate(conn)
         _local.conn = conn
     return _local.conn
 
@@ -629,17 +656,26 @@ class Handler(BaseHTTPRequestHandler):
             jtype = body.get("type", "")
             if jtype not in JOB_TYPES and not jtype.startswith("content."):
                 return self._send({"error": f"unknown job type '{jtype}'"}, 400)
+            # Idempotency: a double-tap or a network retry carrying the same key
+            # returns the job already created instead of minting a duplicate.
+            idem = body.get("idempotency_key")
+            if idem:
+                dup = db().execute(
+                    "SELECT id,status FROM jobs WHERE idempotency_key=?", (idem,)).fetchone()
+                if dup:
+                    return self._send({"id": dup["id"], "status": dup["status"],
+                                       "idempotent": True}, 200)
             jid = new_id("job")
             db().execute(
                 "INSERT INTO jobs(id,type,project_id,recipe_id,recipe_version,payload,"
-                "priority,required_mode,required_caps,status,max_attempts,created_at)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+                "priority,required_mode,required_caps,status,max_attempts,created_at,idempotency_key)"
+                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (jid, jtype, body.get("project", "sandbox"),
                  body.get("recipe"), body.get("recipe_version"),
                  json.dumps(body.get("payload", {})), int(body.get("priority", 5)),
                  body.get("required_mode", "ANY"),
                  json.dumps(body.get("required_caps", [])),
-                 "queued", int(body.get("max_attempts", 2)), now()))
+                 "queued", int(body.get("max_attempts", 2)), now(), idem))
             db().commit()
             event(self._actor(), "job.create", jid, {"type": jtype})
             return self._send({"id": jid, "status": "queued"}, 201)
