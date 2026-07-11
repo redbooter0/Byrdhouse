@@ -278,19 +278,22 @@ def main():
         import byrdimage
         import byrdjudge
 
-        # Interchangeable models: judge falls back to whatever LM Studio has
-        # loaded; checkpoints fall back to whatever is actually installed
-        check("judge uses the loaded model when the configured one is absent",
-              byrdjudge._pick_model(f"http://127.0.0.1:{LP}/v1", "ghost-model") == "mock-vl")
+        # Judging requires a vision model (a text model must not invent scores);
+        # the mock's 'mock-vl' id is vision-capable, so it still judges.
+        check("judge picks the loaded vision model over an absent configured one",
+              byrdjudge._pick_judge_model(f"http://127.0.0.1:{LP}/v1", "ghost-model") == "mock-vl")
+        check("vision detection: VL/vision ids yes, plain text no",
+              byrdjudge._looks_vision("qwen3-vl-4b") and byrdjudge._looks_vision("llava-1.6")
+              and not byrdjudge._looks_vision("llama-3.1-8b-instruct"))
+        # Checkpoints fall back to what's installed, but the fallback is RECORDED
         ckpt_dir = ROOT / "Generators" / "ComfyUI" / "models" / "checkpoints"
         ckpt_dir.mkdir(parents=True, exist_ok=True)
         (ckpt_dir / "onlyInstalled_v1.safetensors").write_bytes(b"stub")
-        check("unmatched checkpoint request falls back to an installed one",
-              byrdimage.resolve_checkpoint(ROOT, "does-not-exist")
-              == "onlyInstalled_v1.safetensors")
-        check("matched checkpoint still resolves by loose name",
-              byrdimage.resolve_checkpoint(ROOT, "only installed")
-              == "onlyInstalled_v1.safetensors")
+        resolved, matched = byrdimage.resolve_checkpoint_info(ROOT, "does-not-exist")
+        check("unmatched checkpoint falls back AND flags it",
+              resolved == "onlyInstalled_v1.safetensors" and matched is False)
+        _, matched2 = byrdimage.resolve_checkpoint_info(ROOT, "only installed")
+        check("matched checkpoint resolves by loose name, no fallback flag", matched2 is True)
         check("recipe version pin honored",
               byrdimage.find_recipe(ROOT, "rpg_tier_list@1").name == "rpg_tier_list.v1.json")
         check("bare recipe name resolves to highest version",

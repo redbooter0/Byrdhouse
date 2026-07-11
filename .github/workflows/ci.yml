@@ -5,6 +5,34 @@ on:
   pull_request:
 
 jobs:
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail if a real secret was committed
+        run: |
+          python - <<'EOF'
+          import json, sys, re, glob
+          bad = []
+          # 1. the config template's admin_token must stay a placeholder
+          tok = json.load(open('byrdhouse.config.json'))['auth']['admin_token']
+          if not tok.startswith('CHANGE_ME'):
+              bad.append(f'byrdhouse.config.json admin_token is not a placeholder ({tok[:8]}...)')
+          # 2. no long hex/base64 blobs that look like tokens in tracked text
+          pat = re.compile(r'(admin_token|api[_-]?key|secret|password|token)"?\s*[:=]\s*"?([A-Za-z0-9+/]{32,})')
+          for f in glob.glob('**/*', recursive=True):
+              if any(f.endswith(e) for e in ('.json', '.ps1', '.py', '.md', '.yml', '.env')) and '/.git/' not in f:
+                  try: text = open(f, encoding='utf-8', errors='ignore').read()
+                  except Exception: continue
+                  for m in pat.finditer(text):
+                      val = m.group(2)
+                      if not val.startswith('CHANGE_ME') and val not in ('true','false'):
+                          bad.append(f'{f}: possible secret near "{m.group(1)}"')
+          if bad:
+              print('SECRET SCAN FAILED:'); [print(' -', b) for b in bad]; sys.exit(1)
+          print('secret scan clean')
+          EOF
+
   belt-integration:
     runs-on: ubuntu-latest
     steps:

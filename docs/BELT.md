@@ -65,6 +65,44 @@ patterns, and we can add the rest one compounding piece at a time.**
 - Dashboard has no logic — new capability is an endpoint first, a button second.
 - No artifact without a card; recipes over prompts.
 
+## Security & trust boundary (be honest about what this is)
+
+The belt is a **trusted single-user system on a private tailnet** — correct for
+one founder, NOT a multi-user SaaS backend. Known, deliberate boundaries:
+
+- One global admin bearer token; several GET endpoints are open; CORS is
+  permissive; the dashboard stores the token in browser localStorage. Fine on a
+  private tailnet during development. Before any outside user / public host,
+  this needs real auth, per-user scoping, and locked-down CORS. Do not pretend
+  otherwise.
+- **Token hygiene**: the config in git is a template (`admin_token` must stay
+  `CHANGE_ME…`); real tokens live only on the machines. CI's `secret-scan` job
+  fails the build if a real token or key lands in a tracked file. A token that
+  ever reached public history is compromised — rotate on the machines, don't
+  just edit `main`.
+
+Agent-safety guardrails (in place; tighten before the tool roster grows to
+code/file/publish):
+- **Judging requires a vision model.** A text-only model may chat and enhance
+  prompts but may NOT invent visual quality scores — the artifact stays
+  honestly unjudged instead (protects the learn-loop dataset).
+- **Chat mutation budget.** Write-class tools (queue/refine) are capped per
+  request so one model turn can't spawn a flood of jobs; read tools are free.
+- **Checkpoint fallback is recorded**, not silent — the card carries
+  requested-vs-resolved and the gallery flags it yellow.
+- Every tool acts only through the same audited belt endpoints the dashboard
+  uses; every action writes an event. Confirmation gating for
+  expensive/destructive actions comes before code/file/publish tools land.
+
+Deferred hardening (tracked, not yet needed):
+- **Video will break the heartbeat model** — the worker's heartbeat pauses
+  during a job; long video/upscale jobs will trip the 15-min reaper. Move
+  heartbeats to a separate thread or use renewable leases *before U5*.
+- **Split the monolith after U1 is proven** — `router.py` and the one-file
+  dashboard are the right call for U0/U1 (no build chain, serves from the
+  router, iPad-friendly), but split along boundaries before adding video, code
+  execution, users, and publishing.
+
 ## Why not import Temporal/river/an MCP job server
 They're heavier than this scale needs, they'd break the stdlib-only rule, and —
 the real reason — **the belt already is one.** Reverse-engineering the patterns

@@ -34,10 +34,29 @@ def _find_recipe_spec(root: Path, recipe_tag: str):
     return _load(p) if p.exists() else None
 
 
-def _pick_model(lms: str, preferred: str) -> str:
-    """Judge with whatever LM Studio actually has loaded. Preferred model wins
-    when it's loaded; otherwise the first loaded model steps in; the preferred
-    name is only returned blind (JIT-load) when nothing is loaded at all."""
+class NoVisionModel(RuntimeError):
+    """No vision-capable model is available to judge — leave the artifact
+    unjudged rather than inventing a score from a text-only model."""
+
+
+# Distinctive fragments of vision/multimodal model ids. A judge score is only
+# trustworthy from a model that can actually see the image, so a text model may
+# NOT stand in just because it happens to be loaded.
+VISION_HINTS = ("vl", "vision", "llava", "pixtral", "internvl", "minicpm-v",
+                "moondream", "cogvlm", "gemma-3", "gemma3", "smolvlm", "-v-")
+
+
+def _looks_vision(model_id: str) -> bool:
+    m = model_id.lower()
+    return any(h in m for h in VISION_HINTS)
+
+
+def _pick_judge_model(lms: str, preferred: str) -> str:
+    """Judging REQUIRES a vision-capable model. Preferred judge_model wins when
+    loaded; a genuinely vision-capable loaded model may stand in; otherwise
+    (nothing loaded) JIT-load the configured judge. If none of those hold —
+    a non-vision model is loaded and no vision judge is configured/available —
+    raise NoVisionModel so the artifact stays honestly unjudged."""
     try:
         with urllib.request.urlopen(f"{lms}/models", timeout=8) as r:
             loaded = [m["id"] for m in json.loads(r.read().decode()).get("data", [])]
@@ -46,13 +65,16 @@ def _pick_model(lms: str, preferred: str) -> str:
     preferred_ok = preferred and not preferred.startswith("CHANGE_ME")
     if preferred_ok and preferred in loaded:
         return preferred
-    if loaded:
+    vision_loaded = [m for m in loaded if _looks_vision(m)]
+    if vision_loaded:
         if preferred_ok:
-            print(f"[judge] '{preferred}' not loaded — using loaded model '{loaded[0]}'")
-        return loaded[0]
-    if preferred_ok:
-        return preferred  # let LM Studio JIT-load it
-    raise RuntimeError("no model loaded in LM Studio and gpu.judge_model not set")
+            print(f"[judge] '{preferred}' not loaded — using vision model '{vision_loaded[0]}'")
+        return vision_loaded[0]
+    if preferred_ok and not loaded:
+        return preferred  # nothing loaded — let LM Studio JIT-load the configured judge
+    raise NoVisionModel(
+        f"no vision-capable model available to judge (loaded: {loaded or 'none'}; "
+        f"configured judge_model: {preferred or 'unset'})")
 
 
 def _fetch_references(cfg, card, limit=2):
@@ -90,7 +112,7 @@ def judge_card(root, card: dict, image_path) -> dict:
     root = Path(root)
     cfg = _load(root / "byrdhouse.config.json")
     lms = cfg["services"]["lmstudio"].rstrip("/")
-    model = _pick_model(lms, cfg["gpu"].get("judge_model", ""))
+    model = _pick_judge_model(lms, cfg["gpu"].get("judge_model", ""))
 
     recipe = _find_recipe_spec(root, card.get("recipe", "")) or {}
     rubric = recipe.get("rubric", {"quality": "1-5"})

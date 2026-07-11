@@ -221,8 +221,17 @@ def run_judge(job) -> None:
     if jm and not jm.startswith("CHANGE_ME") and jm not in _loaded_models():
         _lms_unload_all()
         _lms_load(jm)
-    # else: judge with whatever is loaded — byrdjudge._pick_model resolves it
-    verdict = byrdjudge.judge_card(ROOT, card, image_path)
+    # else: judge with whatever vision model is loaded (byrdjudge enforces vision)
+    try:
+        verdict = byrdjudge.judge_card(ROOT, card, image_path)
+    except byrdjudge.NoVisionModel as e:
+        # A score is only trustworthy from a model that can see the image.
+        # Leave the artifact unjudged (score stays null → the learn loop ignores
+        # it, the founder reviews manually) rather than inventing a number.
+        log(f"SKIP judge {p['artifact_id']}: {e}")
+        api(f"/artifacts/{p['artifact_id']}/review",
+            {"action": "unjudged", "reason": str(e)})
+        return
     card.update(score=verdict["score"], tags=verdict["tags"], caption=verdict["caption"])
     card["rubric_scores"] = verdict["scores"]
     if card_path.exists():

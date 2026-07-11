@@ -115,8 +115,20 @@ def resolve_checkpoint(root: Path, requested: str, comfy: str = "") -> str:
     partial = [n for n in installed if requested_norm in norm(n) or stem_norm in norm(Path(n).stem)]
     if partial:
         return min(partial, key=len)
-    print(f"[byrdimage] no checkpoint matches '{requested}' — using installed '{installed[0]}'")
+    print(f"[byrdimage] no checkpoint matches '{requested}' — FALLBACK to installed '{installed[0]}'")
     return installed[0]
+
+
+def resolve_checkpoint_info(root: Path, requested: str, comfy: str = "") -> tuple:
+    """Like resolve_checkpoint but also reports whether a fallback happened, so
+    the card can record requested-vs-resolved honestly (a silent wrong model
+    makes a job look successful while producing the wrong art)."""
+    resolved = resolve_checkpoint(root, requested, comfy)
+    req = requested.strip()
+    req_full = req if req.lower().endswith(".safetensors") else f"{req}.safetensors"
+    matched = resolved.lower() in (req.lower(), req_full.lower()) or \
+        re.sub(r"[^a-z0-9]+", "", req.lower()) in re.sub(r"[^a-z0-9]+", "", resolved.lower())
+    return resolved, matched
 
 
 # SDXL-native resolutions per aspect — off-grid sizes degrade SDXL badly,
@@ -236,8 +248,8 @@ def generate(root, recipe_name, slots, project, purpose,
         negative = f"{negative}, {negative_extra}" if negative else str(negative_extra)
 
     defaults = recipe.get("defaults", {})
-    checkpoint = resolve_checkpoint(root, checkpoint or defaults.get("checkpoint")
-                                    or die("no checkpoint"), comfy=comfy)
+    ckpt_requested = checkpoint or defaults.get("checkpoint") or die("no checkpoint")
+    checkpoint, ckpt_matched = resolve_checkpoint_info(root, ckpt_requested, comfy=comfy)
     batch = batch or defaults.get("batch", 1)
     steps = defaults.get("steps", 30)
 
@@ -313,6 +325,9 @@ def generate(root, recipe_name, slots, project, purpose,
         "negative": negative, "seed": seed, "checkpoint": checkpoint,
         "workflow": workflow_rel, "slots": user_slots, "vary_picks": vary_picks,
         "size": f"{gen_w}x{gen_h}", **({"lora": lora} if lora else {}),
+        # honest checkpoint record: what was asked vs what actually ran
+        **({"checkpoint_requested": ckpt_requested, "checkpoint_fallback": True}
+           if not ckpt_matched else {}),
     }
     return job_id, run_graph(root, comfy, graph, job_id, project, card_base)
 

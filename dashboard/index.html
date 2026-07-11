@@ -227,13 +227,15 @@ async function chips() {
 /* ── shared renderers ── */
 function artCard(a) {
   const meta = JSON.parse(a.meta || '{}');
+  let jn = {}; try { jn = JSON.parse(a.judge_notes || '{}') || {}; } catch (e) {}
   const img = a.kind === 'image' || a.kind === 'thumbnail'
     ? `<img src="/artifacts/${a.id}/file" loading="lazy" onclick="zoom(this.src)" onerror="this.style.display='none'">` : '';
   const when = (a.job_finished_at || a.created_at || '').slice(5, 16).replace('T', ' ');
   return `<div class="art">${img}<div class="m">
     <b>${esc(meta.recipe || a.kind)}</b> · ${esc(a.project_id)}<br>
-    ${a.score != null ? 'score <b>'+a.score+'</b> · ' : ''}<span class="pill">${esc(a.status)}</span><br>
+    ${a.score != null ? 'score <b>'+a.score+'</b> · ' : (jn.unjudged ? '<span style="color:var(--yellow)">unjudged</span> · ' : '')}<span class="pill">${esc(a.status)}</span><br>
     ${a.gen_seconds != null ? '⏱ '+fmtDur(a.gen_seconds)+' · ' : ''}<span class="muted">${esc(when)}</span><br>
+    ${meta.checkpoint_fallback ? `<span style="color:var(--yellow)">⚠ ran ${esc(meta.checkpoint)} (asked ${esc(meta.checkpoint_requested)})</span><br>` : ''}
     ${esc(meta.purpose || meta.title || '')}
     <div class="row">
       <button class="s ok" ${a.status==='approved'?'disabled':''} onclick="review(this,'${a.id}','approve')">${a.status==='approved'?'✓ approved':'approve'}</button>

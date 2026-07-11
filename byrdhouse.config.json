@@ -17,7 +17,7 @@
     "gaming_root": "E:/ByrdHouse"
   },
   "startup": {
-    "_comment": "Used by start-byrdhouse.ps1. comfyui_dir holds your ComfyUI launcher (portable installs: run_nvidia_gpu.bat). run_router=true hosts the belt API on THIS machine â€” true on GAMING until BYRD-MINI is set up, then flip it to false here, true on MINI, and point services.router at byrd-mini. run_worker=true runs the job daemon (GAMING only).",
+    "_comment": "Used by start-byrdhouse.ps1. comfyui_dir holds your ComfyUI launcher (portable installs: run_nvidia_gpu.bat). run_router=true hosts the belt API on THIS machine — true on GAMING until BYRD-MINI is set up, then flip it to false here, true on MINI, and point services.router at byrd-mini. run_worker=true runs the job daemon (GAMING only).",
     "comfyui_dir": "E:/ByrdHouse/Generators",
     "comfyui_cmd": "start-comfyui-rtx3070-optimized.ps1",
     "python_exe": "E:/ByrdHouse/Generators/ComfyUI/.venv/Scripts/python.exe",

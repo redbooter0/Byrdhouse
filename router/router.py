@@ -378,10 +378,18 @@ def create_refine_job(aid, body, actor):
             "recipe": meta.get("recipe")}, 201
 
 
+# Tools that mutate belt state (create jobs). Read tools are unbounded within
+# the round budget; writes are capped per chat request so one model turn can't
+# spawn a flood of jobs. Confirmation/destructive-action gating comes before the
+# roster grows to code/file/publish tools (see docs/BELT.md security section).
+WRITE_TOOLS = {"queue_image", "refine_image"}
+MAX_WRITES_PER_CHAT = 3
+
+
 def chat_tool_loop(lms, model, convo, actor, max_rounds=4):
     """OpenAI-style function-calling loop against LM Studio. Models without
     tool support just answer normally (tools retried off on rejection)."""
-    actions, use_tools = [], True
+    actions, use_tools, writes = [], True, 0
     for _ in range(max_rounds):
         payload = {"model": model, "temperature": 0.7, "max_tokens": 700,
                    "messages": convo}
@@ -404,12 +412,22 @@ def chat_tool_loop(lms, model, convo, actor, max_rounds=4):
         convo.append(msg)
         for call in calls[:4]:
             fn = call.get("function", {})
+            fname = fn.get("name", "")
             try:
                 args = json.loads(fn.get("arguments") or "{}")
             except json.JSONDecodeError:
                 args = {}
-            result = run_chat_tool(fn.get("name", ""), args, actor)
-            actions.append({"tool": fn.get("name", ""), "args": args})
+            if fname in WRITE_TOOLS:
+                writes += 1
+                if writes > MAX_WRITES_PER_CHAT:
+                    result = {"error": f"mutation budget reached "
+                              f"({MAX_WRITES_PER_CHAT} per request) — ask again to do more"}
+                    actions.append({"tool": fname, "args": args, "blocked": True})
+                    convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                                  "content": json.dumps(result)})
+                    continue
+            result = run_chat_tool(fname, args, actor)
+            actions.append({"tool": fname, "args": args})
             convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                           "content": json.dumps(result)[:4000]})
     return "(stopped after several tool rounds)", actions, None
@@ -788,6 +806,12 @@ class Handler(BaseHTTPRequestHandler):
                     (body.get("score"), json.dumps(body.get("tags", [])),
                      json.dumps({"caption": body.get("caption", ""),
                                  "notes": body.get("notes", "")}), aid))
+            elif action == "unjudged":
+                # score deliberately left null (no vision model) — record why so
+                # the gallery can flag it for manual review, don't invent a score
+                db().execute(
+                    "UPDATE artifacts SET judge_notes=? WHERE id=?",
+                    (json.dumps({"unjudged": body.get("reason", "no vision model")}), aid))
             else:
                 return self._send({"error": f"bad action '{action}'"}, 400)
             db().commit()
