@@ -566,15 +566,27 @@ class Handler(BaseHTTPRequestHandler):
             msgs = body.get("messages") or []
             if not msgs:
                 return self._send({"error": "messages required"}, 400)
-            lms = CFG["services"]["lmstudio"].rstrip("/")
-            try:
-                with urllib.request.urlopen(f"{lms}/models", timeout=8) as r:
-                    models = [m["id"] for m in json.loads(r.read().decode()).get("data", [])]
-            except Exception:
-                return self._send({"error": "LM Studio unreachable — is BYRD-GAMING up?"}, 503)
+            # Primary: the worker PC's LM Studio. Fallback: a small CPU model
+            # on this machine (services.lmstudio_fallback) so chat still answers
+            # while the GPU is busy generating or GAMING is off.
+            endpoints = [CFG["services"]["lmstudio"].rstrip("/")]
+            fb = (CFG["services"].get("lmstudio_fallback") or "").rstrip("/")
+            if fb and not fb.startswith("CHANGE_ME"):
+                endpoints.append(fb)
+            lms, models = None, []
+            for cand in endpoints:
+                try:
+                    with urllib.request.urlopen(f"{cand}/models", timeout=8) as r:
+                        found = [m["id"] for m in json.loads(r.read().decode()).get("data", [])]
+                    if found:
+                        lms, models = cand, found
+                        break
+                except Exception:
+                    continue
             if not models:
-                return self._send({"error": "no model loaded — the GPU is probably in IMAGE "
-                                            "mode generating; chat returns when it finishes"}, 503)
+                return self._send({"error": "no model reachable — GAMING may be mid-generation "
+                                            "or offline; set services.lmstudio_fallback to a "
+                                            "small model on this machine for always-on chat"}, 503)
             counts = {r["status"]: r["n"] for r in db().execute(
                 "SELECT status, COUNT(*) n FROM jobs GROUP BY status")}
             system = ("You are the ByrdHouse operator — the local model on BYRD-GAMING that "

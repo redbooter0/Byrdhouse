@@ -72,7 +72,11 @@ def _lms_unload_all():
 
 def _lms_load(model: str):
     if GPU_ENABLED and model and not model.startswith("CHANGE_ME"):
-        subprocess.run(["lms", "load", model], timeout=600)
+        # full GPU offload first (the 3070 should carry the whole model);
+        # older lms CLIs without --gpu fall back to a plain load
+        r = subprocess.run(["lms", "load", model, "--gpu", "max", "-y"], timeout=600)
+        if r.returncode != 0:
+            subprocess.run(["lms", "load", model], timeout=600)
 
 
 class Gpu:
@@ -108,9 +112,7 @@ class Gpu:
                 else:
                     raise RuntimeError("VRAM did not free — aborting mode switch")
             elif target == "OPERATOR":
-                model = CFG["gpu"].get("operator_model", "")
-                if model and not model.startswith("CHANGE_ME"):
-                    subprocess.run(["lms", "load", model], timeout=600)
+                _lms_load(CFG["gpu"].get("operator_model", ""))
         self.mode = target
         api("/workers/heartbeat", {"id": WORKER_ID, "host": socket.gethostname(),
                                    "caps": CAPS, "mode": self.mode})
