@@ -59,6 +59,7 @@ DB_PATH = ROOT / "db" / "byrdhouse.db"
 DASHBOARD = Path(__file__).resolve().parent.parent / "dashboard"
 PREVIEWS = ROOT / "artifacts" / "_previews"  # worker-uploaded copies for the dashboard
 REFERENCES = ROOT / "references"  # founder-loved thumbnails the judge scores against
+SOURCES = ROOT / "artifacts" / "_sources"  # dashboard-uploaded real source images
 
 JOB_TYPES = {
     "image.generate", "image.judge", "image.refine", "image.upscale", "video.i2v",
@@ -664,6 +665,37 @@ class Handler(BaseHTTPRequestHandler):
             (PREVIEWS / f"{m.group(1)}.png").write_bytes(self.rfile.read(n))
             event(self._actor(), "artifact.preview", m.group(1), {"bytes": n})
             return self._send({"ok": True}, 201)
+
+        m = re.fullmatch(r"/sources/([\w. -]+)", path)
+        if m:  # real source image uploaded from the dashboard (body is bytes)
+            n = int(self.headers.get("Content-Length") or 0)
+            if not 0 < n <= 20_000_000:
+                return self._send({"error": "bad upload size"}, 400)
+            name = m.group(1)
+            project = {k: v[0] for k, v in
+                       parse_qs(urlparse(self.path).query).items()}.get("project", "careyrpg")
+            aid = new_id("src")
+            SOURCES.mkdir(parents=True, exist_ok=True)
+            dest = SOURCES / f"{aid}_{name}"
+            dest.write_bytes(self.rfile.read(n))
+            # A real source image is highest grade by definition — real pixels
+            # beat diffused lookalikes (v3.1). Record it approved at top score so
+            # it lands in the gallery and the belt can composite onto it later.
+            card = {"artifact_id": aid, "job_id": None, "project": project,
+                    "kind": "source", "path": str(dest), "name": name, "source": True,
+                    "purpose": "uploaded source image (real pixels)",
+                    "prompt": "", "slots": {}, "score": 5.0,
+                    "tags": ["source"], "caption": "", "status": "approved",
+                    "created_at": now()}
+            db().execute(
+                "INSERT OR REPLACE INTO artifacts(id,job_id,project_id,kind,path,meta,"
+                "score,tags,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (aid, None, project, "source", str(dest), json.dumps(card),
+                 5.0, json.dumps(["source"]), "approved", now()))
+            db().commit()
+            event(self._actor(), "source.upload", aid, {"bytes": n, "name": name})
+            return self._send({"id": aid, "name": name, "path": str(dest),
+                               "status": "approved", "score": 5.0}, 201)
 
         try:
             body = self._body()

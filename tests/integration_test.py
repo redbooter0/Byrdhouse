@@ -349,6 +349,44 @@ def main():
             check("provided-image final is 1280x720",
                   Image.open(byo[0]["path"]).size == (1280, 720))
 
+        # ── Uploaded source image: saved on the router, recorded at top grade,
+        #    then composited onto by the worker (which fetches it back). This is
+        #    the endpoint the operator model will call once its tools unlock. ──
+        import io
+        buf = io.BytesIO()
+        Image.new("RGB", (800, 450), (120, 40, 160)).save(buf, "PNG")
+        src_bytes = buf.getvalue()
+        rqs = urllib.request.Request(
+            f"http://127.0.0.1:{RP}/sources/palworld_base.png?project=careyrpg",
+            data=src_bytes, method="POST",
+            headers={"Content-Type": "image/png", "Authorization": f"Bearer {TOKEN}"})
+        src_resp = json.loads(urllib.request.urlopen(rqs, timeout=15).read().decode())
+        src_id = src_resp.get("id")
+        check("source upload returns a recorded artifact id", bool(src_id), str(src_resp))
+        src_art = [a for a in api("/artifacts?limit=100") if a["id"] == src_id]
+        check("uploaded source is recorded, approved, top grade",
+              len(src_art) == 1 and src_art[0]["kind"] == "source"
+              and src_art[0]["status"] == "approved" and src_art[0]["score"] == 5.0,
+              str(src_art))
+        with urllib.request.urlopen(
+                f"http://127.0.0.1:{RP}/artifacts/{src_id}/file", timeout=15) as r:
+            check("uploaded source served from the router host", r.read() == src_bytes)
+        # compose a title onto the uploaded source by artifact id (no local path)
+        api("/jobs", {"type": "content.thumbnail", "project": "careyrpg",
+                      "required_mode": "ANY",
+                      "payload": {"title": "SOURCE UPLOAD WORKS",
+                                  "source_artifact": src_id,
+                                  "project": "careyrpg", "purpose": "uploaded source compose"}})
+        run_worker()
+        composed = [a for a in api("/artifacts?limit=100")
+                    if a["kind"] == "thumbnail"
+                    and json.loads(a["meta"] or "{}").get("source_artifact") == src_id]
+        check("worker fetched the uploaded source and composited onto it",
+              len(composed) == 1)
+        if composed:
+            check("uploaded-source final is 1280x720",
+                  Image.open(composed[0]["path"]).size == (1280, 720))
+
         # A retried job re-registers its artifacts — must upsert, not duplicate
         dupe_card = {"artifact_id": "art.dupetest.0", "job_id": "job_dupetest",
                      "kind": "image", "path": "/tmp/dupetest.png", "status": "draft"}
