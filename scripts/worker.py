@@ -129,7 +129,15 @@ class Gpu:
                 else:
                     raise RuntimeError("VRAM did not free — aborting mode switch")
             elif target == "OPERATOR":
-                _lms_load(CFG["gpu"].get("operator_model", ""))
+                # Don't thrash LM Studio: OPERATOR just needs SOME text-capable
+                # model up. If one is already loaded (e.g. the VL judge model,
+                # which does text fine), use it — forcing a swap to a different
+                # operator_model drops LM Studio's server/CORS state and makes
+                # the next request fail. Only load when nothing is loaded.
+                if not _loaded_models():
+                    _lms_load(CFG["gpu"].get("operator_model", ""))
+                else:
+                    log("OPERATOR: a model is already loaded — using it (no reload)")
         self.mode = target
         api("/workers/heartbeat", {"id": WORKER_ID, "host": socket.gethostname(),
                                    "caps": CAPS, "mode": self.mode})
