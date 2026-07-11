@@ -108,6 +108,17 @@ def main():
               all(k in card for k in ("purpose", "seed", "checkpoint", "recipe")))
         approved = api(f"/artifacts/{arts[0]['id']}/review", {"action": "approve"})
         check("approve flow", approved["status"] == "approved")
+        api(f"/artifacts/{arts[1]['id']}/review", {"action": "reject"})
+
+        # Learn loop: the belt projects its own approve/reject history into
+        # an approval-rate ranking (reverse-engineered reinforcement signal)
+        learn = api("/learn?by=recipe")
+        rt = next((b for b in learn["buckets"] if b["value"] == "rpg_tier_list@2"), None)
+        check("learn projection ranks by approval rate",
+              rt and rt["approved"] == 1 and rt["rejected"] == 1 and rt["approval_rate"] == 0.5)
+        pal = api("/learn?by=palette")
+        check("learn projects vary-picks (palette) too",
+              any(b["labeled"] >= 1 for b in pal["buckets"]))
 
         print("== content.thumbnail (two-pass, needs Pillow)")
         try:

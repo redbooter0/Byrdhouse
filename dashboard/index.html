@@ -67,6 +67,20 @@
   input,select,textarea { background:#0d0a18; color:var(--text); border:1px solid var(--line); border-radius:8px;
                           padding:7px 9px; font-size:13px; width:100%; }
   label { font-size:11px; color:var(--dim); display:block; margin:8px 0 2px; }
+  .q { display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px;
+       border-radius:50%; border:1px solid var(--line); color:var(--dim); font-size:10px;
+       cursor:pointer; margin-left:5px; vertical-align:middle; user-select:none; }
+  .q:hover { border-color:var(--accent); color:var(--accent2); }
+  #tipbubble { position:fixed; z-index:60; max-width:260px; background:var(--panel2);
+               border:1px solid var(--accent); border-radius:9px; padding:9px 11px;
+               font-size:12px; color:var(--text); line-height:1.45;
+               box-shadow:0 6px 24px rgba(0,0,0,.5); }
+  details.opts { margin-top:12px; border-top:1px solid var(--line); padding-top:8px; }
+  details.opts > summary { cursor:pointer; font-size:11px; color:var(--dim);
+       text-transform:uppercase; letter-spacing:.1em; list-style:none; }
+  details.opts > summary::-webkit-details-marker { display:none; }
+  details.opts > summary::before { content:'▸ '; }
+  details.opts[open] > summary::before { content:'▾ '; }
   .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:10px; }
   .art { border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--panel2);
          transition:transform .15s, border-color .15s, box-shadow .15s; }
@@ -93,16 +107,23 @@
                   box-shadow:0 0 60px rgba(124,58,237,.35); }
   @media (max-width:820px){
     body{flex-direction:column}
-    /* horizontal room strip instead of a stacked wall of buttons */
-    #side{width:100%; display:flex; flex-wrap:nowrap; gap:4px; overflow-x:auto;
-          -webkit-overflow-scrolling:touch; align-items:center;
-          padding:10px max(10px, env(safe-area-inset-right)) 10px max(10px, env(safe-area-inset-left))}
-    #side h1{font-size:14px; padding:0 6px; white-space:nowrap}
-    #brand{width:120px; margin:0 4px}
+    /* slim top bar: tiny brand, rooms scroll horizontally as compact chips */
+    #side{width:100%; display:flex; flex-direction:row; align-items:center; gap:8px;
+          border-right:0; border-bottom:1px solid var(--line);
+          padding:8px max(10px, env(safe-area-inset-right)) 8px max(10px, env(safe-area-inset-left))}
+    #brand{width:78px; margin:0; flex-shrink:0}
     #side .sub,#side .cap{display:none}
-    #side > div[style]{min-width:150px}
-    .room{flex-shrink:0; white-space:nowrap; padding:7px 10px}
-    .room small{display:none}
+    /* the room list itself becomes the horizontal scroller */
+    #rooms{display:flex; flex-direction:row; gap:6px; overflow-x:auto; flex:1;
+           -webkit-overflow-scrolling:touch; scrollbar-width:none}
+    #rooms::-webkit-scrollbar{display:none}
+    .room{flex-shrink:0; white-space:nowrap; padding:8px 12px; border-radius:10px;
+          background:var(--panel2); border:1px solid var(--line)}
+    .room small,.room .lock{display:none}
+    .room b{font-size:13px}
+    /* admin token: compact, at the end of the bar */
+    #side > div[style]{margin-left:auto; flex-shrink:0; padding:0!important; width:130px}
+    #side > div[style] label{display:none}
     #main{padding:12px max(12px, env(safe-area-inset-right))
                   max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))}
     /* 16px inputs stop Safari's focus auto-zoom */
@@ -118,7 +139,7 @@
   <div class="sub">Control Center · local mode</div>
   <div id="rooms"></div>
   <div class="cap">Admin</div>
-  <div style="padding:0 8px"><label>Admin token</label><input id="token" type="password"></div>
+  <div style="padding:0 8px"><label>Admin token</label><input id="token" type="password" placeholder="admin token"></div>
 </nav>
 
 <main id="main">
@@ -139,6 +160,21 @@ const jpost = async (p, body) => {
   const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j;
 };
 const say = t => $('msg').textContent = t;
+
+/* ── tooltips: clean labels + a ? that pops the description (tap or hover) ── */
+const qtip = text => `<span class="q" onclick="showTip(event)" data-tip="${esc(text)}">?</span>`;
+function showTip(e) {
+  e.stopPropagation();
+  const old = $('tipbubble'); if (old) old.remove();
+  const b = document.createElement('div');
+  b.id = 'tipbubble'; b.textContent = e.currentTarget.dataset.tip;
+  document.body.appendChild(b);
+  const r = e.currentTarget.getBoundingClientRect();
+  const bw = b.offsetWidth, bh = b.offsetHeight;
+  b.style.left = Math.max(8, Math.min(window.innerWidth - bw - 8, r.left)) + 'px';
+  b.style.top = (r.bottom + bh + 8 > window.innerHeight ? r.top - bh - 6 : r.bottom + 6) + 'px';
+}
+document.addEventListener('click', () => { const b = $('tipbubble'); if (b) b.remove(); });
 
 /* ── Rooms (ROOM_MAP.md — the rooms are the product) ── */
 const ROOMS = [
@@ -166,7 +202,10 @@ function renderRooms() {
        <span><b>${r.name}</b><small>${r.sub}</small></span>${r.lock?`<span class="lock">${r.lock}</span>`:''}
      </button>`).join('');
 }
-function go(r) { room = r; renderRooms(); render(); }
+function go(r) { room = r; renderRooms(); render();
+  const on = $('rooms').querySelector('.room.on');  // keep active room visible in the mobile strip
+  if (on) on.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
 
 /* ── status chips (always visible) ── */
 async function chips() {
@@ -233,6 +272,8 @@ V.command = async () => {
   const st = await jget('/stats');
   const arts = await jget('/artifacts?limit=8');
   const ev = await jget('/events?limit=12');
+  const learn = await jget('/learn?by=palette');
+  const learned = (learn.buckets || []).filter(b => b.labeled >= 1).slice(0, 5);
   return `
   <div class="grid">
     <div class="panel wide"><h2>Mission Overview — ByrdHouse is Active</h2>
@@ -252,6 +293,11 @@ V.command = async () => {
     <div class="panel"><h2>Recent activity</h2><table>${ev.map(e =>
       `<tr><td class="muted">${esc((e.ts||'').slice(5,16))}</td><td>${esc(e.actor)}</td><td>${esc(e.action)}</td>
        <td>${e.ok?'':'<span class="pill" style="color:var(--red)">failed</span>'}</td></tr>`).join('')}</table></div>
+    <div class="panel"><h2>What's working — approval rate by palette</h2><table>${
+      learned.map(b => `<tr><td>${esc(b.value)}</td>
+        <td><b>${b.approval_rate!=null?Math.round(b.approval_rate*100)+'%':'—'}</b></td>
+        <td class="muted">${b.approved}✓ ${b.rejected}✗ · ${b.labeled} judged</td></tr>`).join('')
+      || '<tr><td class="muted">approve/reject a few images and the belt learns your taste here</td></tr>'}</table></div>
     <div class="panel wide"><h2>Latest artifacts</h2><div class="cards">${arts.map(artCard).join('') || '<span class="muted">nothing yet — visit the Image Studio</span>'}</div></div>
   </div>`;
 };
@@ -283,38 +329,43 @@ V.image = async () => {
     .sort((a, b) => a.id === b.id ? b.version - a.version : a.id.localeCompare(b.id));
   return `
   <div class="grid">
-    <div class="panel" id="genForm"><h2>Generate (recipes over prompts)</h2>
-      <label>Recipe</label><select id="recipe" onchange="slotFields()">${window._recipes.map(r =>
+    <div class="panel" id="genForm"><h2>Generate ${qtip('Recipes over prompts: pick a recipe, fill its slots, hit Queue. The belt generates a batch, the local model judges it, you approve the keepers.')}</h2>
+      <label>Recipe ${qtip('A versioned prompt template with slots and a rubric. The version you pick is exactly what runs — the card records it.')}</label>
+      <select id="recipe" onchange="slotFields()">${window._recipes.map(r =>
         `<option value="${esc(r.id)}@${r.version}">${esc(r.id)} v${r.version}</option>`).join('')}</select>
       <div id="slots"></div>
-      <label>Thumbnail title (optional — real text composited on top, never diffused)</label>
-      <input id="thumbTitle" placeholder="e.g. BEST BUILDS TIER LIST (leave empty for art only)">
-      <label>Source image (optional — path on the worker PC; composites the title onto YOUR screenshot, skips generation)</label>
-      <input id="srcImage" placeholder="E:\\captures\\palworld_base.png">
-      <label>Project</label><input id="project" value="careyrpg">
-      <label>Purpose (required)</label><input id="purpose" placeholder="why this batch exists">
-      <label>Checkpoint (optional — name of a .safetensors installed on the worker)</label>
-      <input id="ckpt" placeholder="leave empty for the recipe default">
-      <label>Shape</label><select id="aspect">
-        <option value="">16:9 thumbnail (default)</option>
-        <option value="9:16">9:16 TikTok / Shorts</option>
-        <option value="1:1">1:1 square</option>
-        <option value="2:3">2:3 portrait / player model</option>
-        <option value="3:2">3:2 landscape photo</option>
-        <option value="21:9">21:9 banner</option>
-      </select>
-      <label>LoRA (optional — a .safetensors in the worker's models\\loras folder)</label>
-      <input id="lora" placeholder="e.g. palworld_style">
-      <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
-        <input type="checkbox" id="enhance" style="width:auto">
-        ✨ Let the operator model rewrite my prompt first (freeform recipe)</label>
-      <div class="row"><button class="b" onclick="submitGen()">Queue generation</button></div>
-      <div class="muted" style="margin-top:8px">Batch generates → auto-judged by Qwen-VL → approve here. Approved images are your thumbnail art.<br>
-      GPU mode shifts automatically with the queue — the worker chip up top shows the live mode.</div>
+      <label>Purpose ${qtip('Why this batch exists — one line. Required, and kept on every card so months from now you know what a thumbnail was for.')}</label>
+      <input id="purpose" placeholder="why this batch exists">
+      <label>Thumbnail title ${qtip('Optional. Real text composited on top of the art in a second pass — never diffused, so it is always crisp and readable. Leave empty for art only.')}</label>
+      <input id="thumbTitle" placeholder="e.g. BEST BUILDS TIER LIST">
+      <div class="row" style="margin-top:10px"><button class="b" onclick="submitGen()">Queue generation</button></div>
+      <details class="opts"><summary>More options</summary>
+        <label>Project ${qtip('Which channel/project this belongs to — groups artifacts in the gallery and exports.')}</label>
+        <input id="project" value="careyrpg">
+        <label>Shape ${qtip('Output aspect ratio, snapped to SDXL-native sizes. 16:9 for YouTube, 9:16 for TikTok/Shorts, 2:3 for portraits/player models.')}</label>
+        <select id="aspect">
+          <option value="">16:9 thumbnail (default)</option>
+          <option value="9:16">9:16 TikTok / Shorts</option>
+          <option value="1:1">1:1 square</option>
+          <option value="2:3">2:3 portrait / player model</option>
+          <option value="3:2">3:2 landscape photo</option>
+          <option value="21:9">21:9 banner</option>
+        </select>
+        <label>Source image ${qtip('Optional path to an image ALREADY on the worker PC (a real screenshot, box art). Composites your title onto it and skips generation — real pixels beat diffused lookalikes.')}</label>
+        <input id="srcImage" placeholder="E:\\captures\\palworld_base.png">
+        <label>Checkpoint ${qtip('Optional. Name of a .safetensors model installed on the worker. Leave empty for the recipe default. Swap in a stylized model (e.g. Animagine) for anime/game looks.')}</label>
+        <input id="ckpt" placeholder="leave empty for the recipe default">
+        <label>LoRA ${qtip('Optional. A .safetensors LoRA in the worker models/loras folder — game-style LoRAs are the key to nailing a specific game accurately.')}</label>
+        <input id="lora" placeholder="e.g. palworld_style">
+        <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
+          <input type="checkbox" id="enhance" style="width:auto">
+          ✨ Rewrite my prompt first ${qtip('Sends your prompt to the local model to expand into a full SDXL prompt before generating. Runs the freeform recipe. Adds one OPERATOR-mode step.')}</label>
+      </details>
     </div>
-    <div class="panel"><h2>Reference library — the bar to beat</h2>
-      <label>Tag (game or recipe family, e.g. palworld)</label><input id="refTag" placeholder="palworld">
-      <label>Add thumbnails you love (the judge grades new images against these)</label>
+    <div class="panel"><h2>Reference library ${qtip('Upload thumbnails you love. The judge scores every new image against them, so approvals converge on your taste. Tag by game so the right references apply.')}</h2>
+      <label>Tag ${qtip('Game or recipe family, e.g. palworld. References with a matching tag are shown to the judge for those images.')}</label>
+      <input id="refTag" placeholder="palworld">
+      <label>Add thumbnails you love</label>
       <input id="refFile" type="file" accept="image/*" multiple onchange="uploadRefs(this)">
       <div class="cards" id="refList" style="margin-top:10px">${await refListHtml()}</div>
     </div>

@@ -32,6 +32,7 @@ Endpoints (v2 §6):                                          access
   POST /workers/heartbeat   {id,caps,mode,vram}             token
   GET  /mode                requested + worker modes        open
   POST /mode                {mode} request a shift          token
+  GET  /learn?by=recipe|checkpoint|palette|lighting         open
   GET  /events?limit=                                       open
   GET  /reports/daily                                       open
 """
@@ -173,6 +174,54 @@ def job_row(jid):
     return db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
 
 
+LEARN_DIMS = {  # dimension -> how to pull its value out of an artifact card
+    "recipe":     lambda m: m.get("recipe"),
+    "checkpoint": lambda m: m.get("checkpoint"),
+    "palette":    lambda m: (m.get("vary_picks") or {}).get("palette"),
+    "lighting":   lambda m: (m.get("vary_picks") or {}).get("lighting"),
+    "project":    lambda m: m.get("project"),
+}
+
+
+def learn_projection(dim, min_samples=1):
+    """Approval-rate ranking over a feature we already record. Only human
+    verdicts (approved/rejected) count as label; drafts add to 'seen' for
+    context. This is the belt's own reinforcement signal, harvested."""
+    getter = LEARN_DIMS.get(dim, LEARN_DIMS["recipe"])
+    buckets = {}
+    for r in db().execute("SELECT status, score, meta FROM artifacts"):
+        try:
+            meta = json.loads(r["meta"] or "{}")
+        except (json.JSONDecodeError, TypeError):
+            meta = {}
+        key = getter(meta)
+        if not key:
+            continue
+        b = buckets.setdefault(str(key), {"value": str(key), "approved": 0,
+                                          "rejected": 0, "seen": 0, "_score_sum": 0.0,
+                                          "_score_n": 0})
+        b["seen"] += 1
+        if r["status"] == "approved":
+            b["approved"] += 1
+        elif r["status"] == "rejected":
+            b["rejected"] += 1
+        if r["score"] is not None:
+            b["_score_sum"] += r["score"]; b["_score_n"] += 1
+    out = []
+    for b in buckets.values():
+        labeled = b["approved"] + b["rejected"]
+        b["labeled"] = labeled
+        b["approval_rate"] = round(b["approved"] / labeled, 3) if labeled else None
+        b["avg_score"] = round(b["_score_sum"] / b["_score_n"], 2) if b["_score_n"] else None
+        del b["_score_sum"], b["_score_n"]
+        out.append(b)
+    # best-approved first; unlabeled (no verdict yet) sink to the bottom
+    out.sort(key=lambda x: (x["approval_rate"] is not None, x["approval_rate"] or 0,
+                            x["avg_score"] or 0), reverse=True)
+    return {"dimension": dim, "buckets": out,
+            "note": "approval_rate = approved / (approved+rejected); needs verdicts to be meaningful"}
+
+
 # ── chat tools: the operator model can act on the belt through its own
 #    audited operations (bot-ladder rung A1 — same endpoints, same events).
 #    The coming MCP roster plugs into this same loop. ─────────────────────────
@@ -204,6 +253,12 @@ CHAT_TOOLS = [
             "artifact_id": {"type": "string"},
             "mode": {"type": "string", "description": "upscale | riff"}},
             "required": ["artifact_id"]}}},
+    {"type": "function", "function": {
+        "name": "what_works",
+        "description": "Approval-rate ranking of what the founder actually approves, "
+                       "by recipe/checkpoint/palette/lighting. Use to recommend settings.",
+        "parameters": {"type": "object", "properties": {
+            "by": {"type": "string", "description": "recipe|checkpoint|palette|lighting|project"}}}}},
     {"type": "function", "function": {
         "name": "recent_events",
         "description": "Tail of the belt event log (what happened lately).",
@@ -252,6 +307,8 @@ def run_chat_tool(name, args, actor):
                 else {"strength": 0.55, "scale": 1.0, "batch": 4})
         result, code = create_refine_job(str(args.get("artifact_id", "")), opts, actor)
         return result
+    if name == "what_works":
+        return learn_projection(args.get("by", "recipe"))["buckets"][:10]
     if name == "recent_events":
         return [dict(r) for r in db().execute(
             "SELECT ts,actor,action,subject FROM events ORDER BY id DESC LIMIT ?",
@@ -493,6 +550,15 @@ class Handler(BaseHTTPRequestHandler):
                 "approved": db().execute(
                     "SELECT COUNT(*) n FROM artifacts WHERE status='approved'").fetchone()["n"],
             })
+
+        if path == "/learn":
+            # The learn loop (reverse-engineered RLHF): every approve/reject the
+            # founder makes is a labeled datapoint over features we already store
+            # (recipe, checkpoint, palette, lighting). Project them into
+            # approval-rate rankings so the belt can tell — and later bias toward —
+            # what actually gets approved. Pure read over existing data.
+            dim = q.get("by", "recipe")
+            return self._send(learn_projection(dim))
 
         if path == "/events":
             rows = db().execute("SELECT * FROM events ORDER BY id DESC LIMIT ?",
