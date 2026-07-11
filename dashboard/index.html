@@ -112,6 +112,35 @@ const ROOMS = [
   { id:'bot',      name:'Bot Room',       sub:'Autonomy Ladder', lock:'after U3' },
 ];
 let room = 'command';
+const IMAGE_DRAFT_KEY = 'bh_image_studio_draft_v1';
+
+function loadImageDraft() {
+  try { return JSON.parse(localStorage.getItem(IMAGE_DRAFT_KEY)) || {}; }
+  catch (_) { return {}; }
+}
+function imageDraftFromForm() {
+  const form = $('imageStudio');
+  if (!form) return null;
+  const slots = {};
+  form.querySelectorAll('#slots input').forEach(i => { slots[i.dataset.slot] = i.value; });
+  return { recipe:$('recipe').value, slots, title:$('thumbTitle').value,
+    project:$('project').value, purpose:$('purpose').value };
+}
+function saveImageDraft() {
+  const draft = imageDraftFromForm();
+  if (draft) localStorage.setItem(IMAGE_DRAFT_KEY, JSON.stringify(draft));
+}
+function clearImageDraft() { localStorage.removeItem(IMAGE_DRAFT_KEY); }
+function bindImageDraft() {
+  const form = $('imageStudio');
+  if (!form || form.dataset.draftBound) return;
+  form.dataset.draftBound = 'true';
+  form.addEventListener('input', saveImageDraft);
+  form.addEventListener('change', event => {
+    if (event.target.id === 'recipe') slotFields();
+    saveImageDraft();
+  });
+}
 function renderRooms() {
   $('rooms').innerHTML = ROOMS.map(r =>
     `<button class="room ${room===r.id?'on':''}" onclick="go('${r.id}')">
@@ -196,29 +225,40 @@ V.image = async () => {
   const recipes = await jget('/recipes');
   window._recipes = recipes.filter(r => r.kind === 'image.generate');
   const arts = (await jget('/artifacts?limit=18')).filter(a => a.kind==='image'||a.kind==='thumbnail');
+  const draft = loadImageDraft();
   return `
   <div class="grid">
-    <div class="panel"><h2>Generate (recipes over prompts)</h2>
-      <label>Recipe</label><select id="recipe" onchange="slotFields()">${window._recipes.map(r =>
-        `<option value="${esc(r.id)}">${esc(r.id)} v${r.version}</option>`).join('')}</select>
+    <div class="panel" id="imageStudio"><h2>Generate (recipes over prompts)</h2>
+      <label>Recipe</label><select id="recipe">${window._recipes.map(r =>
+        `<option value="${esc(r.id)}" ${r.id===draft.recipe?'selected':''}>${esc(r.id)} v${r.version}</option>`).join('')}</select>
       <div id="slots"></div>
       <label>Thumbnail title (optional — real text composited on top, never diffused)</label>
-      <input id="thumbTitle" placeholder="e.g. BEST BUILDS TIER LIST (leave empty for art only)">
-      <label>Project</label><input id="project" value="careyrpg">
-      <label>Purpose (required)</label><input id="purpose" placeholder="why this batch exists">
+      <input id="thumbTitle" value="${esc(draft.title||'')}" placeholder="e.g. BEST BUILDS TIER LIST (leave empty for art only)">
+      <label>Project</label><input id="project" value="${esc(draft.project ?? 'careyrpg')}">
+      <label>Purpose (required)</label><input id="purpose" value="${esc(draft.purpose||'')}" placeholder="why this batch exists">
       <div class="row"><button class="b" onclick="submitGen()">Queue generation</button>
         <button class="s" onclick="requestMode('IMAGE')">IMAGE mode</button>
         <button class="s" onclick="requestMode('OPERATOR')">OPERATOR mode</button></div>
       <div class="muted" style="margin-top:8px">Batch generates → auto-judged by Qwen-VL → approve here. Approved images are your thumbnail art.</div>
     </div>
-    <div class="panel wide"><h2>Image Studio output</h2><div class="cards">${arts.map(artCard).join('') || '<span class="muted">no images yet</span>'}</div></div>
+    <div class="panel wide"><h2>Image Studio output</h2><div class="cards" id="imageOutput">${arts.map(artCard).join('') || '<span class="muted">no images yet</span>'}</div></div>
   </div>`;
 };
 function slotFields() {
   const r = (window._recipes||[]).find(x => x.id === $('recipe').value);
   if (!r) return;
+  const draft = loadImageDraft();
+  const current = imageDraftFromForm();
+  const values = (current && current.recipe === r.id && Object.keys(current.slots).length
+    ? current.slots : draft.slots) || {};
   $('slots').innerHTML = r.slots.filter(s => !r.vary.includes(s)).map(s =>
-    `<label>${esc(s)}</label><input data-slot="${esc(s)}" placeholder="${esc(s)}">`).join('');
+    `<label>${esc(s)}</label><input data-slot="${esc(s)}" value="${esc(values[s]||'')}" placeholder="${esc(s)}">`).join('');
+}
+async function refreshImageOutput() {
+  const output = $('imageOutput');
+  if (!output) return;
+  const arts = (await jget('/artifacts?limit=18')).filter(a => a.kind==='image'||a.kind==='thumbnail');
+  output.innerHTML = arts.map(artCard).join('') || '<span class="muted">no images yet</span>';
 }
 async function submitGen() {
   try {
@@ -230,6 +270,10 @@ async function submitGen() {
     if (title) payload.title = title;
     const j = await jpost('/jobs', { type: title ? 'content.thumbnail' : 'image.generate',
       project:$('project').value, required_mode:'IMAGE', required_caps:['comfyui'], payload });
+    clearImageDraft();
+    $('thumbTitle').value = '';
+    $('purpose').value = '';
+    document.querySelectorAll('#slots input').forEach(i => { i.value = ''; });
     say('queued '+j.id+(title?' (two-pass thumbnail)':''));
   } catch (e) { say('error: '+e.message); }
 }
@@ -332,11 +376,34 @@ for (const [k, [title, text]] of Object.entries(LOCKED)) {
   V[k] = async () => `<div class="panel"><h2>${title}</h2><div class="note">${text}</div></div>`;
 }
 
+let rendering = false;
+let renderPending = false;
 async function render() {
-  try { $('view').innerHTML = await V[room](); if (room==='image') slotFields(); }
-  catch (e) { say('render error: '+e.message); }
+  if (rendering) { renderPending = true; return; }
+  rendering = true;
+  try {
+    do {
+      renderPending = false;
+      const targetRoom = room;
+      if (targetRoom === 'image' && $('imageStudio')) {
+        await refreshImageOutput();
+      } else {
+        const html = await V[targetRoom]();
+        if (targetRoom !== room) { renderPending = true; continue; }
+        $('view').innerHTML = html;
+        if (targetRoom === 'image') { slotFields(); bindImageDraft(); }
+      }
+    } while (renderPending);
+  } catch (e) { say('render error: '+e.message); }
+  finally { rendering = false; }
 }
-async function tick() { await chips(); await render(); }
+let ticking = false;
+async function tick() {
+  if (ticking) return;
+  ticking = true;
+  try { await chips(); await render(); }
+  finally { ticking = false; }
+}
 renderRooms(); tick(); setInterval(tick, 12000);
 </script>
 </body>
