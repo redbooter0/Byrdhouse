@@ -2,7 +2,7 @@
 
 *One page of current truth. Update weekly or on any milestone. Paste this to any AI to resume work instantly.*
 
-**Last updated:** 2026-07-10 · **Current unlock: U1 IMAGE LAB**
+**Last updated:** 2026-07-11 · **Current unlock: U1 IMAGE LAB**
 
 **U0 status:** functionally complete on real hardware.
 
@@ -16,22 +16,28 @@ The system is local-first:
 - **BYRD-GAMING** owns heavy GPU work: ComfyUI, LM Studio, image/video/game workers.
 - **iPad** is the cockpit: dashboard/browser/manual approvals.
 
+**Network truth:** MINI and GAMING currently communicate over the local
+`15.2.2.0/24` LAN. Tailscale is not installed on GAMING, so away-from-home
+private-overlay control is not yet proven.
+
 Odysseus/smart-home/Stripe is removed from this repo. Cherry Studio remains the local model GUI; ByrdHouse owns the router/worker/dashboard belt.
 
 ## What works now (snapshot refreshed 2026-07-11)
 
-- **Image Studio**: versioned recipes (game-anchored v3/v4 + freeform), aspect
+- **Image Studio**: versioned recipes (game-anchored v3/v4/v5 + freeform), aspect
   presets, LoRA field, checkpoint override, ✨ LLM prompt enhancement, seed pin,
   BYO-screenshot thumbnails, viral compositor (banner/accent), reference
   library (judge grades against founder-loved thumbnails), ⬆ upscale / ≈ riff
   on every card, tap-to-zoom, in-flight placeholders with ages, ⏱ durations
-- **Operator Chat**: agent with belt tools (status, artifacts, queue_image,
-  refine_image, events), model interchangeability, mini-fallback slot for
-  always-on chat, answering model shown per reply
-- **Belt**: reaper, worker liveness, requeue/cancel, previews (downscaled,
-  worker→router upload), job timing joins, deterministic artifact dedupe
-- **Guardrails**: 52-check integration suite + 13-check dashboard suite in CI,
-  BOM enforcement, judge fidelity/off-game caps
+- **Operator Chat + Luna Pulse**: agent with belt tools, cursor-based job
+  transitions, bounded `watch_job`, learned slow thresholds, retry/error and
+  review-ready updates, optional browser alerts
+- **Belt**: authoritative recipe preflight, reaper, worker liveness,
+  requeue/cancel, previews (downscaled, worker→router upload), job timing joins,
+  idempotent MCP submissions, deterministic artifact dedupe
+- **Guardrails**: 89-check integration suite + 26-check dashboard suite,
+  endpoint/template validation, PowerShell 5.1 parse+BOM enforcement, judge
+  fidelity/off-game caps
 
 ## What worked before (U0 foundation)
 
@@ -125,7 +131,9 @@ U2/U3 are already partially built, but they should be treated as usage/hardening
 
 ## Done log
 
-- 2026-07-11 · Hardening from two-agent review (integrity before the U1 proof, no new features): judging now REQUIRES a vision-capable model (a text model can't invent visual scores — artifact stays honestly unjudged, protecting the learn-loop dataset); checkpoint fallback is recorded on the card (requested-vs-resolved) and flagged yellow in the gallery instead of silently running the wrong model; chat write-tools capped at 3 mutations/request; CI secret-scan job fails the build on a committed token/key; fixed the last config mojibake; docs/BELT.md gained an honest security/trust-boundary section (single-token tailnet system, deferred video-heartbeat + monolith-split). 57-check belt suite green. OPEN ACTION (founder): rotate the admin token — it reached public git history
+- 2026-07-11 · Recipe contract + Luna Pulse: confirmed the three hardware failures used `yt_thumbnail@3` (thumbnail) and `yt_thumbnail@4` (two image jobs); `{emotion}` is founder-required in both definitions because it is in each template and absent from `vary`. Dashboard now marks every founder slot required, names all missing fields, blocks before POST without clearing the draft, and the router independently rejects malformed jobs before a worker attempt. Pulse adds cursor-based transitions, hardware-learned overdue thresholds, MCP `job_status`/`job_updates`/`watch_job`, in-app/browser updates, and artifact/error handoff. Windows-native Studio installer/endpoint proof added; MCP defaults read-only. Network audit corrected the record: current transport is LAN, not Tailscale. 89 integration + 26 dashboard assertions green.
+
+- 2026-07-11 · Hardening from two-agent review (integrity before the U1 proof, no new features): judging now REQUIRES a vision-capable model (a text model can't invent visual scores — artifact stays honestly unjudged, protecting the learn-loop dataset); checkpoint fallback is recorded on the card (requested-vs-resolved) and flagged yellow in the gallery instead of silently running the wrong model; chat write-tools capped at 3 mutations/request; CI secret-scan job fails the build on a committed token/key; fixed the last config mojibake; docs/BELT.md gained an honest security/trust-boundary section (single-token private-network system, deferred video-heartbeat + monolith-split). 57-check belt suite green. OPEN ACTION (founder): rotate the admin token — it reached public git history
 
 - 2026-07-11 · Belt strengthening (reverse-engineered durable-execution patterns, see docs/BELT.md): schema migration spine (guarded additive ALTER TABLE — belt schema now evolves on live machine DBs without a wipe), idempotency keys (same key returns the existing job; kills the duplicate-job class at the source), and parent_id/run_after columns migrated in and reserved for the DAG/scheduling rungs. docs/BELT.md maps every canonical job-queue pattern (Temporal/river/event-sourcing) to what the belt already has and the compounding ladder ahead. 55-check belt suite green
 

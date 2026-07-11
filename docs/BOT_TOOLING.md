@@ -15,7 +15,8 @@ ByrdHouse already had **two tool systems that never talked to each other**:
    but blind to the belt.
 
 Same Qwen model, two protocols. **We bridged them** so one shared roster drives
-everything, on either machine, over the tailnet:
+everything, on either machine, over the private network. The current machines
+are on LAN; a tailnet is only true after Tailscale is installed and verified:
 
 - **`scripts/byrd_belt_mcp.py`** — the belt as an MCP server. A stdlib, no-pip
   JSON-RPC/stdio server that exposes the router's already-audited endpoints as
@@ -52,7 +53,7 @@ not act (A0/A1: suggestions from the event log). Flip it off and the bot acts
 |---|---|---|
 | **BYRD-MINI** | router + `byrd_belt_mcp` + memory/fetch/brave-search MCP | all CPU, no GPU contention |
 | **BYRD-GAMING** | worker (owns ComfyUI + LM Studio via mode ritual) + Godot + godot MCP | the muscle; pulls jobs |
-| **Cockpit (iPad / Cherry Studio)** | MCP client → belt + research + godot | one roster, over Tailscale MagicDNS |
+| **Cockpit (iPad / Cherry Studio)** | MCP client → belt + research + godot | LAN today; private overlay required for away-from-home access |
 
 Register the belt in an MCP client:
 
@@ -74,7 +75,7 @@ Register the belt in an MCP client:
 
 ## Research adopted (PulseMCP / niche scan, 2026-07)
 
-- **Keep the "core six" + weekend two** already in `config.mcp`; they match the
+- **Keep the bounded core-seven + one weekend Godot server** in `config.mcp`; they match the
   best-with-LM-Studio picks (SQLite, Brave, Fetch, memory). Source:
   [PulseMCP directory](https://www.pulsemcp.com/servers),
   [Godot MCP servers](https://www.pulsemcp.com/servers?q=godot).
@@ -90,3 +91,35 @@ Register the belt in an MCP client:
 - [ ] stand up the research + godot MCP servers on the machines (fill
       `config.mcp` ping URLs; register belt-MCP in Cherry Studio)
 - [ ] widen `WRITE_TOOLS` permission tiers for the A2 pilot
+
+The bounded eight-server roster now includes `byrdhouse-belt` as a core server
+and keeps one real Godot server. The redundant Godot-docs slot is retired;
+Fetch supplies documentation without spending a second Godot slot.
+
+## Next: guarded Operator Toolkit
+
+Remote control is another belt capability, not an unaudited shell endpoint.
+Implement it in permission tiers:
+
+1. **R0 read:** machine status, process/service list, bounded file search/read,
+   web/image search, and attach a selected result to Operator Chat.
+2. **R1 reversible:** run named diagnostic scripts, restart an allowlisted
+   ByrdHouse service, and apply a reviewed patch inside an approved workspace.
+3. **R2 privileged:** install/update software or change machine configuration
+   only with a short-lived founder approval.
+
+Every action must target a registered machine worker, carry an idempotency key,
+timeout and output cap, remain inside declared path roots, redact secrets, and
+write an event. Arbitrary PowerShell, batch, filesystem mutation, or public
+router exposure stays disabled until per-device identity and the private remote
+overlay are proven.
+
+## Luna Pulse (the control loop beside the belt)
+
+Every queued MCP action returns a `watch_job` handoff. `job_status` reports the
+current phase, elapsed time, the local learned expectation, terminal state,
+error, and resulting artifacts. `job_updates` is cursor-based so an operator
+can recover transitions after sleep or reconnect. The dashboard mirrors
+running, retry, overdue, completion, and review-ready transitions into Operator
+Chat as trusted system updates; those updates are not fed back to the LLM as if
+the founder typed them.

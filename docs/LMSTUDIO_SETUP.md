@@ -38,7 +38,7 @@ whatever IS loaded — but the cleanest setup for a single-model rig:
 
 ## Verify
 
-From the mini (or any tailnet machine):
+From the mini (or any verified private-network machine):
 `http://byrd-gaming:1234/v1/models` in a browser should return JSON listing the
 loaded model. If it does, `byrd-status.ps1` will show `svc_lmstudio` green and
 chat/judge will work on the first try.

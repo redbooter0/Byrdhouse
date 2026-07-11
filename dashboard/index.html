@@ -62,6 +62,8 @@
           aspect-ratio:16/11; gap:6px; color:var(--dim); font-size:12px;
           animation:pulse 1.6s ease-in-out infinite; }
   .busy b { color:var(--accent2); }
+  .busy.slow { border-color:var(--yellow); animation:none; }
+  .busy.slow b { color:var(--yellow); }
   @keyframes pulse { 0%,100%{opacity:.55} 50%{opacity:1} }
   button.ok{color:var(--green)} button.no{color:var(--red)}
   input,select,textarea { background:#0d0a18; color:var(--text); border:1px solid var(--line); border-radius:8px;
@@ -91,6 +93,10 @@
   .art .m b { color:var(--text); }
   .row { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
   #msg { color:var(--yellow); font-size:12.5px; min-height:18px; margin-top:8px; }
+  .pulse-banner { display:none; margin:-5px 0 12px; padding:8px 11px; border-radius:9px;
+                  border:1px solid var(--accent); background:rgba(124,58,237,.12);
+                  color:var(--text); font-size:12.5px; }
+  .pulse-banner.on { display:block; }
   .muted { color:var(--dim); font-size:12px; }
   .note { background:var(--panel2); border:1px dashed var(--line); border-radius:10px; padding:12px; color:var(--dim); font-size:13px; }
   .chatlog { max-height:56vh; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding:6px 2px 12px; }
@@ -144,6 +150,7 @@
 
 <main id="main">
   <div class="topbar" id="statusChips"></div>
+  <div id="pulseBanner" class="pulse-banner"></div>
   <div id="view"></div>
   <div id="msg"></div>
 </main>
@@ -161,6 +168,72 @@ const jpost = async (p, body) => {
 };
 const say = t => { $('msg').textContent = t;
   const g = $('genMsg'); if (g) g.textContent = t; };  // mirror status next to the button
+
+/* ── Luna Pulse: one supervision loop for every belt job ── */
+function pulseSeen() {
+  try { return JSON.parse(localStorage.getItem('bh_pulse_seen')) || []; } catch (e) { return []; }
+}
+function pushLunaUpdate(text, key) {
+  const seen = pulseSeen();
+  if (seen.includes(key)) return;
+  seen.push(key);
+  localStorage.setItem('bh_pulse_seen', JSON.stringify(seen.slice(-200)));
+  const msgs = chatLog();
+  msgs.push({ role:'assistant', content:'Luna Pulse: '+text,
+              model:'live belt update', systemUpdate:true });
+  localStorage.setItem('bh_chat', JSON.stringify(msgs.slice(-40)));
+  const banner = $('pulseBanner');
+  banner.textContent = 'Luna Pulse · '+text; banner.classList.add('on');
+  say('Luna Pulse: '+text);
+  if ($('chatLogView')) {
+    $('chatLogView').innerHTML = chatBubbles();
+    $('chatLogView').scrollTop = 1e9;
+  }
+  if (window.Notification && Notification.permission === 'granted')
+    new Notification('ByrdHouse · Luna Pulse', { body:text });
+}
+async function enableJobNotifications() {
+  if (!window.Notification) return say('Browser notifications are unavailable; in-app Luna updates remain on.');
+  const permission = await Notification.requestPermission();
+  say(permission === 'granted' ? 'Luna job alerts enabled.' : 'In-app Luna updates remain enabled.');
+}
+function pulseText(update) {
+  const j = update.job;
+  if (!j) return '';
+  if (update.action === 'job.running')
+    return `${j.type} ${j.id.slice(-8)} is now running on ${j.worker_id || 'the worker'}.`;
+  if (update.action === 'job.done') return j.message;
+  if (update.action === 'job.failed')
+    return j.status === 'queued'
+      ? `${j.type} ${j.id.slice(-8)} failed an attempt and will retry: ${j.error || 'unknown error'}`
+      : j.message;
+  if (update.action === 'job.cancel') return j.message;
+  if (update.action === 'job.requeue')
+    return `${j.type} ${j.id.slice(-8)} was requeued; Luna is watching the same job id.`;
+  return '';
+}
+async function pulseJobs() {
+  try {
+    const saved = localStorage.getItem('bh_job_event_cursor');
+    const data = await jget('/job-updates?after='+(saved === null ? 'latest' : saved));
+    window._pulseActive = Object.fromEntries((data.active || []).map(j => [j.id, j]));
+    if (saved === null) {
+      localStorage.setItem('bh_job_event_cursor', String(data.latest_event_id || 0));
+    } else {
+      const latestPerJob = {};
+      for (const u of data.updates || []) latestPerJob[u.subject] = u;
+      for (const u of Object.values(latestPerJob)) {
+        const text = pulseText(u);
+        if (text) pushLunaUpdate(text, 'event:'+u.id);
+      }
+      localStorage.setItem('bh_job_event_cursor', String(data.cursor || saved));
+    }
+    for (const j of data.overdue || [])
+      pushLunaUpdate(j.message+' '+j.next_action, 'slow:'+j.id+':'+j.status_changed_at);
+  } catch (e) {
+    // Old router during a rolling two-PC deployment: normal polling still works.
+  }
+}
 
 /* ── tooltips: clean labels + a ? that pops the description (tap or hover) ── */
 const qtip = text => `<span class="q" onclick="showTip(event)" data-tip="${esc(text)}">?</span>`;
@@ -314,9 +387,15 @@ function ago(ts) {
 function busyCards(jobs) {
   const gen = t => t==='image.generate'||t==='content.thumbnail';
   return jobs.filter(j => ['queued','claimed','running'].includes(j.status) && gen(j.type))
-    .map(j => `<div class="busy"><b>${esc(j.status==='queued'?'queued':'generating…')}</b>
-      <span>${esc(j.type)}</span><span>${esc(j.id.slice(-8))}</span>
-      <span>${esc(j.status==='queued' ? 'queued '+ago(j.created_at) : 'started '+ago(j.claimed_at))}</span></div>`).join('');
+    .map(j => {
+      const pulse = (window._pulseActive || {})[j.id];
+      return `<div class="busy ${pulse && pulse.overdue ? 'slow' : ''}"><b>${esc(
+        pulse && pulse.overdue ? 'taking longer than expected' :
+        j.status==='queued' ? 'queued' : 'generating…')}</b>
+        <span>${esc(j.type)}</span><span>${esc(j.id.slice(-8))}</span>
+        <span>${esc(pulse && pulse.overdue ? pulse.phase_seconds+'s / expected '+pulse.expected_seconds+'s' :
+          j.status==='queued' ? 'queued '+ago(j.created_at) : 'started '+ago(j.claimed_at))}</span></div>`;
+    }).join('');
 }
 async function imgOutHtml() {
   const jobs = await jget('/jobs?limit=30');
@@ -519,7 +598,7 @@ async function submitGen() {
     if (!srcArt && type !== 'content.enhance') {
       const missing = missingRequiredSlots(d.slots);
       if (missing.length)
-        throw new Error('fill the required slot(s): ' + missing.join(', '));
+        throw new Error('Missing required fields: ' + missing.join(', '));
     }
     const j = await jpost('/jobs', { type,
       project:d.project,
@@ -553,6 +632,7 @@ V.chat = async () => `
       <input id="chatIn" placeholder="e.g. which of today's thumbnails should I post?" style="flex:1"
              onkeydown="if(event.key==='Enter')sendChat()">
       <button class="b" id="chatSend" onclick="sendChat()">Send</button>
+      <button class="s" onclick="enableJobNotifications()">job alerts</button>
       <button class="s" onclick="localStorage.removeItem('bh_chat');render()">clear</button>
     </div></div>`;
 async function sendChat() {
@@ -568,7 +648,8 @@ async function sendChat() {
   $('chatLogView').innerHTML = chatBubbles() + '<div class="bubble assistant">…</div>';
   $('chatLogView').scrollTop = 1e9;
   try {
-    const j = await jpost('/chat', { messages: msgs.filter(m => m.role !== 'tool').slice(-12) });
+    const j = await jpost('/chat', { messages: msgs.filter(
+      m => m.role !== 'tool' && !m.systemUpdate).slice(-12) });
     if (j.actions && j.actions.length)
       msgs.push({ role: 'tool', content: '🔧 ' + j.actions.map(a =>
         a.tool + (a.args && a.args.prompt ? ': ' + a.args.prompt.slice(0, 60) : '')).join(' · ') });
@@ -644,8 +725,8 @@ V.memory = async () => {
 V.mcp = async () => {
   const checks = ((window._status||{}).machine?.checks||[]).filter(c => c.name.startsWith('mcp_'));
   return `<div class="grid"><div class="panel"><h2>MCP Tools — roster (max 8, every server earns a room)</h2>
-    <div class="note">Core six: Memory · Filesystem · Fetch · Brave Search · SQLite · LM Studio bridge.<br>
-    Weekend two: Godot MCP · Godot Docs. Configure ping URLs in byrdhouse.config.json → byrd-status shows green here.</div>
+    <div class="note">Core seven: ByrdHouse Belt · Memory · Filesystem · Fetch · Brave Search · SQLite · LM Studio bridge.<br>
+    Weekend one: Godot MCP. Godot documentation comes through Fetch, keeping the eight-server roster bounded. Configure ping URLs in byrdhouse.config.json → byrd-status shows green here.</div>
     <table style="margin-top:10px">${checks.map(c =>
       `<tr><td><span class="light ${c.state}"></span></td><td>${esc(c.name.replace('mcp_',''))}</td><td class="muted">${esc(c.detail)}</td></tr>`).join('')
       || '<tr><td class="muted">no MCP pings configured yet</td></tr>'}</table></div></div>`;
@@ -716,7 +797,7 @@ let _refreshing = false;
 async function tick() {
   if (_refreshing) return;  // no overlapping refresh cycles
   _refreshing = true;
-  try { await chips(); await render(); } finally { _refreshing = false; }
+  try { await chips(); await pulseJobs(); await render(); } finally { _refreshing = false; }
 }
 function activeJobs() {
   const q = (window._status||{}).queue || {};

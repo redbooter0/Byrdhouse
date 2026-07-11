@@ -17,6 +17,8 @@ Endpoints (v2 §6):                                          access
   GET  /status              status.json + live queue counts open
   POST /jobs                create job {idempotency_key?}    token
   GET  /jobs?status=&project=&type=                         open
+  GET  /jobs/<id>/observe?slow_after=                       open
+  GET  /job-updates?after=&limit=&slow_after=               open
   POST /jobs/claim          {worker_id,caps,mode}           token
   POST /jobs/<id>/status    {status:running|done|failed}    token
   POST /jobs/<id>/requeue   retry dead/cancelled/stuck job  token
@@ -28,6 +30,7 @@ Endpoints (v2 §6):                                          access
   POST /artifacts/<id>/review {action:approve|reject|judge} token
   POST /artifacts/<id>/refine {strength,scale,prompt,lora}   token
   GET  /recipes             list recipe files               open
+  POST /recipes/validate    preflight recipe + slots         token
   POST /chat                {messages:[...]} -> operator    token
   POST /workers/heartbeat   {id,caps,mode,vram}             token
   GET  /mode                requested + worker modes        open
@@ -73,6 +76,21 @@ REVIEW_TYPES = {"image.generate", "image.refine", "image.upscale", "video.i2v"} 
 # a generation can take minutes), so liveness thresholds must be generous.
 WORKER_OFFLINE_SEC = 600    # no heartbeat for 10 min -> reported offline
 JOB_REAP_SEC = 900          # claimed/running 15 min past last heartbeat -> failure path
+ACTIVE_JOB_STATUSES = {"queued", "claimed", "running"}
+TERMINAL_JOB_STATUSES = {"done", "needs_review", "dead", "cancelled"}
+# Conservative first-run thresholds. Luna Pulse replaces these with 1.5x the
+# local p90 once a job type has at least three successful hardware samples.
+JOB_EXPECTED_SECONDS = {
+    "image.generate": 300,
+    "content.thumbnail": 360,
+    "image.refine": 420,
+    "image.upscale": 420,
+    "image.judge": 180,
+    "content.enhance": 180,
+    "content.package": 180,
+    "content.research": 120,
+    "video.i2v": 1800,
+}
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs(
@@ -82,7 +100,8 @@ CREATE TABLE IF NOT EXISTS jobs(
   required_mode TEXT DEFAULT 'ANY', required_caps TEXT,
   status TEXT NOT NULL DEFAULT 'queued',
   worker_id TEXT, attempts INTEGER DEFAULT 0, max_attempts INTEGER DEFAULT 2,
-  created_at TEXT, claimed_at TEXT, finished_at TEXT, error TEXT);
+  created_at TEXT, claimed_at TEXT, finished_at TEXT, status_changed_at TEXT,
+  error TEXT);
 CREATE TABLE IF NOT EXISTS artifacts(
   id TEXT PRIMARY KEY, job_id TEXT, project_id TEXT,
   kind TEXT, path TEXT, sha256 TEXT,
@@ -113,6 +132,7 @@ MIGRATIONS = [
     ("jobs", "idempotency_key", "ALTER TABLE jobs ADD COLUMN idempotency_key TEXT"),
     ("jobs", "parent_id",       "ALTER TABLE jobs ADD COLUMN parent_id TEXT"),
     ("jobs", "run_after",       "ALTER TABLE jobs ADD COLUMN run_after TEXT"),
+    ("jobs", "status_changed_at", "ALTER TABLE jobs ADD COLUMN status_changed_at TEXT"),
 ]
 INDEXES = [
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_idem ON jobs(idempotency_key)"
@@ -169,12 +189,15 @@ def live_workers(cols="*"):
 
 def fail_job(job, err, actor):
     """The one retry->dead path (v2 §3): requeue while attempts remain, else dead."""
+    changed = now()
     if job["attempts"] < job["max_attempts"]:
-        db().execute("UPDATE jobs SET status='queued', worker_id=NULL, error=? WHERE id=?",
-                     (err, job["id"]))
+        db().execute(
+            "UPDATE jobs SET status='queued', worker_id=NULL, status_changed_at=?, error=?"
+            " WHERE id=?", (changed, err, job["id"]))
     else:
-        db().execute("UPDATE jobs SET status='dead', finished_at=?, error=? WHERE id=?",
-                     (now(), err, job["id"]))
+        db().execute(
+            "UPDATE jobs SET status='dead', finished_at=?, status_changed_at=?, error=?"
+            " WHERE id=?", (changed, changed, err, job["id"]))
     db().commit()
     event(actor, "job.failed", job["id"], {"error": err}, ok=False)
 
@@ -200,6 +223,285 @@ def reaper():
 
 def job_row(jid):
     return db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
+
+
+def _as_utc(value):
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return None
+
+
+def _seconds(start, end):
+    a, b = _as_utc(start), _as_utc(end)
+    return max(0, int((b - a).total_seconds())) if a and b else 0
+
+
+def _bounded_int(value, default, low=1, high=86400):
+    try:
+        return max(low, min(int(value), high))
+    except (TypeError, ValueError):
+        return default
+
+
+def expected_job_seconds(job_type):
+    """Return a hardware-aware slow threshold and explain its source.
+
+    Three completed local samples are enough to replace the conservative
+    bootstrap value. p90 * 1.5 tolerates normal variance without teaching Luna
+    that one unusually fast run is the new promise.
+    """
+    fallback = JOB_EXPECTED_SECONDS.get(job_type, 300)
+    rows = db().execute(
+        "SELECT CAST(ROUND((julianday(finished_at)-julianday(claimed_at))*86400)"
+        " AS INTEGER) seconds FROM jobs WHERE type=? AND claimed_at IS NOT NULL"
+        " AND finished_at IS NOT NULL AND status IN ('done','needs_review')"
+        " ORDER BY finished_at DESC LIMIT 25", (job_type,)).fetchall()
+    durations = sorted(r["seconds"] for r in rows if r["seconds"] and r["seconds"] > 0)
+    if len(durations) < 3:
+        return fallback, "bootstrap_default"
+    p90_index = max(0, ((9 * len(durations) + 9) // 10) - 1)
+    floor = 300 if job_type == "video.i2v" else 60
+    learned = max(floor, int(durations[p90_index] * 1.5))
+    # A corrupted timestamp must not make a job look healthy for days.
+    learned = min(learned, max(fallback * 4, 600))
+    return learned, f"local_history_p90_x1.5 ({len(durations)} samples)"
+
+
+def job_observation(job, slow_after=None):
+    """Luna Pulse's stable view of one job: state, age, slowness and next act."""
+    if not job:
+        return None
+    j = dict(job)
+    status = j["status"]
+    current = now()
+    finished_or_now = j.get("finished_at") or current
+    expected, source = expected_job_seconds(j["type"])
+    if slow_after is not None:
+        expected = _bounded_int(slow_after, expected)
+        source = "caller_override"
+
+    if status == "queued":
+        phase_start = j.get("status_changed_at") or j.get("created_at")
+        # Queue delay is a scheduling/liveness signal, not generation time.
+        threshold = expected if slow_after is not None else max(600, expected * 2)
+        overdue_reason = "waiting_for_compatible_worker"
+    elif status in {"claimed", "running"}:
+        phase_start = j.get("status_changed_at") or j.get("claimed_at") or j.get("created_at")
+        threshold = expected
+        overdue_reason = "running_longer_than_expected"
+    else:
+        phase_start = j.get("status_changed_at") or j.get("finished_at") or j.get("created_at")
+        threshold = expected
+        overdue_reason = None
+
+    phase_seconds = _seconds(phase_start, current)
+    elapsed_seconds = _seconds(j.get("created_at"), finished_or_now)
+    run_seconds = _seconds(j.get("claimed_at"), finished_or_now) if j.get("claimed_at") else 0
+    overdue = status in ACTIVE_JOB_STATUSES and phase_seconds >= threshold
+    terminal = status in TERMINAL_JOB_STATUSES
+    short_id = j["id"][-8:]
+    if j["type"] in {"image.generate", "image.refine", "image.upscale"}:
+        label = "Image"
+    elif j["type"] == "content.thumbnail":
+        label = "Thumbnail"
+    else:
+        label = "Job"
+
+    if status == "queued":
+        message = f"{label} {short_id} is queued and waiting for a compatible worker."
+    elif status in {"claimed", "running"}:
+        message = f"{label} {short_id} is running on {j.get('worker_id') or 'a worker'}."
+    elif status == "needs_review":
+        message = f"{label} {short_id} finished and is ready for review."
+    elif status == "done":
+        message = f"{label} {short_id} finished successfully."
+    elif status == "dead":
+        message = f"{label} {short_id} failed after {j.get('attempts', 0)} attempt(s): {j.get('error') or 'unknown error'}"
+    else:
+        message = f"{label} {short_id} was cancelled."
+    if overdue:
+        message = (f"{label} {short_id} is taking longer than expected "
+                   f"({phase_seconds}s vs {threshold}s); it is still {status}.")
+
+    if status == "needs_review":
+        next_action = "list_artifacts for this job, then ask the founder to approve or reject"
+    elif status == "dead":
+        next_action = "report the exact error; do not submit a duplicate automatically"
+    elif overdue:
+        next_action = "check belt_status and recent_events; keep watching this same job id"
+    elif terminal:
+        next_action = "report completion"
+    else:
+        next_action = "call watch_job again with this status as known_status"
+
+    artifacts = []
+    if terminal:
+        artifacts = [dict(r) for r in db().execute(
+            "SELECT id,kind,status,score FROM artifacts WHERE job_id=? ORDER BY created_at",
+            (j["id"],))]
+    return {
+        "id": j["id"], "type": j["type"], "project": j.get("project_id"),
+        "status": status, "worker_id": j.get("worker_id"),
+        "attempts": j.get("attempts", 0), "max_attempts": j.get("max_attempts", 0),
+        "created_at": j.get("created_at"), "claimed_at": j.get("claimed_at"),
+        "finished_at": j.get("finished_at"), "status_changed_at": phase_start,
+        "elapsed_seconds": elapsed_seconds, "run_seconds": run_seconds,
+        "phase_seconds": phase_seconds, "expected_seconds": threshold,
+        "expectation_source": source, "overdue": overdue,
+        "overdue_reason": overdue_reason if overdue else None,
+        "terminal": terminal, "error": j.get("error"), "artifacts": artifacts,
+        "message": message, "next_action": next_action,
+    }
+
+
+def job_updates(after=0, limit=100, slow_after=None):
+    """Incremental job transitions plus active/overdue snapshots for Luna."""
+    latest = db().execute("SELECT COALESCE(MAX(id),0) id FROM events").fetchone()["id"]
+    after = latest if str(after).lower() == "latest" else _bounded_int(
+        after, 0, low=0, high=2_147_483_647)
+    limit = _bounded_int(limit, 100, low=1, high=200)
+    rows = db().execute(
+        "SELECT * FROM events WHERE id>? AND id<=? AND action LIKE 'job.%'"
+        " ORDER BY id ASC LIMIT ?", (after, latest, limit)).fetchall()
+    cache, updates = {}, []
+    for row in rows:
+        item = dict(row)
+        try:
+            item["detail"] = json.loads(item.get("detail") or "{}")
+        except (TypeError, json.JSONDecodeError):
+            item["detail"] = {}
+        if item["subject"] not in cache:
+            cache[item["subject"]] = job_observation(job_row(item["subject"]), slow_after)
+        item["job"] = cache[item["subject"]]
+        updates.append(item)
+    active = [job_observation(r, slow_after) for r in db().execute(
+        "SELECT * FROM jobs WHERE status IN ('queued','claimed','running')"
+        " ORDER BY created_at ASC LIMIT 200")]
+    return {
+        "updates": updates,
+        "active": active,
+        "overdue": [j for j in active if j["overdue"]],
+        # If the batch filled, continue from its last job event. Otherwise every
+        # event through latest has been inspected, including non-job events.
+        "cursor": updates[-1]["id"] if len(updates) == limit else latest,
+        "latest_event_id": latest,
+    }
+
+
+def _recipe_spec(recipe_name):
+    """Resolve a recipe id or pinned id@version and return (spec, error)."""
+    name = str(recipe_name or "").strip()
+    m = re.fullmatch(r"([\w-]+)(?:@(\d+))?", name)
+    if not m:
+        return None, f"invalid recipe '{name}'"
+    rid, pinned = m.group(1), m.group(2)
+    if pinned:
+        candidates = [ROOT / "recipes" / f"{rid}.v{pinned}.json"]
+    else:
+        candidates = [p for p in (ROOT / "recipes").glob(f"{rid}.v*.json")
+                      if re.search(r"\.v(\d+)\.json$", p.name)]
+        candidates.sort(key=lambda p: int(re.search(r"\.v(\d+)\.json$", p.name).group(1)))
+    if not candidates or not candidates[-1].exists():
+        return None, f"no recipe '{name}'"
+    try:
+        return json.loads(candidates[-1].read_text(encoding="utf-8-sig")), None
+    except (OSError, json.JSONDecodeError) as e:
+        return None, f"recipe '{name}' cannot be loaded: {e}"
+
+
+def recipe_contract(payload, job_type):
+    """Reject invalid recipe jobs at the shared dashboard/chat/MCP boundary."""
+    if job_type not in {"image.generate", "content.thumbnail"}:
+        return None, None, None
+    payload = payload or {}
+    if not isinstance(payload, dict):
+        return "job payload must be an object", None, None
+    recipe_name = str(payload.get("recipe") or "").strip()
+    # Real source images skip generation and therefore need no recipe.
+    if job_type == "content.thumbnail" and (
+            payload.get("image_path") or payload.get("source_artifact")):
+        return None, None, None
+    if not recipe_name:
+        return "recipe is required for this job", None, None
+    spec, error = _recipe_spec(recipe_name)
+    if error:
+        return error, None, None
+    template = spec.get("template")
+    if not isinstance(template, str) or not template.strip():
+        return "recipe authoring error: template must be a non-empty string", None, None
+    vary = spec.get("vary") or {}
+    if not isinstance(vary, dict):
+        return "recipe authoring error: vary must be an object of option arrays", None, None
+    for key, options in vary.items():
+        if not isinstance(options, list):
+            return (f"recipe authoring error: vary slot '{key}' must be an array",
+                    None, None)
+        if not options:
+            return (f"recipe authoring error: vary slot '{key}' has no options",
+                    None, None)
+        if any(not str(option).strip() for option in options):
+            return (f"recipe authoring error: vary slot '{key}' contains an empty option",
+                    None, None)
+    slots = payload.get("slots") or {}
+    if not isinstance(slots, dict):
+        return "recipe slots must be an object", None, None
+    template_slots = list(dict.fromkeys(
+        re.findall(r"\{(\w+)\}", template)))
+    missing = sorted(k for k in template_slots
+                     if k not in vary and not str(slots.get(k, "")).strip())
+    if missing:
+        return "missing required recipe slots: " + ", ".join(missing), None, None
+    try:
+        version = int(spec["version"])
+    except (KeyError, TypeError, ValueError):
+        return "recipe authoring error: version must be an integer", None, None
+    recipe_id = str(spec.get("id") or "").strip()
+    if not recipe_id:
+        return "recipe authoring error: id is required", None, None
+    return None, recipe_id, version
+
+
+def capability_manifest():
+    """Public, secret-free connection contract for Studios and MCP clients."""
+    router = CFG["services"]["router"].rstrip("/")
+    lmstudio = CFG["services"]["lmstudio"].rstrip("/")
+    return {
+        "name": "ByrdHouse",
+        "api_version": 1,
+        "endpoints": {
+            "router": router,
+            "health": f"{router}/health",
+            "status": f"{router}/status",
+            "recipes": f"{router}/recipes",
+            "recipe_validate": f"{router}/recipes/validate",
+            "jobs": f"{router}/jobs",
+            "job_updates": f"{router}/job-updates",
+            "chat": f"{router}/chat",
+            "capabilities": f"{router}/capabilities",
+            "lmstudio_openai": lmstudio,
+            "lmstudio_models": f"{lmstudio}/models",
+        },
+        "mcp": {
+            "transport": "stdio",
+            "server": "scripts/byrd_belt_mcp.py",
+            "readonly_env": "BYRD_BELT_MCP_READONLY=1",
+            "tool_discovery": "MCP tools/list",
+            "observation_tools": ["job_status", "job_updates", "watch_job"],
+        },
+        "luna_pulse": {
+            "purpose": "job transition, completion, failure and overdue supervision",
+            "in_app_tools": [t["function"]["name"] for t in CHAT_TOOLS],
+            "terminal_statuses": sorted(TERMINAL_JOB_STATUSES),
+        },
+        "worker_only": {
+            "comfyui": CFG["services"]["comfyui"].rstrip("/"),
+            "note": "Bot clients queue belt jobs; they never call ComfyUI directly.",
+        },
+    }
 
 
 LEARN_DIMS = {  # dimension -> how to pull its value out of an artifact card
@@ -258,6 +560,19 @@ CHAT_TOOLS = [
         "name": "get_status", "description": "Live queue counts and worker liveness.",
         "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {
+        "name": "get_job_status",
+        "description": "Observe one queued/running job. Returns elapsed time, learned "
+                       "expectation, overdue signal, terminal state, error and artifacts.",
+        "parameters": {"type": "object", "properties": {
+            "job_id": {"type": "string"}}, "required": ["job_id"]}}},
+    {"type": "function", "function": {
+        "name": "get_job_updates",
+        "description": "Luna Pulse: transitions since an event cursor plus every active "
+                       "or overdue job. Use this to tell the founder what changed.",
+        "parameters": {"type": "object", "properties": {
+            "after_event_id": {"type": "integer"},
+            "slow_after_seconds": {"type": "integer"}}}}},
+    {"type": "function", "function": {
         "name": "list_artifacts",
         "description": "Recent artifacts with id, kind, score, status, purpose.",
         "parameters": {"type": "object", "properties": {
@@ -309,6 +624,12 @@ def run_chat_tool(name, args, actor):
         counts = {r["status"]: r["n"] for r in db().execute(
             "SELECT status, COUNT(*) n FROM jobs GROUP BY status")}
         return {"queue": counts, "workers": live_workers("id,mode,last_heartbeat")}
+    if name == "get_job_status":
+        return job_observation(job_row(str(args.get("job_id", "")))) or {
+            "error": "no such job"}
+    if name == "get_job_updates":
+        return job_updates(args.get("after_event_id", 0), 50,
+                           args.get("slow_after_seconds"))
     if name == "list_artifacts":
         sql, a = ("SELECT id,kind,score,status,project_id,meta FROM artifacts"
                   " WHERE rowid IN (SELECT MAX(rowid) FROM artifacts"
@@ -325,6 +646,7 @@ def run_chat_tool(name, args, actor):
         return out
     if name == "queue_image":
         jid = new_id("job")
+        created = now()
         payload = {"recipe": "freeform", "slots": {"prompt": str(args["prompt"])[:500]},
                    "project": args.get("project", "careyrpg"),
                    "purpose": f"chat request: {str(args['prompt'])[:80]}"}
@@ -332,12 +654,14 @@ def run_chat_tool(name, args, actor):
             payload["aspect"] = args["aspect"]
         db().execute(
             "INSERT INTO jobs(id,type,project_id,payload,priority,required_mode,"
-            "required_caps,status,max_attempts,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+            "required_caps,status,max_attempts,created_at,status_changed_at)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
             (jid, "image.generate", payload["project"], json.dumps(payload), 5,
-             "IMAGE", json.dumps(["comfyui"]), "queued", 2, now()))
+             "IMAGE", json.dumps(["comfyui"]), "queued", 2, created, created))
         db().commit()
         event(actor, "job.create", jid, {"type": "image.generate", "via": "chat-tool"})
-        return {"queued": jid, "note": "it will appear in the Image Studio when done"}
+        return {"queued": jid, "status": "queued",
+                "next_action": "track this id with get_job_status until it is terminal"}
     if name == "refine_image":
         mode = args.get("mode", "upscale")
         opts = ({"strength": 0.3, "scale": 2.0} if mode == "upscale"
@@ -382,6 +706,7 @@ def create_refine_job(aid, body, actor):
         return {"error": "artifact has no file path to refine"}, 400
     meta = json.loads(art["meta"] or "{}")
     jid = new_id("job")
+    created = now()
     payload = {
         "source_artifact": aid, "source_path": art["path"],
         "project": art["project_id"] or "sandbox",
@@ -395,10 +720,10 @@ def create_refine_job(aid, body, actor):
             payload[k] = body[k]
     db().execute(
         "INSERT INTO jobs(id,type,project_id,payload,priority,required_mode,"
-        "required_caps,status,max_attempts,created_at)"
-        " VALUES(?,?,?,?,?,?,?,?,?,?)",
+        "required_caps,status,max_attempts,created_at,status_changed_at)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?,?)",
         (jid, "image.refine", payload["project"], json.dumps(payload), 5,
-         "IMAGE", json.dumps(["comfyui"]), "queued", 2, now()))
+         "IMAGE", json.dumps(["comfyui"]), "queued", 2, created, created))
     db().commit()
     event(actor, "job.create", jid,
           {"type": "image.refine", "source": aid,
@@ -509,6 +834,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/health":
             return self._send({"ok": True, "ts": now()})
 
+        if path == "/capabilities":
+            return self._send(capability_manifest())
+
         if path == "/favicon.ico":
             return self._send(b"", content_type="image/x-icon")
 
@@ -532,6 +860,22 @@ class Handler(BaseHTTPRequestHandler):
             sql += " ORDER BY created_at DESC LIMIT ?"
             args.append(int(q.get("limit", 100)))
             return self._send([dict(r) for r in db().execute(sql, args)])
+
+        if path == "/job-updates":
+            return self._send(job_updates(q.get("after", 0), q.get("limit", 100),
+                                          q.get("slow_after")))
+
+        m = re.fullmatch(r"/jobs/([\w.-]+)/observe", path)
+        if m:
+            row = job_row(m.group(1))
+            return self._send(job_observation(row, q.get("slow_after")) if row
+                              else {"error": "no such job"}, 200 if row else 404)
+
+        m = re.fullmatch(r"/jobs/([\w.-]+)", path)
+        if m:
+            row = job_row(m.group(1))
+            return self._send(dict(row) if row else {"error": "no such job"},
+                              200 if row else 404)
 
         if path == "/artifacts":
             # One card per output: retried jobs used to register duplicate rows
@@ -729,11 +1073,30 @@ class Handler(BaseHTTPRequestHandler):
             body = self._body()
         except json.JSONDecodeError:
             return self._send({"error": "invalid JSON"}, 400)
+        if not isinstance(body, dict):
+            return self._send({"error": "JSON body must be an object"}, 400)
+
+        if path == "/recipes/validate":
+            jtype = body.get("type", "image.generate")
+            payload = body.get("payload", {}) or {}
+            contract_error, recipe_id, recipe_version = recipe_contract(payload, jtype)
+            if contract_error:
+                return self._send({"valid": False, "error": contract_error})
+            return self._send({"valid": True, "recipe_id": recipe_id,
+                               "recipe_version": recipe_version})
 
         if path == "/jobs":
             jtype = body.get("type", "")
             if jtype not in JOB_TYPES and not jtype.startswith("content."):
                 return self._send({"error": f"unknown job type '{jtype}'"}, 400)
+            job_payload = body.get("payload", {}) or {}
+            if not isinstance(job_payload, dict):
+                return self._send({"error": "job payload must be an object"}, 400)
+            contract_error, recipe_id, recipe_version = recipe_contract(job_payload, jtype)
+            if contract_error:
+                event(self._actor(), "job.reject", body.get("idempotency_key", "unsubmitted"),
+                      {"type": jtype, "error": contract_error}, ok=False)
+                return self._send({"error": contract_error}, 400)
             # Idempotency: a double-tap or a network retry carrying the same key
             # returns the job already created instead of minting a duplicate.
             idem = body.get("idempotency_key")
@@ -742,21 +1105,24 @@ class Handler(BaseHTTPRequestHandler):
                     "SELECT id,status FROM jobs WHERE idempotency_key=?", (idem,)).fetchone()
                 if dup:
                     return self._send({"id": dup["id"], "status": dup["status"],
-                                       "idempotent": True}, 200)
+                                       "idempotent": True,
+                                       "observe": f"/jobs/{dup['id']}/observe"}, 200)
             jid = new_id("job")
+            created = now()
             db().execute(
                 "INSERT INTO jobs(id,type,project_id,recipe_id,recipe_version,payload,"
-                "priority,required_mode,required_caps,status,max_attempts,created_at,idempotency_key)"
-                " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "priority,required_mode,required_caps,status,max_attempts,created_at,"
+                "status_changed_at,idempotency_key) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (jid, jtype, body.get("project", "sandbox"),
-                 body.get("recipe"), body.get("recipe_version"),
-                 json.dumps(body.get("payload", {})), int(body.get("priority", 5)),
+                 recipe_id or body.get("recipe"), recipe_version or body.get("recipe_version"),
+                 json.dumps(job_payload), int(body.get("priority", 5)),
                  body.get("required_mode", "ANY"),
                  json.dumps(body.get("required_caps", [])),
-                 "queued", int(body.get("max_attempts", 2)), now(), idem))
+                 "queued", int(body.get("max_attempts", 2)), created, created, idem))
             db().commit()
             event(self._actor(), "job.create", jid, {"type": jtype})
-            return self._send({"id": jid, "status": "queued"}, 201)
+            return self._send({"id": jid, "status": "queued",
+                               "observe": f"/jobs/{jid}/observe"}, 201)
 
         if path == "/jobs/claim":
             wid, caps = body.get("worker_id", "?"), set(body.get("caps", []))
@@ -768,10 +1134,12 @@ class Handler(BaseHTTPRequestHandler):
                 need = set(json.loads(job["required_caps"] or "[]"))
                 if not need.issubset(caps):
                     continue
+                changed = now()
                 cur = db().execute(
                     "UPDATE jobs SET status='claimed', worker_id=?, claimed_at=?,"
-                    " attempts=attempts+1 WHERE id=? AND status='queued'",
-                    (wid, now(), job["id"]))
+                    " status_changed_at=?, attempts=attempts+1"
+                    " WHERE id=? AND status='queued'",
+                    (wid, changed, changed, job["id"]))
                 db().commit()
                 if cur.rowcount:
                     event(wid, "job.claim", job["id"], {"type": job["type"]})
@@ -786,11 +1154,14 @@ class Handler(BaseHTTPRequestHandler):
             if not job:
                 return self._send({"error": "no such job"}, 404)
             if new_status == "running":
-                db().execute("UPDATE jobs SET status='running' WHERE id=?", (jid,))
+                db().execute("UPDATE jobs SET status='running', status_changed_at=? WHERE id=?",
+                             (now(), jid))
             elif new_status == "done":
                 final = "needs_review" if job["type"] in REVIEW_TYPES else "done"
-                db().execute("UPDATE jobs SET status=?, finished_at=? WHERE id=?",
-                             (final, now(), jid))
+                changed = now()
+                db().execute(
+                    "UPDATE jobs SET status=?, finished_at=?, status_changed_at=? WHERE id=?",
+                    (final, changed, changed, jid))
             elif new_status == "failed":
                 fail_job(job, str(body.get("error", ""))[:2000], self._actor())
                 return self._send(dict(job_row(jid)))
@@ -810,7 +1181,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send({"error": f"cannot requeue a '{job['status']}' job"}, 400)
             db().execute(
                 "UPDATE jobs SET status='queued', worker_id=NULL, attempts=0,"
-                " error=NULL, finished_at=NULL WHERE id=?", (jid,))
+                " claimed_at=NULL, error=NULL, finished_at=NULL, status_changed_at=?"
+                " WHERE id=?", (now(), jid))
             db().commit()
             event(self._actor(), "job.requeue", jid, {"was": job["status"]})
             return self._send(dict(job_row(jid)))
@@ -823,7 +1195,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send({"error": "no such job"}, 404)
             if job["status"] != "queued":
                 return self._send({"error": f"only queued jobs can be cancelled (this one is '{job['status']}')"}, 400)
-            db().execute("UPDATE jobs SET status='cancelled', finished_at=? WHERE id=?", (now(), jid))
+            changed = now()
+            db().execute(
+                "UPDATE jobs SET status='cancelled', finished_at=?, status_changed_at=?"
+                " WHERE id=?", (changed, changed, jid))
             db().commit()
             event(self._actor(), "job.cancel", jid)
             return self._send(dict(job_row(jid)))

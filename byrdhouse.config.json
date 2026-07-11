@@ -1,5 +1,5 @@
 {
-  "_comment": "ByrdHouse config v1 (Blueprint v2 §4). ONE copy at %BYRDHOUSE_ROOT% on each machine. Scripts read this file — no script may hardcode a host, port, or path. Use Tailscale MagicDNS names, never raw IPs. THIS FILE IS A TEMPLATE: real values (tokens, model names) live only on the machines, never in git.",
+  "_comment": "ByrdHouse config v1 (Blueprint v2 §4). ONE copy at %BYRDHOUSE_ROOT% on each machine. Scripts read this file — no script may hardcode a host, port, or path. Use stable private-network DNS names and verify whether transport is LAN or a private overlay; never assume a hostname proves Tailscale. THIS FILE IS A TEMPLATE: real values (tokens, model names) live only on the machines, never in git.",
   "hosts": {
     "gaming": "byrd-gaming",
     "mini": "byrd-mini",
@@ -80,8 +80,11 @@
       "room": "Realms (weekend)",
       "ping": ""
     },
-    "godot-docs": {
-      "room": "Realms (weekend)",
+    "byrdhouse-belt": {
+      "room": "Command Center",
+      "transport": "stdio",
+      "command": "python",
+      "script": "scripts/byrd_belt_mcp.py",
       "ping": ""
     }
   },

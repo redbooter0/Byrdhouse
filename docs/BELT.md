@@ -67,12 +67,15 @@ patterns, and we can add the rest one compounding piece at a time.**
 
 ## Security & trust boundary (be honest about what this is)
 
-The belt is a **trusted single-user system on a private tailnet** — correct for
-one founder, NOT a multi-user SaaS backend. Known, deliberate boundaries:
+The belt is a **trusted single-user system on a private network** — correct for
+one founder, NOT a multi-user SaaS backend. Today the two PCs communicate over
+LAN; a `byrd-mini` hostname does not prove a tailnet. Tailscale must be installed,
+running, and tested before claiming away-from-home private-overlay access.
+Known, deliberate boundaries:
 
 - One global admin bearer token; several GET endpoints are open; CORS is
   permissive; the dashboard stores the token in browser localStorage. Fine on a
-  private tailnet during development. Before any outside user / public host,
+  private LAN/overlay during development. Before any outside user / public host,
   this needs real auth, per-user scoping, and locked-down CORS. Do not pretend
   otherwise.
 - **Token hygiene**: the config in git is a template (`admin_token` must stay

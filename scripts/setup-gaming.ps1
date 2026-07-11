@@ -11,7 +11,7 @@ $repo = Split-Path $PSScriptRoot -Parent
 Write-Host "`nByrdHouse gaming-PC setup → $Root`n" -ForegroundColor Cyan
 
 # 1. Directory map (v2 §8)
-$dirs = 'db','docs','recipes','workflows','projects','artifacts','inbox','cleaned','processed','logs','scripts','router','dashboard'
+$dirs = 'db','docs','recipes','workflows','projects','artifacts','inbox','cleaned','processed','logs','scripts','router','dashboard','integrations'
 foreach ($d in $dirs) {
     $p = Join-Path $Root $d
     if (-not (Test-Path $p)) { New-Item -ItemType Directory -Path $p -Force | Out-Null; Write-Host "  created $p" }
@@ -27,7 +27,7 @@ if (-not (Test-Path $cfgDest)) {
 }
 
 # 3. Kit files: scripts, docs, recipes (overwrite = repo is the source of truth for kit files)
-foreach ($d in 'scripts','docs','recipes','workflows','router','dashboard') {
+foreach ($d in 'scripts','docs','recipes','workflows','router','dashboard','integrations') {
     $src = Join-Path $repo $d
     if (Test-Path $src) {
         Copy-Item "$src\*" (Join-Path $Root $d) -Recurse -Force

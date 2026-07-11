@@ -94,6 +94,89 @@ check('draft cleared only inside successful submitGen (after jpost)',
   && (html.match(/clearDraft\(\)/g) || []).length === 2 /* def + submitGen */);
 check('no overlapping refresh cycles', /if \(_refreshing\) return/.test(html));
 check('recipe change preserves typed slot values', /const keep = \{\}/.test(html));
+check('Luna Pulse consumes cursor-based job transitions',
+  /\/job-updates\?after=/.test(html)
+  && /bh_job_event_cursor/.test(html)
+  && /latestPerJob/.test(html));
+check('Luna Pulse reports running, overdue, completion, retry and review readiness',
+  /function pulseText\(update\)/.test(html)
+  && /taking longer than expected/.test(html)
+  && /failed an attempt and will retry/.test(html)
+  && /update\.action === 'job\.done'\) return j\.message/.test(html));
+check('trusted Pulse updates appear in chat but are not echoed back into the LLM',
+  /systemUpdate:true/.test(html)
+  && /!m\.systemUpdate/.test(html)
+  && /pushLunaUpdate/.test(html));
+check('browser job alerts require a founder gesture and retain in-app fallback',
+  /onclick="enableJobNotifications\(\)"/.test(html)
+  && /Notification\.requestPermission\(\)/.test(html));
 
-console.log(failures ? `\n${failures} FAILED` : '\nALL CHECKS PASSED');
-process.exit(failures ? 1 : 0);
+async function runSubmitContractTests() {
+  const spec = JSON.parse(fs.readFileSync(
+    path.join(__dirname, '..', 'recipes', 'yt_thumbnail.v4.json'), 'utf8'));
+  const allSlots = [...new Set([...spec.template.matchAll(/\{(\w+)\}/g)].map(m => m[1]))];
+  const recipe = { id:spec.id, version:spec.version, slots:allSlots, vary:Object.keys(spec.vary || {}) };
+  const required = recipe.slots.filter(s => !recipe.vary.includes(s));
+  function missingRequiredSlots(vals) {
+    return required.filter(s => !String((vals && vals[s]) || '').trim());
+  }
+  check('exact yt_thumbnail@4 contract makes emotion founder-required',
+    recipe.id === 'yt_thumbnail' && recipe.version === 4
+    && required.includes('emotion') && !recipe.vary.includes('emotion'));
+  check('vary-supplied slots are not founder inputs',
+    ['palette','lighting','composition'].every(s => recipe.vary.includes(s) && !required.includes(s)));
+  check('missing-slot validation names every founder-required field',
+    missingRequiredSlots({}).join(', ') === 'game, subject, emotion');
+  check('required founder labels are visibly starred',
+    /<label>\$\{esc\(s\)\} <span style="color:var\(--red\)">\*<\/span><\/label>/.test(html));
+
+  fields.recipe.value = 'yt_thumbnail@4';
+  fields.recipe.options = [{ value:'yt_thumbnail@4' }];
+  fields.thumbTitle.value = '';
+  fields.project.value = 'careyrpg';
+  fields.purpose.value = 'hardware contract regression';
+  fields.ckpt = makeInput(); fields.aspect = makeInput(); fields.lora = makeInput();
+  fields.enhance = { checked:false }; fields.view = { innerHTML:'form remains' };
+  slotInputs = [
+    Object.assign(makeInput('Palworld'), { dataset:{ slot:'game' } }),
+    Object.assign(makeInput('a Pal trainer'), { dataset:{ slot:'subject' } }),
+    Object.assign(makeInput(''), { dataset:{ slot:'emotion' } }),
+  ];
+  window._srcArtifact = null;
+  let said = '';
+  const posts = [];
+  const say = value => { said = value; };
+  const jpost = async (url, body) => { posts.push({url, body}); return {id:'job.valid'}; };
+  const render = () => {};
+  const submitStart = html.indexOf('async function submitGen()');
+  const submitEnd = html.indexOf('/* ── Operator Chat', submitStart);
+  check('submitGen source extracted for behavioural contract test',
+    submitStart >= 0 && submitEnd > submitStart);
+  const submitSource = html.slice(submitStart, submitEnd).trim();
+  const submitGen = eval('(' + submitSource + ')');
+
+  saveDraft();
+  await submitGen();
+  check('blank emotion blocks submit before POST and names every missing field',
+    posts.length === 0 && said === 'error: Missing required fields: emotion');
+  check('validation failure preserves draft and typed values',
+    loadDraft() !== null && slotInputs[0].value === 'Palworld'
+    && slotInputs[1].value === 'a Pal trainer' && fields.view.innerHTML === 'form remains');
+
+  slotInputs[2].value = 'wide-eyed shock';
+  saveDraft();
+  await submitGen();
+  check('filled emotion creates one valid pinned payload',
+    posts.length === 1 && posts[0].url === '/jobs'
+    && posts[0].body.payload.recipe === 'yt_thumbnail@4'
+    && posts[0].body.payload.slots.emotion === 'wide-eyed shock'
+    && posts[0].body.payload.slots.game === 'Palworld');
+  check('successful POST clears the draft', loadDraft() === null);
+}
+
+runSubmitContractTests().catch(e => {
+  console.error(e); failures++;
+}).finally(() => {
+  console.log(failures ? `\n${failures} FAILED` : '\nALL CHECKS PASSED');
+  process.exit(failures ? 1 : 0);
+});

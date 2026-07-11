@@ -22,15 +22,18 @@ Register in an MCP client (e.g. Cherry Studio / LM Studio) as:
     env: { BYRDHOUSE_ROOT: "D:/ByrdHouse" }
 """
 
+import hashlib
 import json
 import os
 import sys
+import time
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
 PROTOCOL_VERSION = "2024-11-05"
 SERVER_INFO = {"name": "byrd-belt", "version": "1.0.0"}
-READONLY = os.environ.get("BYRD_BELT_MCP_READONLY", "").lower() in ("1", "true", "yes")
+READONLY = os.environ.get("BYRD_BELT_MCP_READONLY", "1").lower() in ("1", "true", "yes")
 
 
 def _load_cfg():
@@ -69,6 +72,84 @@ def _belt_status(a):
     return router_call("/status")
 
 
+def _capabilities(a):
+    return router_call("/capabilities")
+
+
+def _list_recipes(a):
+    return router_call("/recipes")
+
+
+def _validate_recipe(a):
+    recipe = str(a.get("recipe", "")).strip()
+    if not recipe:
+        return {"valid": False, "error": "validate_recipe needs an exact recipe id@version"}
+    return router_call("/recipes/validate", {
+        "type": "image.generate",
+        "payload": {"recipe": recipe, "slots": a.get("slots") or {}}})
+
+
+def _job_status(a):
+    jid = urllib.parse.quote(str(a.get("job_id", "")).strip(), safe="._-")
+    if not jid:
+        return {"error": "job_status needs job_id"}
+    query = {}
+    if a.get("slow_after_seconds") is not None:
+        query["slow_after"] = int(a["slow_after_seconds"])
+    suffix = "?" + urllib.parse.urlencode(query) if query else ""
+    return router_call(f"/jobs/{jid}/observe{suffix}")
+
+
+def _job_updates(a):
+    query = {"after": max(0, int(a.get("after_event_id", 0))),
+             "limit": min(200, max(1, int(a.get("limit", 100))))}
+    if a.get("slow_after_seconds") is not None:
+        query["slow_after"] = int(a["slow_after_seconds"])
+    return router_call("/job-updates?" + urllib.parse.urlencode(query))
+
+
+def _watch_job(a):
+    """Bounded long-poll for MCP clients that cannot subscribe to events."""
+    jid = str(a.get("job_id", "")).strip()
+    if not jid:
+        return {"error": "watch_job needs job_id"}
+    known = str(a.get("known_status", "")).strip()
+    timeout = min(25, max(0, int(a.get("timeout_seconds", 20))))
+    poll = min(5.0, max(0.5, float(a.get("poll_seconds", 1.5))))
+    deadline = time.monotonic() + timeout
+    while True:
+        obs = _job_status(a)
+        changed = bool(known and obs.get("status") != known)
+        if obs.get("terminal") or obs.get("overdue") or changed:
+            obs["changed"] = changed
+            obs["watch_timed_out"] = False
+            return obs
+        if not known:
+            known = obs.get("status", "")
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            obs["changed"] = False
+            obs["watch_timed_out"] = True
+            return obs
+        time.sleep(min(poll, remaining))
+
+
+def _with_watch(result):
+    if isinstance(result, dict) and result.get("id"):
+        result["watch"] = {"tool": "watch_job", "arguments": {
+            "job_id": result["id"], "known_status": result.get("status", "queued")}}
+    return result
+
+
+def _idempotency_key(tool_name, arguments):
+    request_id = str(arguments.get("request_id")
+                     or arguments.get("_mcp_request_id") or "").strip()
+    if not request_id:
+        return None
+    return "belt-mcp-" + hashlib.sha256(
+        f"{tool_name}:{request_id}".encode()).hexdigest()
+
+
 def _list_artifacts(a):
     q = f"?limit={int(a.get('limit', 8))}"
     if a.get("status"):
@@ -104,9 +185,13 @@ def _queue_image(a):
                    "project": project, "purpose": f"bot request: {prompt[:80]}"}
     if a.get("aspect"):
         payload["aspect"] = a["aspect"]
-    return router_call("/jobs", {"type": "image.generate", "project": project,
-                                 "required_mode": "IMAGE", "required_caps": ["comfyui"],
-                                 "payload": payload})
+    body = {"type": "image.generate", "project": project,
+            "required_mode": "IMAGE", "required_caps": ["comfyui"],
+            "payload": payload}
+    idem = _idempotency_key("queue_image", a)
+    if idem:
+        body["idempotency_key"] = idem
+    return _with_watch(router_call("/jobs", body))
 
 
 def _compose_thumbnail(a):
@@ -119,13 +204,21 @@ def _compose_thumbnail(a):
     src = a.get("source_artifact")
     if src:  # composite onto an uploaded/real source — no GPU pass
         payload["source_artifact"] = src
-        return router_call("/jobs", {"type": "content.thumbnail", "project": project,
-                                     "required_mode": "ANY", "required_caps": [], "payload": payload})
+        body = {"type": "content.thumbnail", "project": project,
+                "required_mode": "ANY", "required_caps": [], "payload": payload}
+        idem = _idempotency_key("compose_thumbnail", a)
+        if idem:
+            body["idempotency_key"] = idem
+        return _with_watch(router_call("/jobs", body))
     # two-pass: recipe art, then real text
     payload["recipe"] = a.get("recipe", "yt_thumbnail")
     payload["slots"] = a.get("slots", {})
-    return router_call("/jobs", {"type": "content.thumbnail", "project": project,
-                                 "required_mode": "IMAGE", "required_caps": ["comfyui"], "payload": payload})
+    body = {"type": "content.thumbnail", "project": project,
+            "required_mode": "IMAGE", "required_caps": ["comfyui"], "payload": payload}
+    idem = _idempotency_key("compose_thumbnail", a)
+    if idem:
+        body["idempotency_key"] = idem
+    return _with_watch(router_call("/jobs", body))
 
 
 def _review_artifact(a):
@@ -142,6 +235,38 @@ TOOLS = [
     _t("belt_status", "Live belt health: queue counts, worker liveness, services. "
        "The bot's first look before it acts.",
        {"type": "object", "properties": {}}, False, _belt_status),
+    _t("belt_capabilities", "Canonical endpoints, MCP transport, tool roster, "
+       "and worker-only boundaries for this ByrdHouse deployment.",
+       {"type": "object", "properties": {}}, False, _capabilities),
+    _t("list_recipes", "List exact recipe versions and founder versus vary slots. "
+       "Call before queueing a recipe-backed image.",
+       {"type": "object", "properties": {}}, False, _list_recipes),
+    _t("validate_recipe", "Preflight an exact recipe id@version and slots without "
+       "creating a job or consuming a worker attempt.",
+       {"type": "object", "properties": {
+           "recipe": {"type": "string"}, "slots": {"type": "object"}},
+        "required": ["recipe"]}, False, _validate_recipe),
+    _t("job_status", "Luna Pulse snapshot for one job: exact state, elapsed time, "
+       "local expected duration, overdue signal, terminal state, error and artifacts.",
+       {"type": "object", "properties": {
+           "job_id": {"type": "string"},
+           "slow_after_seconds": {"type": "integer"}},
+        "required": ["job_id"]}, False, _job_status),
+    _t("job_updates", "Read job transitions after an event cursor plus all active "
+       "and overdue jobs. Save the returned cursor and call again for reliable updates.",
+       {"type": "object", "properties": {
+           "after_event_id": {"type": "integer"},
+           "limit": {"type": "integer"},
+           "slow_after_seconds": {"type": "integer"}}}, False, _job_updates),
+    _t("watch_job", "Wait up to 25 seconds for one job to change state, finish, fail, "
+       "or cross its learned slow threshold. Re-call until terminal; never duplicate it.",
+       {"type": "object", "properties": {
+           "job_id": {"type": "string"},
+           "known_status": {"type": "string"},
+           "timeout_seconds": {"type": "integer"},
+           "poll_seconds": {"type": "number"},
+           "slow_after_seconds": {"type": "integer"}},
+        "required": ["job_id"]}, False, _watch_job),
     _t("list_artifacts", "Recent artifacts (id, kind, score, status, purpose). "
        "Use before review_artifact or refine to get an id.",
        {"type": "object", "properties": {
@@ -159,14 +284,17 @@ TOOLS = [
            "prompt": {"type": "string"}, "recipe": {"type": "string"},
            "slots": {"type": "object"}, "project": {"type": "string"},
            "aspect": {"type": "string", "description": "16:9|9:16|1:1|2:3|3:2|21:9"},
-           "purpose": {"type": "string"}}}, True, _queue_image),
+           "purpose": {"type": "string"},
+           "request_id": {"type": "string", "description": "stable caller id for deduplication"}}},
+       True, _queue_image),
     _t("compose_thumbnail", "Make a YouTube thumbnail: real title text composited "
        "onto art. Pass 'source_artifact' (an uploaded/real image id) to composite "
        "onto real pixels, or a 'recipe'+'slots' to generate the art first.",
        {"type": "object", "properties": {
            "title": {"type": "string"}, "source_artifact": {"type": "string"},
            "recipe": {"type": "string"}, "slots": {"type": "object"},
-           "project": {"type": "string"}, "purpose": {"type": "string"}},
+           "project": {"type": "string"}, "purpose": {"type": "string"},
+           "request_id": {"type": "string", "description": "stable caller id for deduplication"}},
         "required": ["title"]}, True, _compose_thumbnail),
     _t("review_artifact", "Approve or reject an artifact by id (feeds the learn loop).",
        {"type": "object", "properties": {
@@ -215,7 +343,9 @@ def handle(msg):
             for t in visible_tools()]}}
     if method == "tools/call":
         params = msg.get("params") or {}
-        result, is_error = call_tool(params.get("name"), params.get("arguments"))
+        arguments = dict(params.get("arguments") or {})
+        arguments.setdefault("_mcp_request_id", str(mid))
+        result, is_error = call_tool(params.get("name"), arguments)
         return {"jsonrpc": "2.0", "id": mid, "result": {
             "content": [{"type": "text", "text": json.dumps(result, indent=2)}],
             "isError": is_error}}

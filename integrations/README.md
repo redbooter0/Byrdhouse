@@ -46,3 +46,28 @@ enable the byrdhouse-belt MCP server in the chat/agent.
 
 Do not configure ComfyUI as an LLM endpoint or MCP server. Image work must
 remain a queued belt job so the worker owns VRAM, cards, retries, and review.
+
+## Windows-native install and proof
+
+After the normal setup sync, run this on GAMING:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File E:\ByrdHouse\scripts\install-studio-integrations.ps1 -Machine gaming -Root E:\ByrdHouse -InstallLmStudio -CopyCherryJson
+powershell -ExecutionPolicy Bypass -File E:\ByrdHouse\scripts\test-operator-endpoints.ps1 -Root E:\ByrdHouse
+```
+
+On MINI, substitute `mini` and `D:\ByrdHouse`. The installer preserves every
+existing LM Studio MCP entry, makes a timestamped backup, and only replaces the
+single `byrdhouse-belt` entry. The proof is read-only and checks Router, Luna
+Pulse, LM Studio, CORS, ComfyUI, and MCP initialization end to end.
+Add `-RequireRemoteOverlay` when testing away-from-home control; it fails unless
+the Tailscale Windows service is installed and running. A working `byrd-mini`
+LAN hostname is not evidence of Tailscale.
+
+## Luna Pulse
+
+The belt moves work; Pulse supervises it. MCP clients should keep the job id
+returned by every write, call `watch_job` until it is terminal, and use
+`job_updates` with its returned cursor for transitions they may have missed.
+Slow thresholds learn from local completed-job history after three samples.
+Never submit a duplicate just because a generation is slow.
