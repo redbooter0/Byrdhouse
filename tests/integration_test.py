@@ -299,6 +299,38 @@ def main():
         check("bare recipe name resolves to highest version",
               byrdimage.find_recipe(ROOT, "rpg_tier_list").name == "rpg_tier_list.v2.json")
 
+        # ── Regression: the dashboard→recipe slot contract (yt_thumbnail v4) ──
+        # job_19f525b23183s9na6 & siblings died twice with
+        # "unfilled slots ['emotion']": the form let a required, non-vary slot
+        # through empty. Lock every side of the contract with the EXACT recipe.
+        yt = [r for r in api("/recipes") if r["file"] == "yt_thumbnail.v4.json"][0]
+        yt_vary = set(yt["vary"])
+        yt_required = [s for s in yt["slots"] if s not in yt_vary]
+        # (1) /recipes exposes emotion as a required slot the form must render
+        check("yt_thumbnail.v4 exposes emotion as a required (non-vary) slot",
+              "emotion" in yt_required and "emotion" not in yt_vary)
+        # (2) byrdimage rejects a generate that is missing a required slot —
+        #     the exact failure the three dead jobs hit
+        try:
+            byrdimage.generate(ROOT, "yt_thumbnail@4",
+                               {"game": "Palworld", "subject": "a Pal trainer"},
+                               "careyrpg", "regression: missing emotion", dry_run=True)
+            check("byrdimage rejects a generate missing the emotion slot", False)
+        except SystemExit as e:
+            check("byrdimage rejects a generate missing the emotion slot",
+                  "emotion" in str(e), str(e))
+        # (3) a vary slot must ALWAYS be filled by byrdimage: emotion supplied,
+        #     every vary slot (palette/lighting/composition) omitted -> no raise
+        try:
+            byrdimage.generate(ROOT, "yt_thumbnail@4",
+                               {"game": "Palworld", "subject": "a Pal trainer",
+                                "emotion": "wide-eyed shock"},
+                               "careyrpg", "regression: vary auto-fill", dry_run=True)
+            check("byrdimage fills vary slots so a complete recipe submits", True)
+        except SystemExit as e:
+            check("byrdimage fills vary slots so a complete recipe submits",
+                  False, str(e))
+
         # content.thumbnail with image_path composites onto a provided image
         # (no ComfyUI pass) and yields a 1280x720 final with a card
         from PIL import Image

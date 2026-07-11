@@ -234,7 +234,11 @@ def generate(root, recipe_name, slots, project, purpose,
     user_slots = dict(slots)  # what the founder actually asked for, kept on the card
     vary_picks = {}
     for k, options in recipe.get("vary", {}).items():
-        if k not in slots:
+        if not options:
+            die(f"recipe vary slot '{k}' has no options to pick from")
+        # a vary slot is the belt's to fill: pick when the founder left it
+        # missing OR blank, so a vary slot can never reach the template unfilled
+        if not str(slots.get(k, "")).strip():
             vary_picks[k] = random.choice(options)
     slots.update(vary_picks)
 

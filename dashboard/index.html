@@ -395,13 +395,30 @@ async function uploadRefs(input) {
     $('refList').innerHTML = await refListHtml();
   } catch (e) { say('reference upload error: ' + e.message); }
 }
+/* The recipe currently selected in the form (id@version pinned). */
+function currentRecipe() {
+  return (window._recipes||[]).find(
+    x => x.id + '@' + x.version === ($('recipe') ? $('recipe').value : ''));
+}
+/* Slots the recipe needs but does NOT vary — the founder must supply these.
+   These are exactly the fields rendered as required inputs. */
+function requiredSlots(r) {
+  r = r || currentRecipe();
+  return r ? r.slots.filter(s => !r.vary.includes(s)) : [];
+}
+/* Required slots left blank in the given values map. */
+function missingRequiredSlots(vals) {
+  return requiredSlots().filter(s => !String((vals && vals[s]) || '').trim());
+}
 function slotFields() {
-  const r = (window._recipes||[]).find(x => x.id + '@' + x.version === $('recipe').value);
+  const r = currentRecipe();
   if (!r) return;
   const keep = {};  // survive a recipe change without losing typed slot values
   document.querySelectorAll('#slots input').forEach(i => { keep[i.dataset.slot] = i.value; });
-  $('slots').innerHTML = r.slots.filter(s => !r.vary.includes(s)).map(s =>
-    `<label>${esc(s)}</label><input data-slot="${esc(s)}" placeholder="${esc(s)}">`).join('');
+  // every non-vary slot is a REQUIRED input (vary slots byrdimage fills itself)
+  $('slots').innerHTML = requiredSlots(r).map(s =>
+    `<label>${esc(s)} <span style="color:var(--red)">*</span></label>` +
+    `<input data-slot="${esc(s)}" required placeholder="${esc(s)} — required">`).join('');
   document.querySelectorAll('#slots input').forEach(i => { if (keep[i.dataset.slot]) i.value = keep[i.dataset.slot]; });
 }
 
@@ -454,6 +471,15 @@ async function submitGen() {
     if (lora) payload.lora = lora;
     const enhance = $('enhance') && $('enhance').checked && !title && !src && payload.slots.prompt;
     const type = (src || title) ? 'content.thumbnail' : enhance ? 'content.enhance' : 'image.generate';
+    // The dashboard is the recipe's first gate. Every required (non-vary) slot
+    // must be filled HERE, or the job dies deep in byrdimage with
+    // "unfilled slots [...]". Skip only when a source image composites directly
+    // (no recipe generation) or the enhance path substitutes the freeform recipe.
+    if (!src && type !== 'content.enhance') {
+      const missing = missingRequiredSlots(d.slots);
+      if (missing.length)
+        throw new Error('fill the required slot(s): ' + missing.join(', '));
+    }
     const j = await jpost('/jobs', { type,
       project:d.project,
       required_mode: src ? 'ANY' : enhance ? 'OPERATOR' : 'IMAGE',
