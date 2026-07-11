@@ -183,6 +183,25 @@ def main():
         check("workers report computed liveness",
               st["workers"] and all(w.get("status") in ("online", "offline") for w in st["workers"]))
 
+        # A retried job re-registers its artifacts — must upsert, not duplicate
+        dupe_card = {"artifact_id": "art.dupetest.0", "job_id": "job_dupetest",
+                     "kind": "image", "path": "/tmp/dupetest.png", "status": "draft"}
+        api("/jobs/job_dupetest/artifacts", {"artifacts": [dupe_card]})
+        api("/jobs/job_dupetest/artifacts", {"artifacts": [dict(dupe_card, status="needs_review")]})
+        rows = [a for a in api("/artifacts?limit=100") if a["job_id"] == "job_dupetest"]
+        check("re-registered artifact upserts (one card, latest state)",
+              len(rows) == 1 and rows[0]["status"] == "needs_review")
+
+        # Artifact files live on the worker's disk; the dashboard preview must
+        # come from the bytes the worker uploaded to the router
+        png = b"\x89PNG-preview-test"
+        rq2 = urllib.request.Request(
+            f"http://127.0.0.1:{RP}/artifacts/art.dupetest.0/file", data=png, method="POST",
+            headers={"Content-Type": "image/png", "Authorization": f"Bearer {TOKEN}"})
+        urllib.request.urlopen(rq2, timeout=15).read()
+        with urllib.request.urlopen(f"http://127.0.0.1:{RP}/artifacts/art.dupetest.0/file", timeout=15) as r:
+            check("preview served from uploaded cache (file not on router host)", r.read() == png)
+
         # PowerShell 5.1 writes status.json with a UTF-8 BOM — /status must tolerate it
         (ROOT / "status.json").write_bytes(
             b"\xef\xbb\xbf" + json.dumps({"host": "TEST", "overall": "green", "checks": []}).encode())
