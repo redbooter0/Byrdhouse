@@ -519,7 +519,7 @@ async function submitGen() {
     if (!srcArt && type !== 'content.enhance') {
       const missing = missingRequiredSlots(d.slots);
       if (missing.length)
-        throw new Error('fill the required slot(s): ' + missing.join(', '));
+        throw new Error('Missing required fields: ' + missing.join(', '));
     }
     const j = await jpost('/jobs', { type,
       project:d.project,

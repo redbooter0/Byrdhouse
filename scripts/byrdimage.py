@@ -234,8 +234,12 @@ def generate(root, recipe_name, slots, project, purpose,
     user_slots = dict(slots)  # what the founder actually asked for, kept on the card
     vary_picks = {}
     for k, options in recipe.get("vary", {}).items():
+        if not isinstance(options, list):
+            die(f"recipe vary slot '{k}' must be an array of non-empty options")
         if not options:
             die(f"recipe vary slot '{k}' has no options to pick from")
+        if any(not str(option).strip() for option in options):
+            die(f"recipe vary slot '{k}' contains an empty option")
         # a vary slot is the belt's to fill: pick when the founder left it
         # missing OR blank, so a vary slot can never reach the template unfilled
         if not str(slots.get(k, "")).strip():
@@ -243,7 +247,8 @@ def generate(root, recipe_name, slots, project, purpose,
     slots.update(vary_picks)
 
     template = recipe["template"]
-    missing = [k for k in re.findall(r"\{(\w+)\}", template) if k not in slots]
+    template_slots = list(dict.fromkeys(re.findall(r"\{(\w+)\}", template)))
+    missing = [k for k in template_slots if not str(slots.get(k, "")).strip()]
     if missing:
         die(f"unfilled slots {missing} — pass --set {missing[0]}=\"...\"")
     prompt = re.sub(r"\s+", " ", template.format(**slots)).strip()

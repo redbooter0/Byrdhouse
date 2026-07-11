@@ -202,6 +202,76 @@ def job_row(jid):
     return db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
 
 
+def _recipe_spec(recipe_name):
+    """Resolve a recipe id or pinned id@version and return (spec, error)."""
+    name = str(recipe_name or "").strip()
+    match = re.fullmatch(r"([\w-]+)(?:@(\d+))?", name)
+    if not match:
+        return None, f"invalid recipe '{name}'"
+    recipe_id, pinned = match.group(1), match.group(2)
+    if pinned:
+        candidates = [ROOT / "recipes" / f"{recipe_id}.v{pinned}.json"]
+    else:
+        candidates = [p for p in (ROOT / "recipes").glob(f"{recipe_id}.v*.json")
+                      if re.search(r"\.v(\d+)\.json$", p.name)]
+        candidates.sort(key=lambda p: int(re.search(r"\.v(\d+)\.json$", p.name).group(1)))
+    if not candidates or not candidates[-1].exists():
+        return None, f"no recipe '{name}'"
+    try:
+        return json.loads(candidates[-1].read_text(encoding="utf-8-sig")), None
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, f"recipe '{name}' cannot be loaded: {exc}"
+
+
+def recipe_contract(payload, job_type):
+    """Reject invalid recipe jobs at the shared dashboard/chat/MCP boundary."""
+    if job_type not in {"image.generate", "content.thumbnail"}:
+        return None, None, None
+    payload = payload or {}
+    if not isinstance(payload, dict):
+        return "job payload must be an object", None, None
+    # A real source image is composited directly; the selected form recipe is
+    # irrelevant even if the dashboard carries it in the payload.
+    if job_type == "content.thumbnail" and (
+            payload.get("image_path") or payload.get("source_artifact")):
+        return None, None, None
+    recipe_name = str(payload.get("recipe") or "").strip()
+    if not recipe_name:
+        return "recipe is required for this job", None, None
+    spec, error = _recipe_spec(recipe_name)
+    if error:
+        return error, None, None
+    template = spec.get("template")
+    if not isinstance(template, str) or not template.strip():
+        return "recipe authoring error: template must be a non-empty string", None, None
+    vary = spec.get("vary") or {}
+    if not isinstance(vary, dict):
+        return "recipe authoring error: vary must be an object of option arrays", None, None
+    for key, options in vary.items():
+        if not isinstance(options, list):
+            return f"recipe authoring error: vary slot '{key}' must be an array", None, None
+        if not options:
+            return f"recipe authoring error: vary slot '{key}' has no options", None, None
+        if any(not str(option).strip() for option in options):
+            return f"recipe authoring error: vary slot '{key}' contains an empty option", None, None
+    slots = payload.get("slots") or {}
+    if not isinstance(slots, dict):
+        return "recipe slots must be an object", None, None
+    template_slots = list(dict.fromkeys(re.findall(r"\{(\w+)\}", template)))
+    missing = sorted(key for key in template_slots
+                     if key not in vary and not str(slots.get(key, "")).strip())
+    if missing:
+        return "missing required recipe slots: " + ", ".join(missing), None, None
+    try:
+        version = int(spec["version"])
+    except (KeyError, TypeError, ValueError):
+        return "recipe authoring error: version must be an integer", None, None
+    recipe_id = str(spec.get("id") or "").strip()
+    if not recipe_id:
+        return "recipe authoring error: id is required", None, None
+    return None, recipe_id, version
+
+
 LEARN_DIMS = {  # dimension -> how to pull its value out of an artifact card
     "recipe":     lambda m: m.get("recipe"),
     "checkpoint": lambda m: m.get("checkpoint"),
@@ -729,11 +799,21 @@ class Handler(BaseHTTPRequestHandler):
             body = self._body()
         except json.JSONDecodeError:
             return self._send({"error": "invalid JSON"}, 400)
+        if not isinstance(body, dict):
+            return self._send({"error": "JSON body must be an object"}, 400)
 
         if path == "/jobs":
             jtype = body.get("type", "")
             if jtype not in JOB_TYPES and not jtype.startswith("content."):
                 return self._send({"error": f"unknown job type '{jtype}'"}, 400)
+            job_payload = body.get("payload", {}) or {}
+            if not isinstance(job_payload, dict):
+                return self._send({"error": "job payload must be an object"}, 400)
+            contract_error, recipe_id, recipe_version = recipe_contract(job_payload, jtype)
+            if contract_error:
+                event(self._actor(), "job.reject", body.get("idempotency_key", "unsubmitted"),
+                      {"type": jtype, "error": contract_error}, ok=False)
+                return self._send({"error": contract_error}, 400)
             # Idempotency: a double-tap or a network retry carrying the same key
             # returns the job already created instead of minting a duplicate.
             idem = body.get("idempotency_key")
@@ -749,8 +829,8 @@ class Handler(BaseHTTPRequestHandler):
                 "priority,required_mode,required_caps,status,max_attempts,created_at,idempotency_key)"
                 " VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (jid, jtype, body.get("project", "sandbox"),
-                 body.get("recipe"), body.get("recipe_version"),
-                 json.dumps(body.get("payload", {})), int(body.get("priority", 5)),
+                 recipe_id or body.get("recipe"), recipe_version or body.get("recipe_version"),
+                 json.dumps(job_payload), int(body.get("priority", 5)),
                  body.get("required_mode", "ANY"),
                  json.dumps(body.get("required_caps", [])),
                  "queued", int(body.get("max_attempts", 2)), now(), idem))

@@ -31,8 +31,9 @@ const localStorage = {
 function makeInput(v = '') { return { value: v, dataset: {} }; }
 const fields = {
   recipe: { value: 'rpg_tier_list', options: [{ value: 'rpg_tier_list' }, { value: 'build_guide' }] },
-  thumbTitle: makeInput(), srcImage: makeInput(), project: makeInput('careyrpg'), purpose: makeInput(),
+  thumbTitle: makeInput(), project: makeInput('careyrpg'), purpose: makeInput(),
 };
+const window = { _srcArtifact: null };
 let slotInputs = [];
 const $ = id => fields[id];
 const document = { querySelectorAll: sel => (sel === '#slots input' ? slotInputs : []) };
@@ -43,24 +44,25 @@ eval(m[0].replace(/\/\* ── end draft-persistence ── \*\//, ''));
 // save -> load roundtrip
 slotInputs = [Object.assign(makeInput('S TIER SORCERER'), { dataset: { slot: 'subject' } })];
 fields.thumbTitle.value = 'BEST BUILDS';
-fields.srcImage.value = 'E:\\captures\\shot.png';
+window._srcArtifact = { id: 'art.source.test', name: 'shot.png' };
 fields.purpose.value = 'U1 batch 1';
 fields.recipe.value = 'build_guide';
 saveDraft();
 let d = loadDraft();
-check('draft saves recipe/slots/title/src/project/purpose',
+check('draft saves recipe/slots/title/source-artifact/project/purpose',
   d && d.recipe === 'build_guide' && d.slots.subject === 'S TIER SORCERER'
-  && d.title === 'BEST BUILDS' && d.src === 'E:\\captures\\shot.png'
+  && d.title === 'BEST BUILDS' && d.srcArtifact.id === 'art.source.test'
   && d.project === 'careyrpg' && d.purpose === 'U1 batch 1');
 
 // apply restores into a fresh form (reload / room-change path)
 fields.recipe.value = 'rpg_tier_list';
-fields.thumbTitle.value = ''; fields.srcImage.value = ''; fields.purpose.value = ''; fields.project.value = '';
+fields.thumbTitle.value = ''; fields.purpose.value = ''; fields.project.value = '';
+window._srcArtifact = null;
 slotInputs = [Object.assign(makeInput(), { dataset: { slot: 'subject' } })];
 applyDraft(loadDraft());
 check('applyDraft restores every field',
   fields.recipe.value === 'build_guide' && slotInputs[0].value === 'S TIER SORCERER'
-  && fields.thumbTitle.value === 'BEST BUILDS' && fields.srcImage.value === 'E:\\captures\\shot.png'
+  && fields.thumbTitle.value === 'BEST BUILDS' && window._srcArtifact.id === 'art.source.test'
   && fields.purpose.value === 'U1 batch 1' && fields.project.value === 'careyrpg');
 
 // a recipe that no longer exists is ignored, everything else still applies
@@ -79,7 +81,7 @@ check('clearDraft empties storage', loadDraft() === null);
 
 // ── 2. structural invariants in the page source ─────────────────────────────
 check('polling refreshes only #imgOut when the form is on screen',
-  /room === 'image' && \$\('genForm'\)[\s\S]{0,200}\$\('imgOut'\)\.innerHTML = await imgOutHtml\(\)/.test(html));
+  /room === 'image' && \$\('genForm'\)[\s\S]{0,600}\$\('imgOut'\)\.innerHTML =/.test(html));
 check('full re-render skipped while typing in the view',
   /if \(typingInView\(\)\) return/.test(html));
 check('form saves draft on input and change',
@@ -93,5 +95,75 @@ check('draft cleared only inside successful submitGen (after jpost)',
 check('no overlapping refresh cycles', /if \(_refreshing\) return/.test(html));
 check('recipe change preserves typed slot values', /const keep = \{\}/.test(html));
 
-console.log(failures ? `\n${failures} FAILED` : '\nALL CHECKS PASSED');
-process.exit(failures ? 1 : 0);
+async function runSubmitContractTests() {
+  const specs = [3, 4].map(version => JSON.parse(fs.readFileSync(
+    path.join(__dirname, '..', 'recipes', 'yt_thumbnail.v' + version + '.json'), 'utf8')));
+  for (const spec of specs) {
+    const allSlots = [...new Set([...spec.template.matchAll(/\{(\w+)\}/g)].map(m => m[1]))];
+    const vary = Object.keys(spec.vary || {});
+    check('exact yt_thumbnail@' + spec.version + ' makes emotion founder-required',
+      allSlots.includes('emotion') && !vary.includes('emotion'));
+  }
+  const spec = specs[1];
+  const allSlots = [...new Set([...spec.template.matchAll(/\{(\w+)\}/g)].map(m => m[1]))];
+  const recipe = { id:spec.id, version:spec.version, slots:allSlots, vary:Object.keys(spec.vary || {}) };
+  const required = recipe.slots.filter(s => !recipe.vary.includes(s));
+  function missingRequiredSlots(vals) {
+    return required.filter(s => !String((vals && vals[s]) || '').trim());
+  }
+  check('vary-supplied slots are not founder inputs',
+    ['palette','lighting','composition'].every(s => recipe.vary.includes(s) && !required.includes(s)));
+  check('missing-slot validation names every founder-required field',
+    missingRequiredSlots({}).join(', ') === 'game, subject, emotion');
+  check('required founder labels are visibly starred',
+    /<label>\$\{esc\(s\)\} <span style="color:var\(--red\)">\*<\/span><\/label>/.test(html));
+
+  fields.recipe.value = 'yt_thumbnail@4';
+  fields.recipe.options = [{ value:'yt_thumbnail@4' }];
+  fields.thumbTitle.value = '';
+  fields.project.value = 'careyrpg';
+  fields.purpose.value = 'hardware contract regression';
+  fields.ckpt = makeInput(); fields.aspect = makeInput(); fields.lora = makeInput();
+  fields.enhance = { checked:false }; fields.view = { innerHTML:'form remains' };
+  slotInputs = [
+    Object.assign(makeInput('Palworld'), { dataset:{ slot:'game' } }),
+    Object.assign(makeInput('a Pal trainer'), { dataset:{ slot:'subject' } }),
+    Object.assign(makeInput(''), { dataset:{ slot:'emotion' } }),
+  ];
+  window._srcArtifact = null;
+  let said = '';
+  const posts = [];
+  const say = value => { said = value; };
+  const jpost = async (url, body) => { posts.push({url, body}); return {id:'job.valid'}; };
+  const render = () => {};
+  const submitStart = html.indexOf('async function submitGen()');
+  const submitEnd = html.indexOf('/* ── Operator Chat', submitStart);
+  check('submitGen source extracted for behavioural contract test',
+    submitStart >= 0 && submitEnd > submitStart);
+  const submitGen = eval('(' + html.slice(submitStart, submitEnd).trim() + ')');
+
+  saveDraft();
+  await submitGen();
+  check('blank emotion blocks submit before POST and names every missing field',
+    posts.length === 0 && said === 'error: Missing required fields: emotion');
+  check('validation failure preserves draft and typed values',
+    loadDraft() !== null && slotInputs[0].value === 'Palworld'
+    && slotInputs[1].value === 'a Pal trainer' && fields.view.innerHTML === 'form remains');
+
+  slotInputs[2].value = 'wide-eyed shock';
+  saveDraft();
+  await submitGen();
+  check('filled emotion creates one valid pinned payload',
+    posts.length === 1 && posts[0].url === '/jobs'
+    && posts[0].body.payload.recipe === 'yt_thumbnail@4'
+    && posts[0].body.payload.slots.emotion === 'wide-eyed shock'
+    && posts[0].body.payload.slots.game === 'Palworld');
+  check('successful POST clears the draft', loadDraft() === null);
+}
+
+runSubmitContractTests().catch(e => {
+  console.error(e); failures++;
+}).finally(() => {
+  console.log(failures ? '\n' + failures + ' FAILED' : '\nALL CHECKS PASSED');
+  process.exit(failures ? 1 : 0);
+});

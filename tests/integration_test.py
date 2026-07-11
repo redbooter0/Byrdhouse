@@ -182,12 +182,13 @@ def main():
         check("export artifact (auto-approved)", len(exp) == 1 and exp[0]["status"] == "approved")
 
         print("== failure -> retry -> dead")
-        api("/jobs", {"type": "image.generate", "required_mode": "IMAGE",
-                      "payload": {"recipe": "nope", "slots": {}, "purpose": "fail"}})
+        failed_job = api("/jobs", {"type": "content.research", "required_mode": "ANY",
+                                   "payload": {"purpose": "missing csv should fail"}})
         run_worker()
-        dead = [x for x in api("/jobs?type=image.generate") if x["status"] == "dead"]
+        dead = [x for x in api("/jobs?type=content.research")
+                if x["id"] == failed_job["id"] and x["status"] == "dead"]
         check("dead after retries", len(dead) == 1)
-        check("real error message recorded", dead and "no recipe 'nope'" in (dead[0]["error"] or ""))
+        check("real error message recorded", dead and "csv_path" in (dead[0]["error"] or ""))
 
         print("== requeue + cancel + worker liveness")
         rq = api(f"/jobs/{dead[0]['id']}/requeue", {})
@@ -299,16 +300,54 @@ def main():
         check("bare recipe name resolves to highest version",
               byrdimage.find_recipe(ROOT, "rpg_tier_list").name == "rpg_tier_list.v2.json")
 
-        # ── Regression: the dashboard→recipe slot contract (yt_thumbnail v4) ──
-        # job_19f525b23183s9na6 & siblings died twice with
+        # ── Regression: the dashboard→recipe slot contract (yt_thumbnail v3/v4) ──
+        # job_19f525b23183s9na6 used v3; the two siblings used v4. All died twice with
         # "unfilled slots ['emotion']": the form let a required, non-vary slot
-        # through empty. Lock every side of the contract with the EXACT recipe.
-        yt = [r for r in api("/recipes") if r["file"] == "yt_thumbnail.v4.json"][0]
+        # through empty. Lock every side of the contract with the exact recipes.
+        recipe_rows = api("/recipes")
+        yt3 = [r for r in recipe_rows if r["file"] == "yt_thumbnail.v3.json"][0]
+        yt = [r for r in recipe_rows if r["file"] == "yt_thumbnail.v4.json"][0]
         yt_vary = set(yt["vary"])
         yt_required = [s for s in yt["slots"] if s not in yt_vary]
         # (1) /recipes exposes emotion as a required slot the form must render
-        check("yt_thumbnail.v4 exposes emotion as a required (non-vary) slot",
-              "emotion" in yt_required and "emotion" not in yt_vary)
+        check("affected yt_thumbnail.v3 and v4 expose emotion as founder-required",
+              all("emotion" in r["slots"] and "emotion" not in r["vary"] for r in (yt3, yt))
+              and "emotion" in yt_required and "emotion" not in yt_vary)
+        before_contract = len(api("/jobs?limit=200"))
+        try:
+            api("/jobs", {"type": "image.generate", "required_mode": "IMAGE",
+                          "payload": {"recipe": "yt_thumbnail@4",
+                                      "slots": {"game": "Palworld",
+                                                "subject": "a Pal trainer",
+                                                "emotion": ""}}})
+            check("router blocks blank yt_thumbnail.v4 emotion before enqueue", False)
+        except urllib.error.HTTPError as e:
+            body = json.loads(e.read().decode())
+            check("router blocks blank yt_thumbnail.v4 emotion before enqueue",
+                  e.code == 400 and "emotion" in body.get("error", ""), str(body))
+        try:
+            api("/jobs", {"type": "content.thumbnail", "required_mode": "IMAGE",
+                          "payload": {"recipe": "yt_thumbnail@3", "title": "POKEMON",
+                                      "slots": {"subject": "Pokemon"}}})
+            check("router blocks the exact yt_thumbnail.v3 failed payload", False)
+        except urllib.error.HTTPError as e:
+            body = json.loads(e.read().decode())
+            check("router blocks the exact yt_thumbnail.v3 failed payload",
+                  e.code == 400 and "emotion" in body.get("error", ""), str(body))
+        check("malformed affected payloads consume zero worker attempts",
+              len(api("/jobs?limit=200")) == before_contract)
+        valid_contract = api(
+            "/jobs", {"type": "image.generate", "required_mode": "IMAGE",
+                       "payload": {"recipe": "yt_thumbnail@4",
+                                   "slots": {"game": "Palworld",
+                                             "subject": "a Pal trainer",
+                                             "emotion": "wide-eyed shock"}}})
+        valid_row = next(j for j in api("/jobs?limit=200") if j["id"] == valid_contract["id"])
+        check("filled emotion creates a pinned valid router payload",
+              valid_row["recipe_id"] == "yt_thumbnail"
+              and valid_row["recipe_version"] == 4
+              and json.loads(valid_row["payload"])["slots"]["emotion"] == "wide-eyed shock")
+        api(f"/jobs/{valid_contract['id']}/cancel", {})
         # (2) byrdimage rejects a generate that is missing a required slot —
         #     the exact failure the three dead jobs hit
         try:
@@ -331,6 +370,28 @@ def main():
             check("byrdimage fills vary slots so a complete recipe submits",
                   False, str(e))
 
+        bad_vary = {
+            "id": "empty_vary_test", "version": 1, "kind": "image.generate",
+            "template": "{subject}, {palette}", "vary": {"palette": []}}
+        (ROOT / "recipes" / "empty_vary_test.v1.json").write_text(json.dumps(bad_vary))
+        try:
+            api("/jobs", {"type": "image.generate",
+                          "payload": {"recipe": "empty_vary_test@1",
+                                      "slots": {"subject": "paladin"}}})
+            check("router rejects an empty vary array as authoring error", False)
+        except urllib.error.HTTPError as e:
+            body = json.loads(e.read().decode())
+            check("router rejects an empty vary array as authoring error",
+                  e.code == 400 and "authoring error" in body.get("error", "")
+                  and "palette" in body.get("error", ""), str(body))
+        try:
+            byrdimage.generate(ROOT, "empty_vary_test@1", {"subject": "paladin"},
+                               "careyrpg", "empty vary regression", dry_run=True)
+            check("byrdimage names the empty vary slot precisely", False)
+        except SystemExit as e:
+            check("byrdimage names the empty vary slot precisely",
+                  "vary slot 'palette' has no options" in str(e), str(e))
+
         # content.thumbnail with image_path composites onto a provided image
         # (no ComfyUI pass) and yields a 1280x720 final with a card
         from PIL import Image
@@ -340,6 +401,7 @@ def main():
         api("/jobs", {"type": "content.thumbnail", "project": "careyrpg",
                       "required_mode": "ANY",
                       "payload": {"title": "MY OWN SHOT", "image_path": str(shot),
+                                  "recipe": "yt_thumbnail@5", "slots": {},
                                   "project": "careyrpg", "purpose": "byo image"}})
         run_worker()
         byo = [a for a in api("/artifacts?limit=80")
