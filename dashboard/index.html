@@ -9,8 +9,12 @@
           --text:#ece7fb; --dim:#9a8fc0; --accent:#8b5cf6; --accent2:#a78bfa;
           --green:#34d399; --yellow:#fbbf24; --red:#f87171; }
   * { box-sizing:border-box; margin:0; }
-  body { background:var(--bg); color:var(--text); font:14px/1.5 -apple-system,'Segoe UI',sans-serif; display:flex; min-height:100vh; }
+  body { color:var(--text); font:14px/1.5 -apple-system,'Segoe UI',sans-serif; display:flex; min-height:100vh;
+         background:radial-gradient(1200px 600px at 80% -10%, #1e1440 0%, var(--bg) 55%) fixed var(--bg); }
   a { color:var(--accent2); }
+  #brand { width:170px; margin:2px 8px 2px; display:block;
+           filter:drop-shadow(0 0 14px rgba(139,92,246,.35)); }
+  .ricon { font-size:15px; width:20px; text-align:center; flex-shrink:0; }
 
   /* sidebar */
   #side { width:225px; background:var(--panel); border-right:1px solid var(--line); padding:16px 10px; flex-shrink:0; }
@@ -33,12 +37,15 @@
   .light { width:9px; height:9px; border-radius:50%; display:inline-block; flex-shrink:0; }
   .green{background:var(--green)} .yellow{background:var(--yellow)} .red{background:var(--red)}
   .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; }
-  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; }
+  .panel { background:linear-gradient(180deg, rgba(139,92,246,.05), transparent 42%) var(--panel);
+           border:1px solid var(--line); border-radius:12px; padding:14px;
+           transition:border-color .18s; }
+  .panel:hover { border-color:#3b2f63; }
   .wide { grid-column:1/-1; }
   h2 { font-size:12px; color:var(--dim); text-transform:uppercase; letter-spacing:.1em; margin-bottom:10px; }
   .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; }
   .stat { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:12px; }
-  .stat b { font-size:26px; display:block; }
+  .stat b { font-size:26px; display:block; color:var(--accent2); text-shadow:0 0 18px rgba(139,92,246,.35); }
   .stat span { color:var(--dim); font-size:11px; }
   table { width:100%; border-collapse:collapse; font-size:12.5px; }
   td,th { padding:4px 6px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; }
@@ -61,7 +68,10 @@
                           padding:7px 9px; font-size:13px; width:100%; }
   label { font-size:11px; color:var(--dim); display:block; margin:8px 0 2px; }
   .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:10px; }
-  .art { border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--panel2); }
+  .art { border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--panel2);
+         transition:transform .15s, border-color .15s, box-shadow .15s; }
+  .art:hover { transform:translateY(-2px); border-color:var(--accent);
+               box-shadow:0 6px 22px rgba(124,58,237,.22); }
   .art img { width:100%; aspect-ratio:16/9; object-fit:cover; display:block; background:#000; }
   .art .m { padding:8px; font-size:11.5px; color:var(--dim); }
   .art .m b { color:var(--text); }
@@ -81,6 +91,7 @@
           -webkit-overflow-scrolling:touch; align-items:center;
           padding:10px max(10px, env(safe-area-inset-right)) 10px max(10px, env(safe-area-inset-left))}
     #side h1{font-size:14px; padding:0 6px; white-space:nowrap}
+    #brand{width:120px; margin:0 4px}
     #side .sub,#side .cap{display:none}
     #side > div[style]{min-width:150px}
     .room{flex-shrink:0; white-space:nowrap; padding:7px 10px}
@@ -96,8 +107,8 @@
 </head>
 <body>
 <nav id="side">
-  <h1>🦅 BYRD<span>HOUSE</span></h1>
-  <div class="sub">Command Center</div>
+  <img id="brand" src="/logo.png" alt="ByrdHouse" onerror="this.outerHTML='<h1>🦅 BYRD<span>HOUSE</span></h1>'">
+  <div class="sub">Control Center · local mode</div>
   <div id="rooms"></div>
   <div class="cap">Admin</div>
   <div style="padding:0 8px"><label>Admin token</label><input id="token" type="password"></div>
@@ -124,26 +135,27 @@ const say = t => $('msg').textContent = t;
 
 /* ── Rooms (ROOM_MAP.md — the rooms are the product) ── */
 const ROOMS = [
-  { id:'command',  name:'Command Center', sub:'Overview & Status' },
-  { id:'image',    name:'Image Studio',   sub:'Generate & Thumbnails' },
-  { id:'items',    name:'Generated Items',sub:'Gallery & Review' },
-  { id:'content',  name:'Content Pipeline', sub:'Research → Package' },
-  { id:'exports',  name:'Exports Room',   sub:'CSV & Reports' },
-  { id:'memory',   name:'Memory Room',    sub:'via Cherry Studio' },
-  { id:'mcp',      name:'MCP Tools',      sub:'Roster & Pings' },
-  { id:'chat',     name:'Operator Chat',  sub:'Local model, live' },
-  { id:'events',   name:'System Room',    sub:'Events & Workers' },
-  { id:'realms',   name:'Realms Room',    sub:'Weekend Lane', lock:'U6 belt' },
-  { id:'video',    name:'Video Studio',   sub:'Motion', lock:'U5' },
-  { id:'coder',    name:'Coder Room',     sub:'Claude Code', lock:'config' },
-  { id:'business', name:'Business Room',  sub:'Money Map', lock:'R2' },
-  { id:'users',    name:'Users Room',     sub:'Frozen', lock:'demand' },
-  { id:'bot',      name:'Bot Room',       sub:'Autonomy Ladder', lock:'after U3' },
+  { id:'command',  icon:'🛰️', name:'Command Center', sub:'Overview & Status' },
+  { id:'image',    icon:'🎨', name:'Image Studio',   sub:'Generate & Thumbnails' },
+  { id:'items',    icon:'🖼️', name:'Generated Items',sub:'Gallery & Review' },
+  { id:'chat',     icon:'💬', name:'Operator Chat',  sub:'Local model, live' },
+  { id:'content',  icon:'📦', name:'Content Pipeline', sub:'Research → Package' },
+  { id:'exports',  icon:'📤', name:'Exports Room',   sub:'CSV & Reports' },
+  { id:'memory',   icon:'🧠', name:'Memory Room',    sub:'via Cherry Studio' },
+  { id:'mcp',      icon:'🔌', name:'MCP Tools',      sub:'Roster & Pings' },
+  { id:'events',   icon:'⚙️', name:'System Room',    sub:'Events & Workers' },
+  { id:'realms',   icon:'🗺️', name:'Realms Room',    sub:'Weekend Lane', lock:'U6 belt' },
+  { id:'video',    icon:'🎬', name:'Video Studio',   sub:'Motion', lock:'U5' },
+  { id:'coder',    icon:'⌨️', name:'Coder Room',     sub:'Claude Code', lock:'config' },
+  { id:'business', icon:'💰', name:'Business Room',  sub:'Money Map', lock:'R2' },
+  { id:'users',    icon:'👥', name:'Users Room',     sub:'Frozen', lock:'demand' },
+  { id:'bot',      icon:'🤖', name:'Bot Room',       sub:'Autonomy Ladder', lock:'after U3' },
 ];
 let room = 'command';
 function renderRooms() {
   $('rooms').innerHTML = ROOMS.map(r =>
     `<button class="room ${room===r.id?'on':''}" onclick="go('${r.id}')">
+       <span class="ricon">${r.icon||''}</span>
        <span><b>${r.name}</b><small>${r.sub}</small></span>${r.lock?`<span class="lock">${r.lock}</span>`:''}
      </button>`).join('');
 }
@@ -397,7 +409,9 @@ function chatBubbles() {
      + 'If the GPU is mid-generation, chat resumes when it finishes.</span>';
 }
 V.chat = async () => `
-  <div class="panel"><h2>Operator Chat — the model that judges your images</h2>
+  <div class="panel">
+    <img src="/logo-chat.png" alt="ByrdHouse Chat" style="width:150px;display:block;margin:0 0 6px;filter:drop-shadow(0 0 10px rgba(139,92,246,.3))" onerror="this.remove()">
+    <h2>Operator Chat — sees the belt, queues real jobs</h2>
     <div id="chatLogView" class="chatlog">${chatBubbles()}</div>
     <div class="row" style="align-items:stretch">
       <input id="chatIn" placeholder="e.g. which of today's thumbnails should I post?" style="flex:1"

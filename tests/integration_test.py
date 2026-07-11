@@ -202,6 +202,12 @@ def main():
         except urllib.error.HTTPError as e:
             check("chat rejects empty messages", e.code == 400)
 
+        # Recipe slots are deduped — game-anchored templates repeat {game}
+        # in the prompt but the form needs exactly one input for it
+        bg3 = [r for r in api("/recipes") if r["file"] == "build_guide.v3.json"][0]
+        check("recipe slots deduped for the form",
+              bg3["slots"].count("game") == 1 and len(bg3["slots"]) == len(set(bg3["slots"])))
+
         # Chat tools: the operator model can queue a generation from chat
         ch2 = api("/chat", {"messages": [{"role": "user",
                                           "content": "TOOLTEST make me palworld art"}]})

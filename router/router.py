@@ -413,7 +413,10 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     r = json.loads(p.read_text(encoding="utf-8-sig"))
                     out.append({"id": r["id"], "version": r["version"], "kind": r.get("kind"),
-                                "slots": re.findall(r"\{(\w+)\}", r.get("template", "")),
+                                # dedupe, order kept: game-anchored templates repeat
+                                # {game} on purpose but it's ONE input
+                                "slots": list(dict.fromkeys(
+                                    re.findall(r"\{(\w+)\}", r.get("template", "")))),
                                 "vary": list(r.get("vary", {}).keys()), "file": p.name})
                 except Exception:
                     continue
@@ -466,7 +469,9 @@ class Handler(BaseHTTPRequestHandler):
             path = "/index.html"
         f = (DASHBOARD / path.lstrip("/")).resolve()
         if str(f).startswith(str(DASHBOARD)) and f.is_file():
-            ctype = {"html": "text/html", "js": "text/javascript", "css": "text/css"}.get(
+            ctype = {"html": "text/html", "js": "text/javascript", "css": "text/css",
+                     "png": "image/png", "jpg": "image/jpeg", "svg": "image/svg+xml",
+                     "ico": "image/x-icon"}.get(
                 f.suffix.lstrip("."), "application/octet-stream")
             return self._send(f.read_bytes(), content_type=ctype)
 
