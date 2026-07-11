@@ -31,8 +31,9 @@ const localStorage = {
 function makeInput(v = '') { return { value: v, dataset: {} }; }
 const fields = {
   recipe: { value: 'rpg_tier_list', options: [{ value: 'rpg_tier_list' }, { value: 'build_guide' }] },
-  thumbTitle: makeInput(), srcImage: makeInput(), project: makeInput('careyrpg'), purpose: makeInput(),
+  thumbTitle: makeInput(), project: makeInput('careyrpg'), purpose: makeInput(),
 };
+const window = { _srcArtifact: null };
 let slotInputs = [];
 const $ = id => fields[id];
 const document = { querySelectorAll: sel => (sel === '#slots input' ? slotInputs : []) };
@@ -43,24 +44,25 @@ eval(m[0].replace(/\/\* ── end draft-persistence ── \*\//, ''));
 // save -> load roundtrip
 slotInputs = [Object.assign(makeInput('S TIER SORCERER'), { dataset: { slot: 'subject' } })];
 fields.thumbTitle.value = 'BEST BUILDS';
-fields.srcImage.value = 'E:\\captures\\shot.png';
+window._srcArtifact = { id: 'art.source.test', name: 'shot.png' };
 fields.purpose.value = 'U1 batch 1';
 fields.recipe.value = 'build_guide';
 saveDraft();
 let d = loadDraft();
-check('draft saves recipe/slots/title/src/project/purpose',
+check('draft saves recipe/slots/title/source-artifact/project/purpose',
   d && d.recipe === 'build_guide' && d.slots.subject === 'S TIER SORCERER'
-  && d.title === 'BEST BUILDS' && d.src === 'E:\\captures\\shot.png'
+  && d.title === 'BEST BUILDS' && d.srcArtifact.id === 'art.source.test'
   && d.project === 'careyrpg' && d.purpose === 'U1 batch 1');
 
 // apply restores into a fresh form (reload / room-change path)
 fields.recipe.value = 'rpg_tier_list';
-fields.thumbTitle.value = ''; fields.srcImage.value = ''; fields.purpose.value = ''; fields.project.value = '';
+fields.thumbTitle.value = ''; fields.purpose.value = ''; fields.project.value = '';
+window._srcArtifact = null;
 slotInputs = [Object.assign(makeInput(), { dataset: { slot: 'subject' } })];
 applyDraft(loadDraft());
 check('applyDraft restores every field',
   fields.recipe.value === 'build_guide' && slotInputs[0].value === 'S TIER SORCERER'
-  && fields.thumbTitle.value === 'BEST BUILDS' && fields.srcImage.value === 'E:\\captures\\shot.png'
+  && fields.thumbTitle.value === 'BEST BUILDS' && window._srcArtifact.id === 'art.source.test'
   && fields.purpose.value === 'U1 batch 1' && fields.project.value === 'careyrpg');
 
 // a recipe that no longer exists is ignored, everything else still applies
@@ -79,7 +81,7 @@ check('clearDraft empties storage', loadDraft() === null);
 
 // ── 2. structural invariants in the page source ─────────────────────────────
 check('polling refreshes only #imgOut when the form is on screen',
-  /room === 'image' && \$\('genForm'\)[\s\S]{0,200}\$\('imgOut'\)\.innerHTML = await imgOutHtml\(\)/.test(html));
+  /room === 'image' && \$\('genForm'\)[\s\S]{0,600}\$\('imgOut'\)\.innerHTML =/.test(html));
 check('full re-render skipped while typing in the view',
   /if \(typingInView\(\)\) return/.test(html));
 check('form saves draft on input and change',

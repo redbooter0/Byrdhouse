@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "byrdhouse-belt": {
+      "command": "python",
+      "args": [
+        "E:\\ByrdHouse\\scripts\\byrd_belt_mcp.py"
+      ],
+      "env": {
+        "BYRDHOUSE_ROOT": "E:\\ByrdHouse",
+        "BYRD_BELT_MCP_READONLY": "1"
+      }
+    }
+  }
+}

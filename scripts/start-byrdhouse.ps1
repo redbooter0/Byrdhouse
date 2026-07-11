@@ -27,8 +27,22 @@ function Test-Http([string]$Url) {
 Write-Host "`nByrdHouse startup - $env:COMPUTERNAME`n" -ForegroundColor Cyan
 
 if (Get-Command lms -ErrorAction SilentlyContinue) {
-    Write-Host '[lmstudio] starting server...'
-    lms server start 2>$null
+    $lmsUrl = $cfg.services.lmstudio.TrimEnd('/')
+    if (Test-Http "$lmsUrl/models") {
+        Write-Host "[lmstudio] server already reachable at $lmsUrl"
+    } else {
+        Write-Host '[lmstudio] server not reachable - starting server...'
+        lms server start 2>$null
+        $deadline = (Get-Date).AddSeconds(30)
+        while ((Get-Date) -lt $deadline -and -not (Test-Http "$lmsUrl/models")) {
+            Start-Sleep -Seconds 2
+        }
+        if (Test-Http "$lmsUrl/models") {
+            Write-Host "[lmstudio] server up at $lmsUrl"
+        } else {
+            Write-Host "[lmstudio] server did not answer at $lmsUrl" -ForegroundColor Red
+        }
+    }
     $model = $cfg.gpu.operator_model
     if ($model -and $model -notlike 'CHANGE_ME*') {
         $loaded = (lms ps 2>$null) -join ' '
