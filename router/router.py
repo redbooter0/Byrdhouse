@@ -413,7 +413,10 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     r = json.loads(p.read_text(encoding="utf-8-sig"))
                     out.append({"id": r["id"], "version": r["version"], "kind": r.get("kind"),
-                                "slots": re.findall(r"\{(\w+)\}", r.get("template", "")),
+                                # dedupe, order kept: game-anchored templates repeat
+                                # {game} on purpose but it's ONE input
+                                "slots": list(dict.fromkeys(
+                                    re.findall(r"\{(\w+)\}", r.get("template", "")))),
                                 "vary": list(r.get("vary", {}).keys()), "file": p.name})
                 except Exception:
                     continue
