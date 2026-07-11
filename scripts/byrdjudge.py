@@ -49,9 +49,13 @@ def judge_card(root, card: dict, image_path) -> dict:
 
     slots = card.get("slots") or {}
     game = slots.get("game", "")
-    game_rule = ""
+    game_rule = (
+        "\nHARD REQUIREMENT: the image must show what was actually requested. If the "
+        "main requested subject is missing, unrecognizable, or reduced to a body-part "
+        "crop, cap the overall score at 3.0 and say why in the caption."
+    )
     if game:
-        game_rule = (
+        game_rule += (
             f"\nHARD REQUIREMENT: the founder asked for the video game '{game}'. "
             f"If the image does not clearly evoke {game} (its creatures, environment, "
             f"or art style), set game_reference to 1-2, cap the overall score at 2.4, "

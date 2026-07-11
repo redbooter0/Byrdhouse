@@ -1,0 +1,15 @@
+{
+  "id": "freeform",
+  "version": 1,
+  "kind": "image.generate",
+  "_note": "The escape hatch: the founder's exact words become the prompt. Still a recipe — versioned, carded, seeded, judged against prompt fidelity — so the 'recipes over prompts' rule holds while nothing stands between the idea and ComfyUI.",
+  "template": "{prompt}, {palette} palette, {lighting}, clean zone left empty for composited text",
+  "negative": "text, letters, words, watermark, blurry, low contrast, extra limbs, cropped body",
+  "vary": {
+    "palette": ["vivid", "gold-red", "electric-blue", "pastel-punch"],
+    "lighting": ["rim light", "golden hour", "neon glow", "soft daylight"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 30, "batch": 4 },
+  "compose": { "text_zone": "bottom", "max_words": 4, "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "prompt_fidelity": "1-5 — does the image show exactly what the prompt asked for?", "readability": "1-5", "contrast": "1-5", "hook": "1-5" }
+}
