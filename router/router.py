@@ -54,6 +54,7 @@ TOKEN = CFG["auth"]["admin_token"]
 DB_PATH = ROOT / "db" / "byrdhouse.db"
 DASHBOARD = Path(__file__).resolve().parent.parent / "dashboard"
 PREVIEWS = ROOT / "artifacts" / "_previews"  # worker-uploaded copies for the dashboard
+REFERENCES = ROOT / "references"  # founder-loved thumbnails the judge scores against
 
 JOB_TYPES = {
     "image.generate", "image.judge", "image.upscale", "video.i2v",
@@ -276,6 +277,25 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(cached.read_bytes(), content_type="image/png")
             return self._send({"error": "file not on this host"}, 404)
 
+        if path == "/references":
+            out = []
+            if REFERENCES.exists():
+                for p in sorted(REFERENCES.rglob("*.png")) + sorted(REFERENCES.rglob("*.jpg")):
+                    out.append({"tag": p.parent.name if p.parent != REFERENCES else "general",
+                                "name": p.name})
+            tag = q.get("tag", "").lower()
+            if tag:
+                out = [r for r in out if r["tag"].lower() == tag]
+            return self._send(out)
+
+        m = re.fullmatch(r"/references/([\w.-]+)/([\w. -]+)/file", path)
+        if m:
+            f = (REFERENCES / m.group(1) / m.group(2)).resolve()
+            if str(f).startswith(str(REFERENCES.resolve())) and f.is_file():
+                ctype = "image/png" if f.suffix == ".png" else "image/jpeg"
+                return self._send(f.read_bytes(), content_type=ctype)
+            return self._send({"error": "no such reference"}, 404)
+
         if path == "/recipes":
             out = []
             for p in sorted((ROOT / "recipes").glob("*.v*.json")):
@@ -346,6 +366,17 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authed():
             return self._send({"error": "bad or missing bearer token"}, 401)
         path = urlparse(self.path).path.rstrip("/")
+
+        m = re.fullmatch(r"/references/([\w-]+)/([\w. -]+)", path)
+        if m:  # raw reference upload from the dashboard (body is image bytes)
+            n = int(self.headers.get("Content-Length") or 0)
+            if not 0 < n <= 20_000_000:
+                return self._send({"error": "bad upload size"}, 400)
+            dest = REFERENCES / m.group(1) / m.group(2)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(self.rfile.read(n))
+            event(self._actor(), "reference.add", f"{m.group(1)}/{m.group(2)}", {"bytes": n})
+            return self._send({"ok": True, "tag": m.group(1), "name": m.group(2)}, 201)
 
         m = re.fullmatch(r"/artifacts/([\w.-]+)/file", path)
         if m:  # raw image upload from the worker (body is bytes, not JSON)

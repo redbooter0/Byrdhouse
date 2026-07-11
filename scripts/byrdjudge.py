@@ -34,6 +34,36 @@ def _find_recipe_spec(root: Path, recipe_tag: str):
     return _load(p) if p.exists() else None
 
 
+def _fetch_references(cfg, card, limit=2):
+    """Founder-loved thumbnails from the router's reference library (best-effort).
+    Tag priority: the requested game, then the recipe family, then 'general'."""
+    router = cfg.get("services", {}).get("router", "").rstrip("/")
+    if not router:
+        return []
+    slots = card.get("slots") or {}
+    tags = []
+    if slots.get("game"):
+        tags.append(re.sub(r"[^\w-]+", "-", slots["game"].strip().lower()))
+    m = re.match(r"([\w-]+)@", card.get("recipe") or "")
+    if m:
+        tags.append(m.group(1))
+    tags.append("general")
+    out = []
+    for tag in tags:
+        if len(out) >= limit:
+            break
+        try:
+            with urllib.request.urlopen(f"{router}/references?tag={tag}", timeout=10) as r:
+                items = json.loads(r.read().decode())
+            for it in items[: limit - len(out)]:
+                with urllib.request.urlopen(
+                        f"{router}/references/{it['tag']}/{it['name']}/file", timeout=15) as r:
+                    out.append(base64.b64encode(r.read()).decode())
+        except Exception:
+            continue  # references are a bonus, never a blocker
+    return out
+
+
 def judge_card(root, card: dict, image_path) -> dict:
     """Returns {"score": float, "tags": [...], "caption": str}. Raises on failure."""
     root = Path(root)
@@ -46,6 +76,7 @@ def judge_card(root, card: dict, image_path) -> dict:
     recipe = _find_recipe_spec(root, card.get("recipe", "")) or {}
     rubric = recipe.get("rubric", {"quality": "1-5"})
     b64 = base64.b64encode(Path(image_path).read_bytes()).decode()
+    refs = _fetch_references(cfg, card)
 
     slots = card.get("slots") or {}
     game = slots.get("game", "")
@@ -61,25 +92,32 @@ def judge_card(root, card: dict, image_path) -> dict:
             f"or art style), set game_reference to 1-2, cap the overall score at 2.4, "
             f"and include the tag \"off-game\". Generic fantasy that could be any game FAILS this."
         )
+    ref_rule = ""
+    if refs:
+        ref_rule = (
+            f"\nThe FIRST image is the candidate. The following {len(refs)} image(s) are "
+            "REFERENCE thumbnails the founder already loves. Add a rubric key "
+            "\"reference_alignment\" (1-5): how close the candidate gets to the "
+            "references' energy, composition, and punch. Weigh it heavily in the "
+            "overall score — the references are the bar."
+        )
     prompt = (
         "You are the ByrdHouse image judge. Score this generated image against its "
         f"recipe rubric: {json.dumps(rubric)}. The image's purpose: "
         f"{card.get('purpose', 'unknown')}. Requested slots: {json.dumps(slots)}. "
         f"Prompt used: {card.get('prompt', '')[:400]}"
-        f"{game_rule}\n"
+        f"{game_rule}{ref_rule}\n"
         "Reply with ONLY a JSON object: {\"score\": <overall 1-5, one decimal>, "
         "\"scores\": {<rubric key>: <1-5>, ...}, \"tags\": [3-6 short lowercase tags], "
         "\"caption\": \"<one vivid sentence>\"}"
     )
+    content = [{"type": "text", "text": prompt},
+               {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}}]
+    content += [{"type": "image_url", "image_url": {"url": f"data:image/png;base64,{r}"}}
+                for r in refs]
     payload = {
         "model": model,
-        "messages": [{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": prompt},
-                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
-            ],
-        }],
+        "messages": [{"role": "user", "content": content}],
         "temperature": 0.2,
         "max_tokens": 400,
     }

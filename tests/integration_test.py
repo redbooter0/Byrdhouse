@@ -237,6 +237,19 @@ def main():
         with urllib.request.urlopen(f"http://127.0.0.1:{RP}/artifacts/art.dupetest.0/file", timeout=15) as r:
             check("preview served from uploaded cache (file not on router host)", r.read() == png)
 
+        # Reference library: upload from the dashboard, list, serve to the judge
+        ref_png = b"\x89PNG-ref-bytes"
+        rq3 = urllib.request.Request(
+            f"http://127.0.0.1:{RP}/references/palworld/fave.png", data=ref_png, method="POST",
+            headers={"Content-Type": "image/png", "Authorization": f"Bearer {TOKEN}"})
+        urllib.request.urlopen(rq3, timeout=15).read()
+        refs = api("/references?tag=palworld")
+        check("reference listed under its tag",
+              len(refs) == 1 and refs[0]["name"] == "fave.png")
+        with urllib.request.urlopen(
+                f"http://127.0.0.1:{RP}/references/palworld/fave.png/file", timeout=15) as r:
+            check("reference file served", r.read() == ref_png)
+
         # PowerShell 5.1 writes status.json with a UTF-8 BOM — /status must tolerate it
         (ROOT / "status.json").write_bytes(
             b"\xef\xbb\xbf" + json.dumps({"host": "TEST", "overall": "green", "checks": []}).encode())
