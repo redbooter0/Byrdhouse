@@ -216,7 +216,8 @@ def http_json(url: str, payload=None, timeout=30):
 def generate(root, recipe_name, slots, project, purpose,
              batch=None, checkpoint=None, dry_run=False, job_id=None,
              aspect=None, width=None, height=None, negative_extra=None,
-             lora=None, lora_strength=0.9, seed=None, reference=None):
+             lora=None, lora_strength=0.9, seed=None, reference=None,
+             engine=None):
     """Run one image.generate: recipe -> ComfyUI -> archived PNGs + cards.
     Returns (job_id, [(png_path, card_dict), ...]). Raises SystemExit on
     validation errors (via die) — callers that need exceptions can catch it."""
@@ -252,10 +253,11 @@ def generate(root, recipe_name, slots, project, purpose,
         negative = f"{negative}, {negative_extra}" if negative else str(negative_extra)
 
     defaults = recipe.get("defaults", {})
-    ckpt_requested = checkpoint or defaults.get("checkpoint") or die("no checkpoint")
+    engine = engine or {}
+    ckpt_requested = checkpoint or engine.get("checkpoint") or defaults.get("checkpoint") or die("no checkpoint")
     checkpoint, ckpt_matched = resolve_checkpoint_info(root, ckpt_requested, comfy=comfy)
     batch = batch or defaults.get("batch", 1)
-    steps = defaults.get("steps", 30)
+    steps = int(engine.get("steps") or defaults.get("steps", 30))
 
     # ── Build the graph ───────────────────────────────────────────────────────
     # A reference image routes through the IP-Adapter graph: the base checkpoint
@@ -284,9 +286,9 @@ def generate(root, recipe_name, slots, project, purpose,
             sampler_nodes += 1
             inputs["seed"] = seed
             inputs["steps"] = steps
-            inputs["cfg"] = img_cfg.get("cfg", 7.0)
-            inputs["sampler_name"] = img_cfg.get("sampler", "dpmpp_2m")
-            inputs["scheduler"] = img_cfg.get("scheduler", "karras")
+            inputs["cfg"] = float(engine.get("cfg") or img_cfg.get("cfg", 7.0))
+            inputs["sampler_name"] = engine.get("sampler_name") or img_cfg.get("sampler", "dpmpp_2m")
+            inputs["scheduler"] = engine.get("scheduler") or img_cfg.get("scheduler", "karras")
         elif ct == "CheckpointLoaderSimple":
             inputs["ckpt_name"] = checkpoint          # fix 4 source of truth
         elif ct == "EmptyLatentImage":

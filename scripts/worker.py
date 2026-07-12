@@ -186,7 +186,7 @@ def run_generate(job) -> None:
         aspect=p.get("aspect"), width=p.get("width"), height=p.get("height"),
         negative_extra=p.get("negative"), lora=p.get("lora"),
         lora_strength=float(p.get("lora_strength", 0.9)), seed=p.get("seed"),
-        reference=reference)
+        reference=reference, engine=p.get("engine"))
     cards = []
     for png, card in saved:
         card["path"] = str(png)

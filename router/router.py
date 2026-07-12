@@ -202,6 +202,59 @@ def job_row(jid):
     return db().execute("SELECT * FROM jobs WHERE id=?", (jid,)).fetchone()
 
 
+# ── ComfyUI proxy: live node info + installed models for dashboard controls ──
+_comfy_cache = {}
+_comfy_cache_ts = 0
+COMFY_CACHE_SEC = 300  # re-fetch every 5 min
+
+def _comfy_fetch(endpoint):
+    comfy = CFG["services"]["comfyui"].rstrip("/")
+    try:
+        with urllib.request.urlopen(f"{comfy}{endpoint}", timeout=10) as r:
+            return json.loads(r.read().decode())
+    except Exception:
+        return None
+
+def _comfy_nodes():
+    global _comfy_cache, _comfy_cache_ts
+    if time.time() - _comfy_cache_ts < COMFY_CACHE_SEC and _comfy_cache:
+        return _comfy_cache
+    raw = _comfy_fetch("/object_info")
+    if not raw:
+        return {"error": "ComfyUI unreachable", "nodes": {}}
+    nodes = {}
+    for cls in ("KSampler", "KSamplerAdvanced", "CheckpointLoaderSimple",
+                "LoraLoader", "EmptyLatentImage", "CLIPTextEncode",
+                "IPAdapterAdvanced", "IPAdapterUnifiedLoader"):
+        info = raw.get(cls)
+        if not info:
+            continue
+        inputs = {}
+        for name, spec in info.get("input", {}).get("required", {}).items():
+            if isinstance(spec, list) and len(spec) >= 1:
+                if isinstance(spec[0], list):
+                    inputs[name] = {"type": "enum", "options": spec[0]}
+                    if len(spec) > 1 and isinstance(spec[1], dict):
+                        inputs[name]["default"] = spec[1].get("default")
+                elif isinstance(spec[0], str):
+                    entry = {"type": spec[0]}
+                    if len(spec) > 1 and isinstance(spec[1], dict):
+                        for k in ("default", "min", "max", "step"):
+                            if k in spec[1]:
+                                entry[k] = spec[1][k]
+                    inputs[name] = entry
+        nodes[cls] = inputs
+    _comfy_cache = {"nodes": nodes}
+    _comfy_cache_ts = time.time()
+    return _comfy_cache
+
+def _comfy_models(folder):
+    data = _comfy_fetch(f"/models/{folder}")
+    if data is None:
+        return {"error": "ComfyUI unreachable", "models": []}
+    return {"folder": folder, "models": data if isinstance(data, list) else []}
+
+
 LEARN_DIMS = {  # dimension -> how to pull its value out of an artifact card
     "recipe":     lambda m: m.get("recipe"),
     "checkpoint": lambda m: m.get("checkpoint"),
@@ -602,6 +655,19 @@ class Handler(BaseHTTPRequestHandler):
                 except Exception:
                     continue
             return self._send(out)
+
+        # ── ComfyUI proxy: expose live node info + installed models ──────────
+        # The dashboard renders real ComfyUI controls (sampler, scheduler,
+        # steps, CFG, checkpoints, LoRAs) from the worker's actual install
+        # instead of hardcoded dropdowns. Cached until the router restarts.
+        if path == "/comfy/nodes":
+            return self._send(_comfy_nodes())
+
+        if path.startswith("/comfy/models/"):
+            folder = path.split("/comfy/models/", 1)[1].strip("/")
+            if not re.fullmatch(r"[\w.-]+", folder):
+                return self._send({"error": "bad folder name"}, 400)
+            return self._send(_comfy_models(folder))
 
         if path == "/mode":
             req = db().execute("SELECT value FROM kv WHERE key='requested_mode'").fetchone()

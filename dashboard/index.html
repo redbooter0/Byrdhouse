@@ -359,13 +359,12 @@ V.image = async () => {
         <label>Source image ${qtip('Upload a real screenshot or box art from your phone. It is saved, recorded in the gallery at top grade (real pixels beat diffused lookalikes), and your title is composited onto it — no generation needed. Add a Thumbnail title above, then Queue.')}</label>
         <input id="srcFile" type="file" accept="image/*" onchange="uploadSource(this)">
         <div id="srcPreview" class="muted" style="margin-top:6px"></div>
-        <label>Checkpoint ${qtip('Optional. Name of a .safetensors model installed on the worker. Leave empty for the recipe default. Swap in a stylized model (e.g. Animagine) for anime/game looks.')}</label>
-        <input id="ckpt" placeholder="leave empty for the recipe default">
-        <label>LoRA ${qtip('Optional. A .safetensors LoRA in the worker models/loras folder — game-style LoRAs are the key to nailing a specific game accurately.')}</label>
-        <input id="lora" placeholder="e.g. palworld_style">
         <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
           <input type="checkbox" id="enhance" style="width:auto">
           ✨ Rewrite my prompt first ${qtip('Sends your prompt to the local model to expand into a full SDXL prompt before generating. Runs the freeform recipe. Adds one OPERATOR-mode step.')}</label>
+      </details>
+      <details class="opts" id="engineDetails"><summary>Engine controls ${qtip('Direct ComfyUI node parameters. These override config defaults — change the sampler, steps, CFG, checkpoint, and LoRA from right here. Loaded live from the worker.')}</summary>
+        <div id="engineControls" style="opacity:.5;font-size:12px;color:var(--dim)">loading from ComfyUI…</div>
       </details>
     </div>
     <div class="panel"><h2>Reference library ${qtip('Upload thumbnails you love. The judge scores every new image against them, so approvals converge on your taste. Tag by game so the right references apply.')}</h2>
@@ -463,11 +462,16 @@ const DRAFT_KEY = 'bh_draft';
 function readForm() {
   const slots = {};
   document.querySelectorAll('#slots input').forEach(i => { if (i.value) slots[i.dataset.slot] = i.value; });
+  const eng = {};
+  ['engCkpt','engLora','engSampler','engScheduler','engSteps','engCfg','engNeg','engSeed'].forEach(id => {
+    const e = $(id); if (e && e.value) eng[id] = e.value;
+  });
   return { recipe: $('recipe') ? $('recipe').value : '', slots,
            title: $('thumbTitle') ? $('thumbTitle').value : '',
            srcArtifact: window._srcArtifact || null,
            project: $('project') ? $('project').value : 'careyrpg',
-           purpose: $('purpose') ? $('purpose').value : '' };
+           purpose: $('purpose') ? $('purpose').value : '',
+           engine: Object.keys(eng).length ? eng : null };
 }
 function saveDraft() { localStorage.setItem(DRAFT_KEY, JSON.stringify(readForm())); }
 function loadDraft() {
@@ -484,15 +488,116 @@ function applyDraft(d) {
   $('thumbTitle').value = d.title || '';
   $('project').value = d.project || 'careyrpg';
   $('purpose').value = d.purpose || '';
-  // restore a previously-uploaded source image (survives reload/room switches)
   window._srcArtifact = d.srcArtifact || null;
   if (window._srcArtifact && $('srcPreview'))
     $('srcPreview').innerHTML =
       `<span style="color:var(--green)">✓ saved &amp; recorded · grade A</span> ${esc(window._srcArtifact.name || '')}`
       + `<br><img src="/artifacts/${esc(window._srcArtifact.id)}/file" style="height:52px;border-radius:6px;margin-top:4px">`
       + `<br><button class="s" onclick="clearSource()" style="margin-top:4px">remove</button>`;
+  if (d.engine) {
+    Object.entries(d.engine).forEach(([id, val]) => {
+      const e = $(id);
+      if (e) { e.value = val; e.dispatchEvent(new Event('input')); }
+    });
+  }
 }
 /* ── end draft-persistence ── */
+
+/* ── Engine controls: live ComfyUI node parameters ─────────────────────── */
+window._engineData = null;
+async function loadEngineControls() {
+  const el = $('engineControls');
+  if (!el) return;
+  try {
+    const [nodesResp, ckptResp, loraResp] = await Promise.all([
+      jget('/comfy/nodes'), jget('/comfy/models/checkpoints'), jget('/comfy/models/loras')
+    ]);
+    if (nodesResp.error) {
+      el.innerHTML = '<span style="color:var(--yellow)">⚠ ComfyUI offline — engine controls unavailable (config defaults will be used)</span>';
+      el.style.opacity = '.6';
+      return;
+    }
+    const ks = (nodesResp.nodes || {}).KSampler || {};
+    const ckpts = (ckptResp.models || []);
+    const loras = (loraResp.models || []);
+    window._engineData = { nodes: nodesResp.nodes, checkpoints: ckpts, loras: loras };
+
+    const samplerOpts = (ks.sampler_name && ks.sampler_name.options || []);
+    const schedulerOpts = (ks.scheduler && ks.scheduler.options || []);
+    const stepsInfo = ks.steps || {};
+    const cfgInfo = ks.cfg || {};
+
+    let html = '';
+
+    // Checkpoint
+    html += '<label>Checkpoint</label><select id="engCkpt"><option value="">recipe default</option>';
+    ckpts.forEach(c => { html += `<option value="${esc(c)}">${esc(c.replace(/\.safetensors$/,''))}</option>`; });
+    html += '</select>';
+
+    // LoRA
+    html += '<label>LoRA</label><select id="engLora"><option value="">none</option>';
+    loras.forEach(l => { html += `<option value="${esc(l)}">${esc(l.replace(/\.safetensors$/,''))}</option>`; });
+    html += '</select>';
+
+    // Sampler
+    if (samplerOpts.length) {
+      const sampDef = ks.sampler_name.default || 'dpmpp_2m';
+      html += '<label>Sampler</label><select id="engSampler"><option value="">default</option>';
+      samplerOpts.forEach(s => { html += `<option value="${esc(s)}"${s===sampDef?' selected':''}>${esc(s)}</option>`; });
+      html += '</select>';
+    }
+
+    // Scheduler
+    if (schedulerOpts.length) {
+      const schedDef = ks.scheduler.default || 'karras';
+      html += '<label>Scheduler</label><select id="engScheduler"><option value="">default</option>';
+      schedulerOpts.forEach(s => { html += `<option value="${esc(s)}"${s===schedDef?' selected':''}>${esc(s)}</option>`; });
+      html += '</select>';
+    }
+
+    // Steps slider
+    const stMin = stepsInfo.min || 1, stMax = Math.min(stepsInfo.max || 150, 150), stDef = stepsInfo.default || 30;
+    html += `<label>Steps <span id="engStepsVal" style="color:var(--accent2)">${stDef}</span></label>`;
+    html += `<input type="range" id="engSteps" min="${stMin}" max="${stMax}" value="${stDef}" oninput="$('engStepsVal').textContent=this.value">`;
+
+    // CFG slider
+    const cfMin = cfgInfo.min || 1, cfMax = Math.min(cfgInfo.max || 30, 30), cfDef = cfgInfo.default || 7;
+    html += `<label>CFG <span id="engCfgVal" style="color:var(--accent2)">${cfDef}</span></label>`;
+    html += `<input type="range" id="engCfg" min="${cfMin}" max="${cfMax}" step="0.5" value="${cfDef}" oninput="$('engCfgVal').textContent=this.value">`;
+
+    // Negative prompt
+    html += '<label>Extra negative prompt</label>';
+    html += '<input id="engNeg" placeholder="e.g. text, letters, watermark">';
+
+    // Seed
+    html += '<label>Seed (blank = random each job)</label>';
+    html += '<input id="engSeed" placeholder="random" inputmode="numeric">';
+
+    el.innerHTML = html;
+    el.style.opacity = '1';
+    el.style.fontSize = '';
+    el.style.color = '';
+  } catch (e) {
+    el.innerHTML = '<span style="color:var(--yellow)">⚠ Could not load engine controls: ' + esc(e.message) + '</span>';
+    el.style.opacity = '.6';
+  }
+}
+function collectEngine() {
+  const eng = {};
+  const v = id => { const e = $(id); return e ? e.value.trim() : ''; };
+  if (v('engCkpt')) eng.checkpoint = v('engCkpt');
+  if (v('engLora')) eng.lora = v('engLora');
+  if (v('engSampler')) eng.sampler_name = v('engSampler');
+  if (v('engScheduler')) eng.scheduler = v('engScheduler');
+  const steps = v('engSteps');
+  if (steps) eng.steps = parseInt(steps);
+  const cfg = v('engCfg');
+  if (cfg) eng.cfg = parseFloat(cfg);
+  if (v('engNeg')) eng.negative = v('engNeg');
+  if (v('engSeed')) eng.seed = v('engSeed');
+  return Object.keys(eng).length ? eng : null;
+}
+/* ── end engine controls ── */
 
 async function submitGen() {
   try {
@@ -504,18 +609,23 @@ async function submitGen() {
     const payload = { recipe:d.recipe, slots:d.slots, project:d.project, purpose:d.purpose };
     if (title) payload.title = title;
     if (srcArt) payload.source_artifact = srcArt.id;
-    const ckpt = $('ckpt') ? $('ckpt').value.trim() : '';
-    if (ckpt) payload.checkpoint = ckpt;
+    const eng = collectEngine();
+    if (eng) {
+      if (eng.checkpoint) payload.checkpoint = eng.checkpoint;
+      if (eng.lora) payload.lora = eng.lora;
+      if (eng.negative) payload.negative = eng.negative;
+      if (eng.seed) payload.seed = eng.seed;
+      payload.engine = {};
+      if (eng.sampler_name) payload.engine.sampler_name = eng.sampler_name;
+      if (eng.scheduler) payload.engine.scheduler = eng.scheduler;
+      if (eng.steps) payload.engine.steps = eng.steps;
+      if (eng.cfg) payload.engine.cfg = eng.cfg;
+      if (eng.checkpoint) payload.engine.checkpoint = eng.checkpoint;
+    }
     const aspect = $('aspect') ? $('aspect').value : '';
     if (aspect) payload.aspect = aspect;
-    const lora = $('lora') ? $('lora').value.trim() : '';
-    if (lora) payload.lora = lora;
     const enhance = $('enhance') && $('enhance').checked && !title && !srcArt && payload.slots.prompt;
     const type = (srcArt || title) ? 'content.thumbnail' : enhance ? 'content.enhance' : 'image.generate';
-    // The dashboard is the recipe's first gate. Every required (non-vary) slot
-    // must be filled HERE, or the job dies deep in byrdimage with
-    // "unfilled slots [...]". Skip only when a source image composites directly
-    // (no recipe generation) or the enhance path substitutes the freeform recipe.
     if (!srcArt && type !== 'content.enhance') {
       const missing = missingRequiredSlots(d.slots);
       if (missing.length)
@@ -526,9 +636,9 @@ async function submitGen() {
       required_mode: srcArt ? 'ANY' : enhance ? 'OPERATOR' : 'IMAGE',
       required_caps: srcArt ? [] : enhance ? ['lmstudio'] : ['comfyui'], payload });
     say('queued '+j.id+(srcArt?' (title onto your uploaded image)':title?' (two-pass thumbnail)':enhance?' (prompt enhancement first)':''));
-    window._srcArtifact = null;         // consumed — next batch starts clean
-    clearDraft();                       // only a successful queue clears the draft
-    $('view').innerHTML = '';           // force a fresh (empty) form
+    window._srcArtifact = null;
+    clearDraft();
+    $('view').innerHTML = '';
     render();
   } catch (e) { say('error: '+e.message); }
 }
@@ -706,7 +816,7 @@ async function render() {
     $('view').innerHTML = await V[room]();
     if (room === 'image') {
       slotFields();
-      applyDraft(loadDraft());
+      loadEngineControls().then(() => applyDraft(loadDraft()));
       $('genForm').addEventListener('input', saveDraft);
       $('genForm').addEventListener('change', saveDraft);
     }
