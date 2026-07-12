@@ -109,7 +109,7 @@ check('submitGen names missing required slots and blocks before POST /jobs',
 
 // ── 3. structural invariants in the page source ─────────────────────────────
 check('polling refreshes only #imgOut when the form is on screen',
-  /room === 'image' && \$\('genForm'\)[\s\S]{0,700}\$\('imgOut'\)\.innerHTML =/.test(html));
+  /room === 'create' && \$\('genForm'\)[\s\S]{0,700}\$\('imgOut'\)\.innerHTML =/.test(html));
 check('full re-render skipped while typing in the view',
   /if \(typingInView\(\)\) return/.test(html));
 check('form saves draft on input and change',

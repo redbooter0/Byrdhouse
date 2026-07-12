@@ -1,4 +1,4 @@
-# setup-mini.ps1 — BYRD-MINI bootstrap (nervous system: db, queue, dashboard, memory)
+﻿# setup-mini.ps1 — BYRD-MINI bootstrap (nervous system: db, queue, dashboard, memory)
 # Same as setup-gaming.ps1 but rooted at D:\ByrdHouse and auto-sets run_router=true.
 #
 # Usage:  cd D:\ByrdHouse
