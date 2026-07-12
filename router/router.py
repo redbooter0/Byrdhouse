@@ -69,10 +69,49 @@ JOB_TYPES = {
 }
 REVIEW_TYPES = {"image.generate", "image.refine", "image.upscale", "video.i2v"}  # done -> needs_review
 
-# Worker heartbeats pause while a job runs (the worker loop is synchronous and
-# a generation can take minutes), so liveness thresholds must be generous.
-WORKER_OFFLINE_SEC = 600    # no heartbeat for 10 min -> reported offline
-JOB_REAP_SEC = 900          # claimed/running 15 min past last heartbeat -> failure path
+# The worker heartbeats from a dedicated thread (worker.py) every ~30s even
+# while a long generation runs, so silence now genuinely means a dead process
+# and the thresholds can be tight without reaping healthy long jobs.
+WORKER_OFFLINE_SEC = 120    # no heartbeat for 2 min (4 missed beats) -> offline
+JOB_REAP_SEC = 300          # claimed/running 5 min past last heartbeat -> failure path
+
+# Router build identity — the belt's answer to "are my machines on the same
+# code?". API_VERSION is the wire contract; build_sha is the exact commit. Both
+# ride every heartbeat/health response so drift between MINI, GAMING and the
+# dashboard is visible instead of silent (they all sync from one git repo).
+API_VERSION = "1"
+
+
+def repo_build(start=None):
+    """Best-effort git build id (short SHA + branch), stdlib-only, no subprocess
+    and no network — reads .git directly so it works on both machines exactly as
+    they are synced. Returns {'sha','branch'}; unknowns off a git tree."""
+    try:
+        p = Path(start or __file__).resolve()
+        for d in [p] + list(p.parents):
+            gitdir = d / ".git"
+            if not gitdir.is_dir():
+                continue
+            head = (gitdir / "HEAD").read_text(encoding="utf-8").strip()
+            if not head.startswith("ref:"):
+                return {"sha": head[:12], "branch": "detached"}
+            ref = head[4:].strip()
+            branch = ref.rsplit("/", 1)[-1]
+            reffile = gitdir / ref
+            if reffile.exists():
+                return {"sha": reffile.read_text(encoding="utf-8").strip()[:12], "branch": branch}
+            packed = gitdir / "packed-refs"
+            if packed.exists():
+                for line in packed.read_text(encoding="utf-8").splitlines():
+                    if line and not line.startswith(("#", "^")) and line.endswith(ref):
+                        return {"sha": line.split()[0][:12], "branch": branch}
+            return {"sha": "unknown", "branch": branch}
+    except Exception:
+        pass
+    return {"sha": "unknown", "branch": "unknown"}
+
+
+BUILD = repo_build()
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs(
@@ -113,6 +152,9 @@ MIGRATIONS = [
     ("jobs", "idempotency_key", "ALTER TABLE jobs ADD COLUMN idempotency_key TEXT"),
     ("jobs", "parent_id",       "ALTER TABLE jobs ADD COLUMN parent_id TEXT"),
     ("jobs", "run_after",       "ALTER TABLE jobs ADD COLUMN run_after TEXT"),
+    ("workers", "build_sha",    "ALTER TABLE workers ADD COLUMN build_sha TEXT"),
+    ("workers", "api_version",  "ALTER TABLE workers ADD COLUMN api_version TEXT"),
+    ("workers", "gpu",          "ALTER TABLE workers ADD COLUMN gpu TEXT"),
 ]
 INDEXES = [
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_idem ON jobs(idempotency_key)"
@@ -165,6 +207,18 @@ def live_workers(cols="*"):
             w["status"] = "online" if (w["last_heartbeat"] or "") > cutoff else "offline"
         out.append(w)
     return out
+
+
+def worker_online(worker_id):
+    """True if this specific worker has heartbeated within the liveness window.
+    The fence for requeue: a live worker still owns its job."""
+    if not worker_id:
+        return False
+    row = db().execute("SELECT last_heartbeat FROM workers WHERE id=?", (worker_id,)).fetchone()
+    if not row or not row["last_heartbeat"]:
+        return False
+    cutoff = (datetime.now(timezone.utc) - timedelta(seconds=WORKER_OFFLINE_SEC)).isoformat()
+    return row["last_heartbeat"] > cutoff
 
 
 def fail_job(job, err, actor):
@@ -560,7 +614,8 @@ class Handler(BaseHTTPRequestHandler):
         path = u.path.rstrip("/") or "/"
 
         if path == "/health":
-            return self._send({"ok": True, "ts": now()})
+            return self._send({"ok": True, "ts": now(), "api_version": API_VERSION,
+                               "build_sha": BUILD["sha"], "branch": BUILD["branch"]})
 
         if path == "/favicon.ico":
             return self._send(b"", content_type="image/x-icon")
@@ -572,7 +627,26 @@ class Handler(BaseHTTPRequestHandler):
                 status = json.loads(sj.read_text(encoding="utf-8-sig"))
             counts = {r["status"]: r["n"] for r in db().execute(
                 "SELECT status, COUNT(*) n FROM jobs GROUP BY status")}
-            return self._send({"machine": status, "queue": counts, "workers": live_workers()})
+            workers = live_workers()
+            router_build = {"sha": BUILD["sha"], "branch": BUILD["branch"],
+                            "api_version": API_VERSION}
+            # Drift: any ONLINE worker on a different commit or API version than
+            # the router is a silent-split hazard (press a button, half the code
+            # is missing). Only online workers count — an offline box is stale by
+            # definition and shown as such elsewhere.
+            drift = []
+            for w in workers:
+                if w.get("status") != "online":
+                    continue
+                wsha, wver = w.get("build_sha"), w.get("api_version")
+                if wsha and wsha != BUILD["sha"]:
+                    drift.append({"worker": w["id"], "issue": "commit_mismatch",
+                                  "worker_sha": wsha, "router_sha": BUILD["sha"]})
+                if wver and wver != API_VERSION:
+                    drift.append({"worker": w["id"], "issue": "api_version_mismatch",
+                                  "worker_api": wver, "router_api": API_VERSION})
+            return self._send({"machine": status, "queue": counts, "workers": workers,
+                               "router": router_build, "drift": drift})
 
         if path == "/jobs":
             sql, args = "SELECT * FROM jobs", []
@@ -874,6 +948,20 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send({"error": "no such job"}, 404)
             if job["status"] not in ("dead", "cancelled", "claimed", "running"):
                 return self._send({"error": f"cannot requeue a '{job['status']}' job"}, 400)
+            # Fence: a claimed/running job whose worker is STILL ALIVE is really
+            # executing right now. Requeuing it would hand the same work to a
+            # second claim while the first keeps going — duplicate output on the
+            # one GPU, racing status writes. Refuse and point at cancel. Only when
+            # the owner has gone silent (crash/reboot) is an immediate requeue
+            # safe; otherwise the reaper handles it after JOB_REAP_SEC.
+            if job["status"] in ("claimed", "running") and worker_online(job["worker_id"]):
+                return self._send(
+                    {"error": f"job is {job['status']} right now on live worker "
+                     f"{job['worker_id']} — it's generating. Let it finish (images "
+                     f"take ~1-2 min); if the worker has crashed the job becomes "
+                     f"requeueable automatically after ~5 min. Requeue is for "
+                     f"dead/cancelled or crashed jobs, not live ones.",
+                     "worker": job["worker_id"]}, 409)
             db().execute(
                 "UPDATE jobs SET status='queued', worker_id=NULL, attempts=0,"
                 " error=NULL, finished_at=NULL WHERE id=?", (jid,))
@@ -993,13 +1081,19 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/workers/heartbeat":
             db().execute(
-                "INSERT OR REPLACE INTO workers(id,host,caps,mode,last_heartbeat,status)"
-                " VALUES(?,?,?,?,?,?)",
+                "INSERT OR REPLACE INTO workers"
+                "(id,host,caps,mode,last_heartbeat,status,build_sha,api_version,gpu)"
+                " VALUES(?,?,?,?,?,?,?,?,?)",
                 (body.get("id", "?"), body.get("host", ""), json.dumps(body.get("caps", [])),
-                 body.get("mode", "ANY"), now(), "online"))
+                 body.get("mode", "ANY"), now(), "online",
+                 body.get("build_sha"), body.get("api_version"),
+                 json.dumps(body.get("gpu")) if body.get("gpu") is not None else None))
             db().commit()
             req = db().execute("SELECT value FROM kv WHERE key='requested_mode'").fetchone()
-            return self._send({"ok": True, "requested_mode": req["value"] if req else None})
+            # Echo the router's own identity so the worker can log a drift warning
+            # the moment it talks to a router built from a different commit.
+            return self._send({"ok": True, "requested_mode": req["value"] if req else None,
+                               "router_build_sha": BUILD["sha"], "api_version": API_VERSION})
 
         if path == "/mode":
             mode = body.get("mode", "").upper()

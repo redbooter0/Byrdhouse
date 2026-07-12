@@ -63,6 +63,16 @@ generated/
 *.mov
 *.webm
 
+# Live runtime data — never commit generated artifacts, uploaded sources, the
+# founder's reference library, dropped transcripts/CSVs, or the health snapshot.
+# Sidecar cards under artifacts/ carry prompts and local machine paths; keeping
+# the whole tree out of git closes that leak path. These dirs are created at
+# runtime on each machine, not shipped in the kit.
+artifacts/
+references/
+inbox/
+status.json
+
 # Backups
 *.bak
 *.bak-*

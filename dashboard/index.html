@@ -236,12 +236,13 @@ function artCard(a) {
     <b>${esc(meta.recipe || a.kind)}</b> · ${esc(a.project_id)}<br>
     ${a.score != null ? 'score <b>'+a.score+'</b> · ' : (jn.unjudged ? '<span style="color:var(--yellow)">unjudged</span> · ' : '')}<span class="pill">${esc(a.status)}</span><br>
     ${a.gen_seconds != null ? '⏱ '+fmtDur(a.gen_seconds)+' · ' : ''}<span class="muted">${esc(when)}</span><br>
+    ${(meta.out_size || meta.size) ? `<span class="muted">▢ ${esc(meta.out_size || meta.size)}${meta.in_size && meta.out_size && meta.out_size!==meta.in_size ? ' ← '+esc(meta.in_size) : ''}</span><br>` : ''}
     ${meta.checkpoint_fallback ? `<span style="color:var(--yellow)">⚠ ran ${esc(meta.checkpoint)} (asked ${esc(meta.checkpoint_requested)})</span><br>` : ''}
     ${esc(meta.purpose || meta.title || '')}
     <div class="row">
       <button class="s ok" ${a.status==='approved'?'disabled':''} onclick="review(this,'${a.id}','approve')">${a.status==='approved'?'✓ approved':'approve'}</button>
       <button class="s no" ${a.status==='rejected'?'disabled':''} onclick="review(this,'${a.id}','reject')">${a.status==='rejected'?'✗ rejected':'reject'}</button>
-      <button class="s" onclick="refineArt('${a.id}',0.3,2.0)" title="hi-res polish">⬆ upscale</button>
+      <button class="s" onclick="refineArt('${a.id}',0.4,1.5)" title="re-render 1.5× bigger with fresh detail (8GB-safe)">⬆ upscale</button>
       <button class="s" onclick="refineArt('${a.id}',0.55,1.0)" title="variations near this image">≈ riff</button>
     </div></div></div>`;
 }
@@ -255,7 +256,7 @@ function zoom(src) {
 async function refineArt(id, strength, scale) {
   try {
     const j = await jpost(`/artifacts/${id}/refine`, { strength, scale });
-    say(`queued ${j.id} (${strength <= 0.35 ? 'upscale' : 'riff'} of ${id})`);
+    say(`queued ${j.id} (${scale > 1.0 ? 'upscale' : 'riff'} of ${id})`);
     render();
   } catch (e) { say('error: '+e.message); }
 }

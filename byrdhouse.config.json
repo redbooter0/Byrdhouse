@@ -39,7 +39,10 @@
     "scheduler": "karras"
   },
   "gpu": {
+    "_comment": "nvidia_smi: leave blank to auto-discover (PATH, then C:/Windows/System32/nvidia-smi.exe) — set the full .exe path only if discovery fails. vram_free_threshold_mb is the minimum free VRAM to enter IMAGE mode; vram_image_healthy_mb is the level below which we warn about possible SDXL OOM on the 8GB 3070 (warn only, still proceeds).",
+    "nvidia_smi": "",
     "vram_free_threshold_mb": 1024,
+    "vram_image_healthy_mb": 5000,
     "default_mode": "OPERATOR",
     "operator_model": "qwen/qwen3.5-9b",
     "judge_model": "qwen/qwen3-vl-4b"

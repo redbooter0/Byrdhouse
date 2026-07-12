@@ -52,6 +52,19 @@ def load_json(path: Path):
         return json.load(f)
 
 
+def _png_size(path):
+    """(width, height) from a PNG's IHDR header — stdlib only, no Pillow, so the
+    refine layer can record output resolution without a pip dependency."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(24)
+        if head[:8] == b"\x89PNG\r\n\x1a\n" and head[12:16] == b"IHDR":
+            return int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+    except Exception:
+        pass
+    return None
+
+
 def new_id(prefix: str) -> str:
     ts = format(int(time.time() * 1000), "x")
     rand = "".join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(6))
@@ -460,6 +473,7 @@ def refine(root, source_path, project, purpose, prompt=None, negative=None,
     workflow_rel = "workflows/sdxl_img2img_api.json"
     graph = load_json(root / workflow_rel)
     graph.pop("_comment", None)
+    steps_used = 30
     for node in graph.values():
         ct, inputs = node.get("class_type"), node.get("inputs", {})
         if ct == "LoadImage":
@@ -474,6 +488,7 @@ def refine(root, source_path, project, purpose, prompt=None, negative=None,
             inputs["cfg"] = img_cfg.get("cfg", 7.0)
             inputs["sampler_name"] = img_cfg.get("sampler", "dpmpp_2m")
             inputs["scheduler"] = img_cfg.get("scheduler", "karras")
+            steps_used = int(inputs.get("steps", 30))
         elif ct == "CheckpointLoaderSimple":
             inputs["ckpt_name"] = checkpoint
         elif ct == "SaveImage":
@@ -490,13 +505,26 @@ def refine(root, source_path, project, purpose, prompt=None, negative=None,
     if lora:
         insert_lora(graph, resolve_lora(root, lora), lora_strength)
 
-    print(f"[byrdimage] refine {source.name}  strength {strength}  scale {scale}")
+    # Record the resolution change so the dashboard can SHOW that an upscale did
+    # something (a 1.5× on a gallery thumbnail is otherwise invisible) and so the
+    # card honestly carries the pixels that ran.
+    in_wh = _png_size(source)
+    size_fields = {}
+    if in_wh:
+        size_fields["in_size"] = f"{in_wh[0]}x{in_wh[1]}"
+        size_fields["out_size"] = f"{round(in_wh[0] * scale)}x{round(in_wh[1] * scale)}"
+    print(f"[byrdimage] refine {source.name}  strength {strength}  scale {scale}"
+          + (f"  {size_fields['in_size']} -> {size_fields['out_size']}" if size_fields else ""))
     card_base = {
         "recipe": src_card.get("recipe", "refine"), "purpose": purpose,
         "prompt": prompt, "negative": negative, "seed": seed,
         "checkpoint": checkpoint, "workflow": workflow_rel,
         "slots": src_card.get("slots", {}), "vary_picks": {},
         "refined_from": str(source), "strength": strength, "scale": scale,
+        "steps": steps_used, "cfg": img_cfg.get("cfg", 7.0),
+        "sampler": img_cfg.get("sampler", "dpmpp_2m"),
+        "scheduler": img_cfg.get("scheduler", "karras"),
+        **size_fields,
         **({"lora": lora} if lora else {}),
     }
     return job_id, run_graph(root, comfy, graph, job_id, project, card_base)
