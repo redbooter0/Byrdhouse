@@ -172,13 +172,21 @@ def register_cards(job, cards):
 
 def run_generate(job) -> None:
     p = json.loads(job["payload"])
+    # A reference_artifact (an uploaded real screenshot / key art) steers the
+    # generation toward that game's look via IP-Adapter — fetch it to local disk
+    # first, exactly like the source-composite path.
+    reference = None
+    if p.get("reference_artifact"):
+        reference = str(fetch_artifact_file(p["reference_artifact"],
+                                            ROOT / "artifacts" / "_sources"))
     job_id, saved = byrdimage.generate(
         ROOT, p["recipe"], p.get("slots", {}), p.get("project", "sandbox"),
         p.get("purpose", "unspecified"), batch=p.get("batch"),
         checkpoint=p.get("checkpoint"), job_id=job["id"],
         aspect=p.get("aspect"), width=p.get("width"), height=p.get("height"),
         negative_extra=p.get("negative"), lora=p.get("lora"),
-        lora_strength=float(p.get("lora_strength", 0.9)), seed=p.get("seed"))
+        lora_strength=float(p.get("lora_strength", 0.9)), seed=p.get("seed"),
+        reference=reference)
     cards = []
     for png, card in saved:
         card["path"] = str(png)

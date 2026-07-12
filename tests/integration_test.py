@@ -430,6 +430,23 @@ def main():
         check("web_search reports clearly when unconfigured",
               isinstance(ws, dict) and "not configured" in ws.get("error", ""))
 
+        # ── IP-Adapter: reference-driven generation (the 'make it look like THIS
+        #    game' engine). Reuse the uploaded source (src_id) as the reference. ──
+        api("/jobs", {"type": "image.generate", "project": "careyrpg",
+                      "required_mode": "IMAGE", "required_caps": ["comfyui"],
+                      "payload": {"recipe": "game_ref", "reference_artifact": src_id,
+                                  "slots": {"subject": "a Pal trainer", "emotion": "shocked"},
+                                  "project": "careyrpg", "purpose": "ref-driven test", "batch": 2}})
+        run_worker()
+        refgen = [a for a in api("/artifacts?limit=120")
+                  if a["kind"] == "image"
+                  and json.loads(a["meta"] or "{}").get("reference")]
+        check("reference-driven generation archived images with reference lineage",
+              len(refgen) >= 2, str(len(refgen)))
+        if refgen:
+            check("reference generation ran through the IP-Adapter workflow",
+                  "ipadapter" in json.loads(refgen[0]["meta"]).get("workflow", ""))
+
         # A retried job re-registers its artifacts — must upsert, not duplicate
         dupe_card = {"artifact_id": "art.dupetest.0", "job_id": "job_dupetest",
                      "kind": "image", "path": "/tmp/dupetest.png", "status": "draft"}
