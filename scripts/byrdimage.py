@@ -374,6 +374,8 @@ def generate(root, recipe_name, slots, project, purpose,
         "scheduler": engine.get("scheduler") or img_cfg.get("scheduler", "karras"),
         **({"lora": lora} if lora else {}),
         **({"reference": str(reference)} if reference else {}),
+        **({"subject_profile": recipe.get("subject_profile")} if recipe.get("subject_profile") else {}),
+        **({"category": recipe.get("category")} if recipe.get("category") else {}),
         **({"checkpoint_requested": ckpt_requested, "checkpoint_fallback": True}
            if not ckpt_matched else {}),
     }

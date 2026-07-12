@@ -1,0 +1,23 @@
+{
+  "id": "outfit_transfer_me",
+  "version": 1,
+  "kind": "image.generate",
+  "subject_profile": "me",
+  "category": "OutfitTransfer",
+  "_note": "Style and outfit transfer: 'put me in this.' Upload an outfit/style reference image alongside your face reference. Uses the style-transfer IP-Adapter to apply the look while FaceID preserves your identity. Great for fashion concepts, costume ideas, branded looks.",
+  "workflow": "workflows/sdxl_ipadapter_face_api.json",
+  "requires_reference": true,
+  "template": "photorealistic portrait of {subject} wearing {outfit}, {setting}, {lighting}, fashion photography quality, sharp details, professional styling, 8K detail",
+  "negative": "text, letters, words, watermark, blurry, low quality, deformed face, extra limbs, wrong person, different person, cartoon, painting, mannequin",
+  "slots": {
+    "subject": { "required": false, "default": "a stylish man", "label": "Subject description" },
+    "outfit": { "required": true, "label": "Outfit / look description (e.g., 'luxury black suit', 'futuristic armor')" }
+  },
+  "vary": {
+    "setting": ["clean studio backdrop", "urban street with bokeh", "luxury interior", "outdoor golden hour"],
+    "lighting": ["soft fashion studio lighting", "dramatic side light", "natural window light", "neon-accented editorial"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 34, "batch": 4 },
+  "compose": { "text_zone": "none" },
+  "rubric": { "identity": "1-5 — does this look like the same person as the reference?", "outfit_accuracy": "1-5 — does the outfit match what was requested?", "postability": "1-5", "realism": "1-5" }
+}

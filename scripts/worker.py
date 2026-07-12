@@ -298,6 +298,32 @@ def register_cards(job, cards):
                                   "path": card["path"]}})
 
 
+def resolve_profile_reference(root, profile_id):
+    """Find the default face reference photo from a subject profile."""
+    pdir = root / "profiles" / profile_id
+    pfile = pdir / "profile.json"
+    if not pfile.exists():
+        log(f"profile '{profile_id}' not found at {pdir}")
+        return None
+    profile = json.loads(pfile.read_text(encoding="utf-8"))
+    default_set = profile.get("references", {}).get("default_set", [])
+    for name in default_set:
+        ref = pdir / "references" / name
+        if ref.exists():
+            log(f"profile '{profile_id}' reference: {ref.name}")
+            return str(ref)
+    refs_dir = pdir / "references"
+    if refs_dir.is_dir():
+        photos = [f for f in refs_dir.iterdir()
+                  if f.suffix.lower() in (".jpg", ".jpeg", ".png") and f.name != ".gitkeep"]
+        if photos:
+            pick = sorted(photos)[0]
+            log(f"profile '{profile_id}' fallback reference: {pick.name}")
+            return str(pick)
+    log(f"profile '{profile_id}' has no reference photos in {refs_dir}")
+    return None
+
+
 def run_generate(job) -> None:
     p = json.loads(job["payload"])
     # A reference_artifact (an uploaded real screenshot / key art) steers the
@@ -307,6 +333,17 @@ def run_generate(job) -> None:
     if p.get("reference_artifact"):
         reference = str(fetch_artifact_file(p["reference_artifact"],
                                             ROOT / "artifacts" / "_sources"))
+
+    # Creator V1: if the recipe declares a subject_profile and no explicit
+    # reference was given, auto-wire the profile's face reference photo.
+    # The profile can come from the payload (dashboard) or the recipe itself.
+    profile_id = p.get("subject_profile")
+    if not profile_id:
+        recipe_path = byrdimage.find_recipe(ROOT, p["recipe"])
+        recipe_data = byrdimage.load_json(recipe_path)
+        profile_id = recipe_data.get("subject_profile")
+    if not reference and profile_id:
+        reference = resolve_profile_reference(ROOT, profile_id)
     job_id, saved = byrdimage.generate(
         ROOT, p["recipe"], p.get("slots", {}), p.get("project", "sandbox"),
         p.get("purpose", "unspecified"), batch=p.get("batch"),

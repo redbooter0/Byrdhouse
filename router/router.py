@@ -715,17 +715,44 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(f.read_bytes(), content_type=ctype)
             return self._send({"error": "no such reference"}, 404)
 
+        if path == "/profiles":
+            out = []
+            profiles_dir = ROOT / "profiles"
+            if profiles_dir.is_dir():
+                for pdir in sorted(profiles_dir.iterdir()):
+                    pfile = pdir / "profile.json"
+                    if not pfile.exists():
+                        continue
+                    try:
+                        p = json.loads(pfile.read_text(encoding="utf-8-sig"))
+                        refs_dir = pdir / "references"
+                        photos = [f.name for f in refs_dir.iterdir()
+                                  if f.suffix.lower() in (".jpg", ".jpeg", ".png")] if refs_dir.is_dir() else []
+                        out.append({"id": p.get("id", pdir.name),
+                                    "display_name": p.get("display_name", pdir.name),
+                                    "references": len(photos),
+                                    "has_references": len(photos) > 0,
+                                    "preferences": p.get("preferences", {})})
+                    except Exception:
+                        continue
+            return self._send(out)
+
         if path == "/recipes":
             out = []
             for p in sorted((ROOT / "recipes").glob("*.v*.json")):
                 try:
                     r = json.loads(p.read_text(encoding="utf-8-sig"))
-                    out.append({"id": r["id"], "version": r["version"], "kind": r.get("kind"),
-                                "slots": list(dict.fromkeys(
-                                    re.findall(r"\{(\w+)\}", r.get("template", "")))),
-                                "vary": list(r.get("vary", {}).keys()), "file": p.name,
-                                "workflow": r.get("workflow"),
-                                "note": r.get("_note", "")})
+                    entry = {"id": r["id"], "version": r["version"], "kind": r.get("kind"),
+                             "slots": list(dict.fromkeys(
+                                 re.findall(r"\{(\w+)\}", r.get("template", "")))),
+                             "vary": list(r.get("vary", {}).keys()), "file": p.name,
+                             "workflow": r.get("workflow"),
+                             "note": r.get("_note", "")}
+                    if r.get("subject_profile"):
+                        entry["subject_profile"] = r["subject_profile"]
+                    if r.get("category"):
+                        entry["category"] = r["category"]
+                    out.append(entry)
                 except Exception:
                     continue
             return self._send(out)

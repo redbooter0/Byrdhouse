@@ -1,0 +1,34 @@
+{
+  "id": "me",
+  "display_name": "Carey",
+  "created": "2026-07-12",
+  "updated": "2026-07-12",
+
+  "references": {
+    "_setup": "Place 5-7 clear photos in profiles/me/references/ on your machine. Name them descriptively (front.jpg, left_angle.jpg, etc). The worker picks from default_set when a 'me' recipe runs.",
+    "default_set": ["front.jpg"],
+    "available": []
+  },
+
+  "identity_notes": {
+    "skin_tone": "",
+    "hairstyle": "",
+    "facial_hair": "",
+    "body_build": "",
+    "distinguishing_features": "",
+    "disallowed_transforms": ["age regression", "gender swap"]
+  },
+
+  "preferences": {
+    "preferred_styles": ["cinematic", "founder", "editorial"],
+    "preferred_aspect": "4:5",
+    "default_checkpoint": "juggernautXL_v9",
+    "identity_weight": 0.85,
+    "min_identity_score": 3
+  },
+
+  "quality": {
+    "identity_threshold": "the output must be recognizably the same person as the reference photos",
+    "postability_threshold": "sharp, well-lit, no artifacts, ready to post without editing"
+  }
+}

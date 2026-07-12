@@ -1,0 +1,20 @@
+{
+  "id": "animated_me",
+  "version": 1,
+  "kind": "image.animate",
+  "subject_profile": "me",
+  "category": "Animated",
+  "_note": "V1 PLACEHOLDER: short-form video clips from approved images of you. Takes an approved gallery image and produces a 3-5 second clip with subtle motion (blink, breathing, slight head turn, camera drift). Requires an image-to-video workflow to be installed on GAMING. The recipe is registered now so the belt knows the intent; the actual workflow lands in Phase 5.",
+  "workflow": null,
+  "requires_source_image": true,
+  "template": "subtle cinematic motion: {motion_type}, identity preserved, loopable, social media ready",
+  "negative": "jarring motion, face distortion, identity change, flickering, artifacts",
+  "slots": {
+    "motion_type": { "required": false, "default": "subtle breathing and blink", "label": "Motion type" }
+  },
+  "vary": {
+    "motion_type": ["subtle breathing and blink", "slow head turn", "gentle hair movement with breeze", "slow cinematic camera push-in"]
+  },
+  "defaults": { "duration": 4, "fps": 24 },
+  "rubric": { "identity_stability": "1-5 — does the face stay recognizable across all frames?", "motion_quality": "1-5 — is the motion smooth and natural?", "loopability": "1-5 — does it loop cleanly?" }
+}

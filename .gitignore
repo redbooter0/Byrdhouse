@@ -73,6 +73,12 @@ references/
 inbox/
 status.json
 
+# Identity profile reference photos (personal images, never committed).
+# The profile.json schema ships in the kit; actual photos stay on-machine.
+profiles/*/references/*.jpg
+profiles/*/references/*.jpeg
+profiles/*/references/*.png
+
 # Backups
 *.bak
 *.bak-*

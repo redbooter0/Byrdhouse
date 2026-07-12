@@ -1,0 +1,92 @@
+{
+  "package": "ByrdHouse Flux2 Klein Style Transfer + Upscale",
+  "version": "1.0.0",
+  "target": {
+    "host": "BYRD-GAMING",
+    "gpu": "RTX 3070",
+    "vram_gb": 8
+  },
+  "workflow_files": [
+    "ByrdHouse_Flux2_Klein_3070_SAFE_FIRST_RUN.json",
+    "ByrdHouse_Flux2_Klein_3070_PRODUCTION_ALL_IN_ONE.json",
+    "ByrdHouse_Flux2_Klein_MASTER_OPERATOR.json"
+  ],
+  "recommended_first_file": "ByrdHouse_Flux2_Klein_3070_SAFE_FIRST_RUN.json",
+  "production_file": "ByrdHouse_Flux2_Klein_3070_PRODUCTION_ALL_IN_ONE.json",
+  "models_required": [
+    {
+      "file": "flux-2-klein-9b-fp8.safetensors",
+      "suggested_folder": "models/diffusion_models or models/unet",
+      "role": "generation model"
+    },
+    {
+      "file": "qwen_3_8b_fp8mixed.safetensors",
+      "suggested_folder": "models/text_encoders",
+      "role": "Flux2 text encoder"
+    },
+    {
+      "file": "flux2-vae.safetensors",
+      "suggested_folder": "models/vae",
+      "role": "VAE"
+    },
+    {
+      "file": "4x_foolhardy_Remacri.pth",
+      "suggested_folder": "models/upscale_models",
+      "role": "3070-friendly production upscaler"
+    }
+  ],
+  "models_optional_seedvr2": [
+    {
+      "file": "seedvr2_ema_7b_sharp_fp8_e4m3fn_mixed_block35_fp16.safetensors",
+      "role": "heavy SeedVR2 DiT"
+    },
+    {
+      "file": "ema_vae_fp16.safetensors",
+      "role": "SeedVR2 VAE"
+    }
+  ],
+  "custom_nodes_required": [
+    {
+      "node_pack": "ComfyUI-Use-Everywhere",
+      "nodes": [
+        "GetNode",
+        "SetNode"
+      ]
+    },
+    {
+      "node_pack": "rgthree-comfy",
+      "nodes": [
+        "Seed (rgthree)",
+        "Image Comparer (rgthree)",
+        "Fast Groups Bypasser (rgthree)"
+      ]
+    },
+    {
+      "node_pack": "comfyui_xiser_nodes",
+      "nodes": [
+        "XIS_INT_Slider",
+        "XIS_Float_Slider"
+      ]
+    }
+  ],
+  "custom_nodes_optional": [
+    {
+      "node_pack": "seedvr2_videoupscaler",
+      "nodes": [
+        "SeedVR2VideoUpscaler",
+        "SeedVR2LoadDiTModel",
+        "SeedVR2LoadVAEModel",
+        "SeedVR2TorchCompileSettings"
+      ]
+    }
+  ],
+  "outputs": {
+    "raw_prefix": "ByrdHouse/Flux2Klein/raw/ByrdHouse_Flux2Klein_RAW",
+    "upscaled_prefix": "ByrdHouse/Flux2Klein/upscaled/ByrdHouse_Flux2Klein_4X"
+  },
+  "api_integration": {
+    "status": "one local ComfyUI export required",
+    "reason": "The uploaded file is editable UI workflow JSON, while /prompt and byrdimage-full require API-format JSON.",
+    "action": "After the SAFE workflow runs, use ComfyUI Save (API Format), then place the exported file in E:/ByrdHouse/Images/Workflows."
+  }
+}

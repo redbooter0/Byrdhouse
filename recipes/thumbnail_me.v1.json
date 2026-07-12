@@ -1,0 +1,23 @@
+{
+  "id": "thumbnail_me",
+  "version": 1,
+  "kind": "image.generate",
+  "subject_profile": "me",
+  "category": "Thumbnails",
+  "_note": "YouTube/TikTok thumbnail-ready portraits of you. High-click expressions, bold compositions, punchy colors — YOUR face stops the scroll. IP-Adapter FaceID preserves identity. Designed for 16:9 with text compositing zones. The existing yt_thumbnail recipes generate game characters; this one generates YOU.",
+  "workflow": "workflows/sdxl_ipadapter_face_api.json",
+  "template": "YouTube thumbnail portrait of {subject}, {emotion} facial expression, {composition}, {palette} palette, {lighting}, ultra-detailed, crisp high contrast, punchy saturated colors, bold readable space for text, professional marketing quality",
+  "negative": "text, letters, words, watermark, blurry, soft, low contrast, washed out, extra limbs, deformed face, wrong person, different person, generic, bland",
+  "slots": {
+    "subject": { "required": false, "default": "a content creator", "label": "Subject description" },
+    "emotion": { "required": true, "label": "Expression (shocked, excited, angry, laughing, determined)" }
+  },
+  "vary": {
+    "palette": ["high-saturation teal-and-orange", "black-and-molten-gold", "electric-blue-and-magenta", "crimson-and-white high-contrast"],
+    "composition": ["face filling the left third, large and close", "extreme close-up with space on the right for text", "centered power pose with clean background"],
+    "lighting": ["dramatic rim light separating from background", "hard flash with deep shadows", "warm golden key light", "vibrant neon backlight glow"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 34, "batch": 4 },
+  "compose": { "text_zone": "bottom", "max_words": 4, "style": "banner", "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "identity": "1-5 — does this look like the same person as the reference?", "click_factor": "1-5 — would this stop a scroll?", "expression": "1-5 — does the emotion read clearly?", "postability": "1-5" }
+}
