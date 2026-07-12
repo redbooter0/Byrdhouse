@@ -2,7 +2,7 @@
 
 *One page of current truth. Update weekly or on any milestone. Paste this to any AI to resume work instantly.*
 
-**Last updated:** 2026-07-12 · **Current unlock: U1 IMAGE LAB** · **North star: R0 (first thumbnail shipped on Carey's channel)**
+**Last updated:** 2026-07-12 · **Current unlock: U1 IMAGE LAB · Phase B (Product Recovery Sprint) shipped** · **North star: R0 (first thumbnail shipped on Carey's channel)**
 
 **U0 status:** functionally complete on real hardware.
 
@@ -20,18 +20,23 @@ Odysseus/smart-home/Stripe is removed from this repo. Cherry Studio remains the 
 
 ## What works now (snapshot refreshed 2026-07-11)
 
-- **Image Studio**: versioned recipes (game-anchored v3/v4 + freeform), aspect
-  presets, LoRA field, checkpoint override, ✨ LLM prompt enhancement, seed pin,
-  BYO-screenshot thumbnails, viral compositor (banner/accent), reference
-  library (judge grades against founder-loved thumbnails), ⬆ upscale / ≈ riff
-  on every card, tap-to-zoom, in-flight placeholders with ages, ⏱ durations
-- **Operator Chat**: agent with belt tools (status, artifacts, queue_image,
-  refine_image, events), model interchangeability, mini-fallback slot for
-  always-on chat, answering model shown per reply
+- **Dashboard (Phase B)**: Product Recovery Sprint shipped — 16-room admin console
+  replaced by 3-tab founder cockpit: Home (WIP, approval queue, recent results,
+  weekly stats), Create (image generation with founder-friendly labels), Library
+  (all artifacts with filter bar). All diagnostics/admin/workers/events/exports
+  behind a System gear icon. Single system dot replaces chip bar.
+- **Create tab**: versioned recipes (game-anchored v3/v4 + freeform + 6 "me"
+  identity recipes), aspect presets, LoRA/checkpoint override, prompt enhancement,
+  BYO-screenshot thumbnails, reference library, upscale/riff on every card,
+  tap-to-zoom, in-flight progress, engine controls behind power-user panel
+- **Creator V1 foundation**: identity profiles (profiles/me/), subject_profile
+  on recipes, worker auto-resolves face reference from profile dir, Flux2 Klein
+  workflow package integrated (SAFE + PRODUCTION + MASTER + API adapter)
 - **Belt**: reaper, worker liveness, requeue/cancel, previews (downscaled,
-  worker→router upload), job timing joins, deterministic artifact dedupe
-- **Guardrails**: 52-check integration suite + 13-check dashboard suite in CI,
-  BOM enforcement, judge fidelity/off-game caps
+  worker→router upload), job timing joins, deterministic artifact dedupe,
+  2-PC coordination (version drift, heartbeat, requeue fencing)
+- **Guardrails**: 52-check integration suite in CI, BOM enforcement, judge
+  fidelity/off-game caps
 
 ## What worked before (U0 foundation)
 
@@ -134,8 +139,8 @@ U2/U3 are already partially built, but they should be treated as usage/hardening
 **The single biggest R0 lever** is thumbnails that actually look like the game. That is exactly the IP-Adapter reference engine + custom license-clear checkpoints (see below and `docs/MODELS.md`).
 
 ### Unlock ladder + acceptance
-- **U1 Image Lab (finishing):** 10 router-generated images, ≥5 approved with full cards, ≥2 thumbnails 1280×720 with real composited text, suite green. Recipe-slot contract bug fixed (2026-07-12); IP-Adapter reference route landed.
-- **U2 Command Center:** dashboard daily-usable (branding mockup in `branding/` is the target). Accept: a full day's work with no terminal.
+- **U1 Image Lab (finishing):** 10 router-generated images, ≥5 approved with full cards, ≥2 thumbnails 1280×720 with real composited text, suite green. Recipe-slot contract bug fixed (2026-07-12); IP-Adapter reference route landed. Creator V1 foundation landed (profiles, me-recipes, Flux2 Klein).
+- **U2 Command Center (Phase B shipped):** dashboard redesigned as founder cockpit — Home/Create/Library tabs, System behind gear icon. Accept: a full day's work with no terminal.
 - **U3 Spine:** harden queue controls only where usage exposes friction (`parent_id`/`run_after` reserved). *Bot pilot unlocks after U3.*
 - **U4 Learn Loop:** `GET /learn` already ranks by approval rate; needs enough approve/reject data to steer.
 - **U5 Motion/Video:** approved images → `video.i2v` clips + `video.assemble`. After the image lane is reliable.
@@ -156,6 +161,7 @@ The always-on operator that runs the belt while Carey is away. Foundation landed
 
 ## Done log
 
+- 2026-07-12 · Phase B Product Recovery Sprint: dashboard rewritten from 16-room admin console to 3-tab founder cockpit (Home/Create/Library). All diagnostics behind System gear icon. Single system dot replaces chip row. Creator V1 foundation: identity profiles (profiles/me/), 6 "me" recipes (cinematic/founder/fantasy/outfit_transfer/thumbnail/animated), worker face-reference auto-wiring, Flux2 Klein package (SAFE + PRODUCTION + MASTER workflows, API adapter, install script). 2-PC coordination hardening committed separately. Integration suite green. No router/worker behavior changes.
 - 2026-07-12 · Recipe-slot contract bug fixed on real hardware (jobs died on `unfilled slots ['emotion']`): dashboard now renders every non-vary slot as a required `*` input and `submitGen` blocks + names missing slots before POST; `byrdimage` guarantees vary slots fill and fails loudly on empty vary arrays; dashboard test suite repaired (PR#18 had crashed it) and expanded with required-slot coverage. Then landed the R0 lever: IP-Adapter reference engine (`game_ref` recipe + `sdxl_ipadapter_api.json` — a real uploaded screenshot steers the checkpoint toward THE game's look), Goose bot-operator foundation (`scripts/byrd_belt_mcp.py` belt-as-MCP + `goose/` runtime/identity + `web_search`), and the custom license-clear model kit (`docs/MODELS.md`: animagine-xl-4.0 / RealVisXL_V5.0 / dreamshaper-xl, all openrail++). Integration 70-check + dashboard 20-check green. PR #19 merged. OPEN (founder): rotate the admin token (public git history).
 - 2026-07-11 · Hardening from two-agent review (integrity before the U1 proof, no new features): judging now REQUIRES a vision-capable model (a text model can't invent visual scores — artifact stays honestly unjudged, protecting the learn-loop dataset); checkpoint fallback is recorded on the card (requested-vs-resolved) and flagged yellow in the gallery instead of silently running the wrong model; chat write-tools capped at 3 mutations/request; CI secret-scan job fails the build on a committed token/key; fixed the last config mojibake; docs/BELT.md gained an honest security/trust-boundary section (single-token tailnet system, deferred video-heartbeat + monolith-split). 57-check belt suite green. OPEN ACTION (founder): rotate the admin token — it reached public git history
 
