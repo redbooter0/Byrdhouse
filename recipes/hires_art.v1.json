@@ -1,0 +1,15 @@
+{
+  "id": "hires_art",
+  "version": 1,
+  "kind": "image.generate",
+  "_note": "Two-pass hi-res final: generates at 2/3 target size then upscales 1.5x with a refine pass (denoise 0.5). Produces noticeably sharper detail, cleaner edges, and less artifact noise than a single-pass generation. Use for approved compositions that need to be publish-ready. Slower (two sampling passes) but worth it for finals.",
+  "workflow": "workflows/sdxl_hires_api.json",
+  "template": "{prompt}, {palette} palette, {lighting}, ultra-detailed, crisp sharp focus, professional quality, clean zone left for title",
+  "negative": "text, letters, words, watermark, blurry, soft focus, low quality, compression artifacts, noise, grain, extra limbs, deformed",
+  "vary": {
+    "palette": ["vivid cinematic", "gold-red dramatic", "teal-orange blockbuster", "black-gold premium"],
+    "lighting": ["dramatic rim light with fill", "golden hour with lens flare", "studio three-point lighting", "hard directional key light"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 30, "batch": 2, "base_scale": 1.5 },
+  "rubric": { "prompt_fidelity": "1-5", "sharpness": "1-5 — are fine details crisp, not mushy?", "readability": "1-5", "hook": "1-5" }
+}

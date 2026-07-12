@@ -1,0 +1,51 @@
+{
+  "_comment": "Two-pass hires fix: generate at base resolution (recipe sets base_scale=1.5 in defaults so byrdimage shrinks EmptyLatentImage to 2/3 target dims), then LatentUpscaleBy 1.5x recovers target res, then second KSampler at denoise 0.5 refines. Sharper details than a single pass at high res, and fits 8GB VRAM. Both KSamplers share the same CLIP/model so byrdimage injects prompt and engine overrides normally.",
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0, "steps": 30, "cfg": 7.0,
+      "sampler_name": "dpmpp_2m", "scheduler": "karras",
+      "denoise": 1.0,
+      "model": ["4", 0], "positive": ["6", 0], "negative": ["7", 0],
+      "latent_image": ["5", 0]
+    }
+  },
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "juggernautXL_v9.safetensors" }
+  },
+  "5": {
+    "class_type": "EmptyLatentImage",
+    "inputs": { "width": 896, "height": 512, "batch_size": 1 }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] }
+  },
+  "10": {
+    "class_type": "LatentUpscaleBy",
+    "inputs": { "upscale_method": "bislerp", "scale_by": 1.5, "samples": ["3", 0] }
+  },
+  "11": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0, "steps": 30, "cfg": 7.0,
+      "sampler_name": "dpmpp_2m", "scheduler": "karras",
+      "denoise": 0.5,
+      "model": ["4", 0], "positive": ["6", 0], "negative": ["7", 0],
+      "latent_image": ["10", 0]
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["11", 0], "vae": ["4", 2] }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "byrdhouse_hires", "images": ["8", 0] }
+  }
+}

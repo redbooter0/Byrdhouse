@@ -1,0 +1,17 @@
+{
+  "id": "loot_showcase",
+  "version": 1,
+  "kind": "image.generate",
+  "_note": "Rare loot/item showcase: glowing legendary item center-frame with dramatic presentation. The 'I FOUND THIS' / 'NEW LEGENDARY' / 'BEST WEAPON IN THE GAME' category. Item is the hero, character reacts to it, game environment frames the scene.",
+  "template": "{game} video game scene: {item} glowing with legendary rarity aura in the center, {subject} reaching toward it with {reaction} expression, authentic {game} environment, item radiates {glow_color} energy particles, {palette} palette, {lighting}, dramatic item presentation, clean zone for composited text",
+  "negative": "text, letters, words, watermark, blurry, low contrast, generic item, unrelated game, dark muddy, no glow",
+  "vary": {
+    "palette": ["gold legendary", "purple epic", "teal-gold divine", "crimson-black cursed"],
+    "lighting": ["item-emanating glow", "volumetric light beams", "ember backlight", "neon item aura"],
+    "glow_color": ["golden legendary", "purple mythic", "green exotic", "white divine"],
+    "reaction": ["awe-struck", "greedy excitement", "shocked disbelief", "reverential"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 30, "batch": 4 },
+  "compose": { "text_zone": "bottom", "max_words": 4, "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "game_reference": "1-5", "item_prominence": "1-5 — is the item the clear hero of the image?", "glow_quality": "1-5 — does the rarity aura read?", "hook": "1-5" }
+}

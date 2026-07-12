@@ -260,13 +260,13 @@ def generate(root, recipe_name, slots, project, purpose,
     steps = int(engine.get("steps") or defaults.get("steps", 30))
 
     # ── Build the graph ───────────────────────────────────────────────────────
-    # A reference image routes through the IP-Adapter graph: the base checkpoint
-    # borrows the reference's look (the 'make it look like THIS game' path) — no
-    # per-game LoRA, no training. Everything else about generation is unchanged.
-    if reference:
-        workflow_rel = img_cfg.get("reference_workflow", "workflows/sdxl_ipadapter_api.json")
-    else:
-        workflow_rel = img_cfg.get("workflow", "workflows/sdxl_base_api.json")
+    # Recipe can specify its own workflow graph; falls back to config defaults.
+    workflow_rel = recipe.get("workflow")
+    if not workflow_rel:
+        if reference:
+            workflow_rel = img_cfg.get("reference_workflow", "workflows/sdxl_ipadapter_api.json")
+        else:
+            workflow_rel = img_cfg.get("workflow", "workflows/sdxl_base_api.json")
     graph = load_json(root / workflow_rel)
     graph.pop("_comment", None)
 
@@ -274,6 +274,13 @@ def generate(root, recipe_name, slots, project, purpose,
     seed = int(seed) if seed else secrets.randbits(63)  # fix 1: random per job (or pinned for reruns)
     prefix = f"{datetime.now():%Y%m%d}_{recipe['id']}_{job_id}"  # fix 2: unique
     gen_w, gen_h = pick_dims(aspect, width, height, img_cfg)
+
+    # Hires workflows generate at a smaller base size and upscale within the
+    # graph (LatentUpscaleBy). base_scale > 1 means EmptyLatentImage is set to
+    # target / scale, and the workflow's upscale node recovers target res.
+    base_scale = float(defaults.get("base_scale", 1.0))
+    base_w = round(gen_w / base_scale / 8) * 8 if base_scale > 1.0 else gen_w
+    base_h = round(gen_h / base_scale / 8) * 8 if base_scale > 1.0 else gen_h
 
     clip_nodes = sampler_nodes = 0
     for node in graph.values():
@@ -292,8 +299,8 @@ def generate(root, recipe_name, slots, project, purpose,
         elif ct == "CheckpointLoaderSimple":
             inputs["ckpt_name"] = checkpoint          # fix 4 source of truth
         elif ct == "EmptyLatentImage":
-            inputs["width"] = gen_w
-            inputs["height"] = gen_h
+            inputs["width"] = base_w
+            inputs["height"] = base_h
             inputs["batch_size"] = batch
         elif ct == "SaveImage":
             inputs["filename_prefix"] = prefix

@@ -1,0 +1,59 @@
+{
+  "_comment": "IP-Adapter style transfer: high-weight style-only transfer from a reference image. The composition and subject come from the prompt; the colors, texture, rendering style, and aesthetic come from the reference. Great for 'make my thumbnail look like THAT game's art style' without reproducing the reference's content. Weight 1.0 + style transfer type = maximum style influence.",
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" }
+  },
+  "12": {
+    "class_type": "IPAdapterUnifiedLoader",
+    "inputs": { "preset": "PLUS (high strength)", "model": ["4", 0] }
+  },
+  "13": {
+    "class_type": "IPAdapterAdvanced",
+    "inputs": {
+      "weight": 1.0,
+      "weight_type": "style transfer",
+      "combine_embeds": "concat",
+      "start_at": 0.0,
+      "end_at": 1.0,
+      "embeds_scaling": "K+mean(V) w/ C penalty",
+      "model": ["12", 0],
+      "ipadapter": ["12", 1],
+      "image": ["1", 0]
+    }
+  },
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0, "steps": 30, "cfg": 7.0,
+      "sampler_name": "dpmpp_2m", "scheduler": "karras",
+      "denoise": 1.0,
+      "model": ["13", 0], "positive": ["6", 0], "negative": ["7", 0],
+      "latent_image": ["5", 0]
+    }
+  },
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "juggernautXL_v9.safetensors" }
+  },
+  "5": {
+    "class_type": "EmptyLatentImage",
+    "inputs": { "width": 1152, "height": 768, "batch_size": 1 }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["3", 0], "vae": ["4", 2] }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "byrdhouse_style", "images": ["8", 0] }
+  }
+}

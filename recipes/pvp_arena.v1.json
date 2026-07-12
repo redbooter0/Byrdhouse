@@ -1,0 +1,17 @@
+{
+  "id": "pvp_arena",
+  "version": 1,
+  "kind": "image.generate",
+  "_note": "Competitive PvP/arena thumbnails: two sides clashing, competitive energy, tournament/ranked feel. The 'BEST PVP BUILD' / 'RANKED GAMEPLAY' / 'HOW TO WIN EVERY FIGHT' category. More chaotic energy than vs_matchup — this is mid-combat, not a face-off pose.",
+  "template": "{game} video game combat scene: {subject} in the middle of an intense {combat_type} fight, abilities and effects exploding around them, competitive arena setting from {game}, {damage_effects}, {palette} palette, {lighting}, extreme action angle, motion blur on strikes, clean zone for composited text",
+  "negative": "text, letters, words, watermark, blurry, low contrast, peaceful, standing still, generic arena, unrelated game, calm",
+  "vary": {
+    "palette": ["crimson-black aggressive", "electric-blue competitive", "gold-red championship", "neon-green toxic"],
+    "lighting": ["ability glow explosions", "arena spotlight", "energy burst flash", "volumetric combat haze"],
+    "combat_type": ["melee slash combo", "ranged ability barrage", "ultimate ability activation", "close-quarters brawl"],
+    "damage_effects": ["sparks and shockwave on hit", "elemental explosion particles", "critical hit number burst", "shield break shatter"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 30, "batch": 4 },
+  "compose": { "text_zone": "bottom", "max_words": 4, "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "game_reference": "1-5", "action_energy": "1-5 — does it feel like mid-combat?", "readability": "1-5", "hook": "1-5" }
+}

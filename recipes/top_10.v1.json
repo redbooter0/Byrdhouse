@@ -1,0 +1,15 @@
+{
+  "id": "top_10",
+  "version": 1,
+  "kind": "image.generate",
+  "_note": "Ranking/countdown thumbnails: subject with tiered/stacked items or characters arranged to imply ranking. The 'BEST WEAPONS' / 'TOP 5 BUILDS' / '10 THINGS YOU MISSED' category — high CTR format. Composition emphasizes vertical hierarchy or grid arrangement with the #1 item prominent.",
+  "template": "{game} video game key art: {subject} surrounded by ranked {ranked_items} arranged in a dramatic tier display, glowing #{rank_focus} item the largest and most prominent, recognizable {game} setting and art style, {palette} palette, {lighting}, numbered ranking energy, dramatic depth, clean zone for composited list title",
+  "negative": "text, letters, words, numbers, watermark, blurry, low contrast, generic, unrelated game, flat composition",
+  "vary": {
+    "palette": ["gold-red tier", "electric-blue ranking", "black-gold premium", "rainbow spectrum"],
+    "lighting": ["volumetric haze", "rim light", "neon glow", "ember backlight"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 30, "batch": 4 },
+  "compose": { "text_zone": "upper-left", "max_words": 5, "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "game_reference": "1-5", "ranking_clarity": "1-5 — does it read as a ranked list?", "readability": "1-5", "hook": "1-5" }
+}

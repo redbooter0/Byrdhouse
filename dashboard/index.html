@@ -334,8 +334,11 @@ V.image = async () => {
   <div class="grid">
     <div class="panel" id="genForm"><h2>Generate ${qtip('Recipes over prompts: pick a recipe, fill its slots, hit Queue. The belt generates a batch, the local model judges it, you approve the keepers.')}</h2>
       <label>Recipe ${qtip('A versioned prompt template with slots and a rubric. The version you pick is exactly what runs — the card records it.')}</label>
-      <select id="recipe" onchange="slotFields()">${window._recipes.map(r =>
-        `<option value="${esc(r.id)}@${r.version}">${esc(r.id)} v${r.version}</option>`).join('')}</select>
+      <select id="recipe" onchange="slotFields();showRecipeInfo()">${window._recipes.map(r => {
+        const wf = r.workflow ? r.workflow.replace('workflows/sdxl_','').replace('_api.json','') : 'base';
+        return `<option value="${esc(r.id)}@${r.version}">${esc(r.id)} v${r.version} [${esc(wf)}]</option>`;
+      }).join('')}</select>
+      <div id="recipeInfo" style="font-size:11px;color:var(--dim);margin:4px 0 6px;min-height:14px"></div>
       <div id="slots"></div>
       <label>Purpose ${qtip('Why this batch exists — one line. Required, and kept on every card so months from now you know what a thumbnail was for.')}</label>
       <input id="purpose" placeholder="why this batch exists">
@@ -454,6 +457,21 @@ function slotFields() {
     `<label>${esc(s)} <span style="color:var(--red)">*</span></label>` +
     `<input data-slot="${esc(s)}" required placeholder="${esc(s)} — required">`).join('');
   document.querySelectorAll('#slots input').forEach(i => { if (keep[i.dataset.slot]) i.value = keep[i.dataset.slot]; });
+}
+function showRecipeInfo() {
+  const r = currentRecipe();
+  const el = $('recipeInfo');
+  if (!el || !r) return;
+  const wf = (r.workflow || 'standard txt2img').replace('workflows/sdxl_','').replace('_api.json','');
+  const pipes = { 'base': 'Prompt → KSampler → Image → Judge',
+    'hires': 'Prompt → KSampler → Upscale 1.5× → Refine → Image → Judge',
+    'ipadapter': 'Reference + Prompt → IP-Adapter → KSampler → Image → Judge',
+    'ipadapter_face': 'Face Ref → FaceID → KSampler → Image → Judge',
+    'ipadapter_style': 'Style Ref → Style Transfer → KSampler → Image → Judge',
+    'img2img': 'Source → VAEEncode → KSampler → Image → Judge' };
+  const pipe = pipes[wf] || `Pipeline: ${wf}`;
+  const note = (r.note || '').split('.')[0];
+  el.innerHTML = `<span style="color:var(--accent2)">${esc(pipe)}</span>${note ? '<br>' + esc(note) : ''}`;
 }
 
 /* ── draft-persistence: the Image Studio form survives polling, room
@@ -816,6 +834,7 @@ async function render() {
     $('view').innerHTML = await V[room]();
     if (room === 'image') {
       slotFields();
+      showRecipeInfo();
       loadEngineControls().then(() => applyDraft(loadDraft()));
       $('genForm').addEventListener('input', saveDraft);
       $('genForm').addEventListener('change', saveDraft);

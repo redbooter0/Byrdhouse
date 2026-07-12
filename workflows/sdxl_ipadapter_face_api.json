@@ -1,0 +1,59 @@
+{
+  "_comment": "IP-Adapter FaceID: like sdxl_ipadapter_api but using the PLUS FACE (portrait) preset for consistent character faces across thumbnails. Upload a clear face reference and the base checkpoint will reproduce that face's features — same person across different scenes. Needs ComfyUI_IPAdapter_plus custom nodes + the FaceID SDXL models (h94/IP-Adapter-FaceID).",
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" }
+  },
+  "12": {
+    "class_type": "IPAdapterUnifiedLoader",
+    "inputs": { "preset": "PLUS FACE (portrait)", "model": ["4", 0] }
+  },
+  "13": {
+    "class_type": "IPAdapterAdvanced",
+    "inputs": {
+      "weight": 0.85,
+      "weight_type": "linear",
+      "combine_embeds": "concat",
+      "start_at": 0.0,
+      "end_at": 1.0,
+      "embeds_scaling": "V only",
+      "model": ["12", 0],
+      "ipadapter": ["12", 1],
+      "image": ["1", 0]
+    }
+  },
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0, "steps": 30, "cfg": 7.0,
+      "sampler_name": "dpmpp_2m", "scheduler": "karras",
+      "denoise": 1.0,
+      "model": ["13", 0], "positive": ["6", 0], "negative": ["7", 0],
+      "latent_image": ["5", 0]
+    }
+  },
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "juggernautXL_v9.safetensors" }
+  },
+  "5": {
+    "class_type": "EmptyLatentImage",
+    "inputs": { "width": 1152, "height": 768, "batch_size": 1 }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["3", 0], "vae": ["4", 2] }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "byrdhouse_face", "images": ["8", 0] }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "character_showcase",
+  "version": 1,
+  "kind": "image.generate",
+  "_note": "Full-body character art: centered hero pose, head-to-toe visible, signature outfit and gear, game-faithful environment behind. Perfect for 'NEW CHARACTER REVEALED' or build showcase thumbnails. Uses 2:3 portrait aspect internally for character detail, composited onto 16:9 later if needed.",
+  "template": "full-body character art of {subject} from {game}, standing in a heroic pose visible head to toe, wearing their signature outfit and gear, {emotion} expression, recognizable {game} environment and creatures in the background, faithful {game} art style, {palette} palette, {lighting}, ultra-detailed game render, sharp focus, professional character splash art",
+  "negative": "text, letters, words, watermark, blurry, low contrast, extra limbs, deformed, close-up, cropped body, feet only, legs only, headless, generic, unrelated game",
+  "vary": {
+    "palette": ["gold-red", "electric-blue", "crimson-slate", "black-gold", "vivid saturated"],
+    "lighting": ["dramatic rim light", "golden hour", "studio key light", "volumetric haze"],
+    "emotion": ["determined", "fierce", "confident smirk", "battle-ready"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 30, "batch": 4 },
+  "compose": { "text_zone": "bottom", "max_words": 4, "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "game_reference": "1-5 — unmistakably THIS game?", "full_body": "1-5 — head to toe visible, not cropped?", "readability": "1-5", "hook": "1-5" }
+}

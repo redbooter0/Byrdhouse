@@ -1,0 +1,16 @@
+{
+  "id": "cinematic_wide",
+  "version": 1,
+  "kind": "image.generate",
+  "_note": "21:9 ultrawide cinematic landscape: epic environment shots, world reveals, exploration content. The 'EXPLORING THE NEW MAP' / 'THIS GAME IS BEAUTIFUL' / 'HIDDEN LOCATION FOUND' category. Default aspect 21:9 but works at 16:9 too. Character is small in frame — the WORLD is the star.",
+  "template": "cinematic ultrawide landscape from {game}: {scene}, vast scale with {subject} small in the distance for scale, recognizable {game} world architecture and environment, {atmosphere}, {palette} palette, {lighting}, epic sweeping vista, film grain, anamorphic lens flare, professional cinematography, 8K detail",
+  "negative": "text, letters, words, watermark, blurry, low quality, close-up, portrait, character filling frame, flat, boring, indoor, cramped",
+  "vary": {
+    "palette": ["warm golden epic", "cool blue-teal serene", "sunset orange-purple dramatic", "foggy desaturated moody"],
+    "lighting": ["golden hour with long shadows", "volumetric god rays through clouds", "dramatic storm lighting", "soft dawn mist"],
+    "atmosphere": ["ethereal mist in valleys", "dramatic storm clouds rolling in", "clear sky with distant mountains", "bioluminescent particles floating"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 34, "batch": 4 },
+  "compose": { "text_zone": "bottom", "max_words": 5, "style": "banner", "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "game_reference": "1-5", "scale_epic": "1-5 — does the world feel vast?", "cinematic_quality": "1-5", "hook": "1-5" }
+}
