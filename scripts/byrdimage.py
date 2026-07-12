@@ -354,9 +354,13 @@ def generate(root, recipe_name, slots, project, purpose,
         "recipe": recipe_tag, "purpose": purpose, "prompt": prompt,
         "negative": negative, "seed": seed, "checkpoint": checkpoint,
         "workflow": workflow_rel, "slots": user_slots, "vary_picks": vary_picks,
-        "size": f"{gen_w}x{gen_h}", **({"lora": lora} if lora else {}),
+        "size": f"{gen_w}x{gen_h}",
+        "steps": steps,
+        "cfg": float(engine.get("cfg") or img_cfg.get("cfg", 7.0)),
+        "sampler": engine.get("sampler_name") or img_cfg.get("sampler", "dpmpp_2m"),
+        "scheduler": engine.get("scheduler") or img_cfg.get("scheduler", "karras"),
+        **({"lora": lora} if lora else {}),
         **({"reference": str(reference)} if reference else {}),
-        # honest checkpoint record: what was asked vs what actually ran
         **({"checkpoint_requested": ckpt_requested, "checkpoint_fallback": True}
            if not ckpt_matched else {}),
     }
