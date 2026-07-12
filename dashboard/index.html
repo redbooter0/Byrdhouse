@@ -559,29 +559,27 @@ async function loadEngineControls() {
 
     // Sampler
     if (samplerOpts.length) {
-      const sampDef = ks.sampler_name.default || 'dpmpp_2m';
-      html += '<label>Sampler</label><select id="engSampler"><option value="">default</option>';
-      samplerOpts.forEach(s => { html += `<option value="${esc(s)}"${s===sampDef?' selected':''}>${esc(s)}</option>`; });
+      html += '<label>Sampler</label><select id="engSampler"><option value="">recipe / config default</option>';
+      samplerOpts.forEach(s => { html += `<option value="${esc(s)}">${esc(s)}</option>`; });
       html += '</select>';
     }
 
     // Scheduler
     if (schedulerOpts.length) {
-      const schedDef = ks.scheduler.default || 'karras';
-      html += '<label>Scheduler</label><select id="engScheduler"><option value="">default</option>';
-      schedulerOpts.forEach(s => { html += `<option value="${esc(s)}"${s===schedDef?' selected':''}>${esc(s)}</option>`; });
+      html += '<label>Scheduler</label><select id="engScheduler"><option value="">recipe / config default</option>';
+      schedulerOpts.forEach(s => { html += `<option value="${esc(s)}">${esc(s)}</option>`; });
       html += '</select>';
     }
 
-    // Steps slider
+    // Steps (blank = recipe default; recipe sets its own step count)
     const stMin = stepsInfo.min || 1, stMax = Math.min(stepsInfo.max || 150, 150), stDef = stepsInfo.default || 30;
-    html += `<label>Steps <span id="engStepsVal" style="color:var(--accent2)">${stDef}</span></label>`;
-    html += `<input type="range" id="engSteps" min="${stMin}" max="${stMax}" value="${stDef}" oninput="$('engStepsVal').textContent=this.value">`;
+    html += `<label>Steps</label>`;
+    html += `<input type="number" id="engSteps" min="${stMin}" max="${stMax}" placeholder="recipe default (${stDef})" inputmode="numeric">`;
 
-    // CFG slider
+    // CFG (blank = recipe default)
     const cfMin = cfgInfo.min || 1, cfMax = Math.min(cfgInfo.max || 30, 30), cfDef = cfgInfo.default || 7;
-    html += `<label>CFG <span id="engCfgVal" style="color:var(--accent2)">${cfDef}</span></label>`;
-    html += `<input type="range" id="engCfg" min="${cfMin}" max="${cfMax}" step="0.5" value="${cfDef}" oninput="$('engCfgVal').textContent=this.value">`;
+    html += `<label>CFG</label>`;
+    html += `<input type="number" id="engCfg" min="${cfMin}" max="${cfMax}" step="0.5" placeholder="recipe default (${cfDef})" inputmode="decimal">`;
 
     // Negative prompt
     html += '<label>Extra negative prompt</label>';
