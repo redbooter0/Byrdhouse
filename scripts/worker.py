@@ -14,9 +14,11 @@ Stdlib only. Run:  python scripts/worker.py [--no-gpu] [--once]
 import argparse
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 from datetime import datetime, timezone
@@ -34,6 +36,43 @@ TOKEN = CFG["auth"]["admin_token"]
 WORKER_ID = f"worker-{socket.gethostname().lower()}"
 CAPS = ["comfyui", "lmstudio"]
 GPU_ENABLED = True
+
+# Build identity — GAMING reports the exact commit it is running so the router
+# (MINI) can flag when the two machines have drifted apart. API_VERSION must
+# match the router's constant of the same name; bump both when the wire changes.
+API_VERSION = "1"
+
+
+def repo_build(start=None):
+    """Best-effort git build id (short SHA + branch), stdlib-only, no subprocess.
+    Reads .git directly so it reflects exactly what git sync left on disk."""
+    try:
+        p = Path(start or __file__).resolve()
+        for d in [p] + list(p.parents):
+            gitdir = d / ".git"
+            if not gitdir.is_dir():
+                continue
+            head = (gitdir / "HEAD").read_text(encoding="utf-8").strip()
+            if not head.startswith("ref:"):
+                return {"sha": head[:12], "branch": "detached"}
+            ref = head[4:].strip()
+            branch = ref.rsplit("/", 1)[-1]
+            reffile = gitdir / ref
+            if reffile.exists():
+                return {"sha": reffile.read_text(encoding="utf-8").strip()[:12], "branch": branch}
+            packed = gitdir / "packed-refs"
+            if packed.exists():
+                for line in packed.read_text(encoding="utf-8").splitlines():
+                    if line and not line.startswith(("#", "^")) and line.endswith(ref):
+                        return {"sha": line.split()[0][:12], "branch": branch}
+            return {"sha": "unknown", "branch": branch}
+    except Exception:
+        pass
+    return {"sha": "unknown", "branch": "unknown"}
+
+
+BUILD = repo_build()
+GPU_INFO = {"nvidia_smi": None, "available": None}  # filled by Gpu preflight (see below)
 
 
 def api(path, payload=None, method=None):
@@ -97,6 +136,63 @@ def log(msg):
     print(f"[worker {datetime.now():%H:%M:%S}] {msg}", flush=True)
 
 
+_GPU = None          # set in main(); lets heartbeat() report the live mode
+_drift_warned = False
+
+
+def heartbeat():
+    """One heartbeat with full identity (build_sha/api_version/gpu) so MINI can
+    see GAMING's exact commit and GPU health. Returns the router's response, or
+    None on a network error (never fatal — the next beat retries). Logs ONCE if
+    the router is on a different commit than this worker."""
+    global _drift_warned
+    mode = _GPU.mode if _GPU is not None else CFG["gpu"].get("default_mode", "OPERATOR")
+    try:
+        beat = api("/workers/heartbeat", {
+            "id": WORKER_ID, "host": socket.gethostname(), "caps": CAPS, "mode": mode,
+            "build_sha": BUILD["sha"], "api_version": API_VERSION, "gpu": GPU_INFO})
+    except Exception as e:
+        log(f"heartbeat failed (will retry): {e}")
+        return None
+    rsha = beat.get("router_build_sha")
+    if rsha and rsha not in ("unknown", BUILD["sha"]) and not _drift_warned:
+        log(f"⚠ VERSION DRIFT: this worker is on {BUILD['sha']} but the router "
+            f"is on {rsha}. One machine did not git-pull — re-sync before trusting "
+            f"the dashboard.")
+        _drift_warned = True
+    return beat
+
+
+HEARTBEAT_SEC = 20  # background beat interval; < router WORKER_OFFLINE_SEC/4
+
+
+def _heartbeat_thread():
+    """Daemon: keep GAMING marked online while the main thread is busy inside a
+    long generation. Pure liveness — mode-change requests are handled only by the
+    main loop so GPU control never happens off the main thread."""
+    while True:
+        time.sleep(HEARTBEAT_SEC)
+        heartbeat()
+
+
+def _find_nvidia_smi():
+    """Locate nvidia-smi even when it isn't on PATH — the exact failure on GAMING
+    where a bare 'nvidia-smi' call raised and every IMAGE-mode switch died. Honors
+    an optional gpu.nvidia_smi config override, then PATH, then the standard
+    Windows install locations the NVIDIA driver uses. Returns a path or None."""
+    override = CFG["gpu"].get("nvidia_smi", "")
+    if override and not override.startswith("CHANGE_ME") and Path(override).exists():
+        return override
+    found = shutil.which("nvidia-smi") or shutil.which("nvidia-smi.exe")
+    if found:
+        return found
+    for cand in (r"C:\Windows\System32\nvidia-smi.exe",
+                 r"C:\Program Files\NVIDIA Corporation\NVSMI\nvidia-smi.exe"):
+        if Path(cand).exists():
+            return cand
+    return None
+
+
 def _lms_unload_all():
     if GPU_ENABLED:
         subprocess.run(["lms", "unload", "--all"], timeout=120)
@@ -117,10 +213,27 @@ class Gpu:
     def __init__(self, enabled: bool):
         self.enabled = enabled
         self.mode = CFG["gpu"].get("default_mode", "OPERATOR")
+        self.nvidia_smi = _find_nvidia_smi() if enabled else None
+        GPU_INFO["nvidia_smi"] = self.nvidia_smi
+        if enabled:
+            if not self.nvidia_smi:
+                GPU_INFO["available"] = False
+                log("⚠ GPU: nvidia-smi not found on PATH or standard locations. "
+                    "IMAGE mode cannot verify VRAM and will refuse to switch. Set "
+                    "gpu.nvidia_smi in byrdhouse.config.json to the full .exe path.")
+            else:
+                try:
+                    used, total = self._vram()
+                    GPU_INFO.update(available=True, vram_total_mb=total, vram_used_mb=used)
+                    log(f"GPU: nvidia-smi at {self.nvidia_smi} — {total-used}MB free of {total}MB")
+                except Exception as e:
+                    GPU_INFO["available"] = False
+                    log(f"⚠ GPU: nvidia-smi found but VRAM read failed: {e}")
 
     def _vram(self):
+        exe = self.nvidia_smi or "nvidia-smi"
         out = subprocess.run(
-            ["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
+            [exe, "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
             capture_output=True, text=True, timeout=15).stdout
         used, total = out.strip().splitlines()[0].split(",")
         return int(used.strip()), int(total.strip())
@@ -131,13 +244,29 @@ class Gpu:
         log(f"mode {self.mode} -> {target}")
         if self.enabled:
             if target == "IMAGE":
+                # Hard rule (v2 §7.1): a mode switch must VERIFY VRAM, never assume.
+                # If nvidia-smi is missing we cannot verify, so we refuse loudly
+                # rather than blindly loading ComfyUI onto an 8GB card that may
+                # still hold the LLM.
+                if not self.nvidia_smi:
+                    raise RuntimeError(
+                        "cannot switch to IMAGE: nvidia-smi not found (set gpu.nvidia_smi "
+                        "in byrdhouse.config.json). VRAM cannot be verified.")
                 subprocess.run(["lms", "unload", "--all"], timeout=120)
                 threshold = int(CFG["gpu"].get("vram_free_threshold_mb", 1024))
+                # A healthy SDXL run on the 3070 wants most of the 8GB free after
+                # the LLM unloads; warn (don't block) when the configured gate is
+                # met but headroom is still thin, so a future OOM isn't a mystery.
+                sdxl_floor = int(CFG["gpu"].get("vram_image_healthy_mb", 5000))
                 deadline = time.time() + 180
                 while time.time() < deadline:
                     used, total = self._vram()
                     free = total - used
+                    GPU_INFO.update(vram_total_mb=total, vram_used_mb=used)
                     if free >= threshold:
+                        if free < sdxl_floor:
+                            log(f"  ⚠ only {free}MB free (< {sdxl_floor}MB healthy for "
+                                f"SDXL) — proceeding, but watch for OOM")
                         break
                     log(f"  waiting for VRAM: {free}MB free ({used}MB used)")
                     time.sleep(5)
@@ -154,8 +283,7 @@ class Gpu:
                 else:
                     log("OPERATOR: a model is already loaded — using it (no reload)")
         self.mode = target
-        api("/workers/heartbeat", {"id": WORKER_ID, "host": socket.gethostname(),
-                                   "caps": CAPS, "mode": self.mode})
+        heartbeat()  # report the new mode immediately (full identity payload)
 
 
 def register_cards(job, cards):
@@ -170,6 +298,32 @@ def register_cards(job, cards):
                                   "path": card["path"]}})
 
 
+def resolve_profile_reference(root, profile_id):
+    """Find the default face reference photo from a subject profile."""
+    pdir = root / "profiles" / profile_id
+    pfile = pdir / "profile.json"
+    if not pfile.exists():
+        log(f"profile '{profile_id}' not found at {pdir}")
+        return None
+    profile = json.loads(pfile.read_text(encoding="utf-8"))
+    default_set = profile.get("references", {}).get("default_set", [])
+    for name in default_set:
+        ref = pdir / "references" / name
+        if ref.exists():
+            log(f"profile '{profile_id}' reference: {ref.name}")
+            return str(ref)
+    refs_dir = pdir / "references"
+    if refs_dir.is_dir():
+        photos = [f for f in refs_dir.iterdir()
+                  if f.suffix.lower() in (".jpg", ".jpeg", ".png") and f.name != ".gitkeep"]
+        if photos:
+            pick = sorted(photos)[0]
+            log(f"profile '{profile_id}' fallback reference: {pick.name}")
+            return str(pick)
+    log(f"profile '{profile_id}' has no reference photos in {refs_dir}")
+    return None
+
+
 def run_generate(job) -> None:
     p = json.loads(job["payload"])
     # A reference_artifact (an uploaded real screenshot / key art) steers the
@@ -179,6 +333,17 @@ def run_generate(job) -> None:
     if p.get("reference_artifact"):
         reference = str(fetch_artifact_file(p["reference_artifact"],
                                             ROOT / "artifacts" / "_sources"))
+
+    # Creator V1: if the recipe declares a subject_profile and no explicit
+    # reference was given, auto-wire the profile's face reference photo.
+    # The profile can come from the payload (dashboard) or the recipe itself.
+    profile_id = p.get("subject_profile")
+    if not profile_id:
+        recipe_path = byrdimage.find_recipe(ROOT, p["recipe"])
+        recipe_data = byrdimage.load_json(recipe_path)
+        profile_id = recipe_data.get("subject_profile")
+    if not reference and profile_id:
+        reference = resolve_profile_reference(ROOT, profile_id)
     job_id, saved = byrdimage.generate(
         ROOT, p["recipe"], p.get("slots", {}), p.get("project", "sandbox"),
         p.get("purpose", "unspecified"), batch=p.get("batch"),
@@ -186,7 +351,7 @@ def run_generate(job) -> None:
         aspect=p.get("aspect"), width=p.get("width"), height=p.get("height"),
         negative_extra=p.get("negative"), lora=p.get("lora"),
         lora_strength=float(p.get("lora_strength", 0.9)), seed=p.get("seed"),
-        reference=reference)
+        reference=reference, engine=p.get("engine"))
     cards = []
     for png, card in saved:
         card["path"] = str(png)
@@ -496,18 +661,30 @@ def main():
     global GPU_ENABLED
     GPU_ENABLED = not args.no_gpu
 
+    global _GPU
     gpu = Gpu(enabled=GPU_ENABLED)
-    log(f"{WORKER_ID} starting — router {ROUTER}, mode {gpu.mode}, gpu={'on' if gpu.enabled else 'off'}")
+    _GPU = gpu  # heartbeat() (incl. the background thread) reports gpu.mode
+    log(f"{WORKER_ID} starting — router {ROUTER}, mode {gpu.mode}, "
+        f"gpu={'on' if gpu.enabled else 'off'}, build {BUILD['sha']}")
+
+    # Continuous liveness: a daemon thread beats every HEARTBEAT_SEC so a long
+    # generation (which blocks this main thread inside runner()) never makes
+    # GAMING look dead to MINI's reaper. Skipped under --once so the drain-once
+    # test path stays deterministic. A crashed process kills the daemon too, so
+    # real failures still stop heartbeating and get reaped.
+    if not args.once:
+        threading.Thread(target=_heartbeat_thread, daemon=True, name="heartbeat").start()
+        log("heartbeat thread up — GAMING stays visible to MINI during long jobs")
+
     last_beat = 0.0
     idle_streak = 0
 
     while True:
         try:
             if time.time() - last_beat > 30:
-                beat = api("/workers/heartbeat", {"id": WORKER_ID, "host": socket.gethostname(),
-                                                  "caps": CAPS, "mode": gpu.mode})
+                beat = heartbeat()
                 last_beat = time.time()
-                req = beat.get("requested_mode")
+                req = beat.get("requested_mode") if beat else None
                 if req and req != gpu.mode:  # dashboard/manual mode request
                     gpu.switch(req)
                     api("/mode", {"mode": ""})  # clear the request

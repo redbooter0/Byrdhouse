@@ -1,5 +1,5 @@
 {
-  "_comment": "SDXL img2img graph for image.refine: LoadImage -> VAEEncode -> LatentUpscaleBy -> RepeatLatentBatch -> KSampler(denoise=strength) -> save. byrdimage.refine() fills image, checkpoint, prompt/negative, seed, denoise, scale, batch and prefix at submit time.",
+  "_comment": "SDXL img2img graph for image.refine: LoadImage -> VAEEncode -> LatentUpscaleBy(bislerp) -> RepeatLatentBatch -> KSampler(denoise=strength) -> save. byrdimage.refine() fills image, checkpoint, prompt/negative, seed, denoise, scale, batch and prefix at submit time. Dashboard 'upscale' uses denoise 0.4 + scale 1.5 (8GB-safe ~1728x1152 from 1152x768); 'riff' uses denoise 0.55 + scale 1.0. bislerp latent upscale is smoother than nearest-exact.",
   "1": {
     "class_type": "LoadImage",
     "inputs": { "image": "" }
@@ -10,7 +10,7 @@
   },
   "10": {
     "class_type": "LatentUpscaleBy",
-    "inputs": { "upscale_method": "nearest-exact", "scale_by": 1.6, "samples": ["2", 0] }
+    "inputs": { "upscale_method": "bislerp", "scale_by": 1.6, "samples": ["2", 0] }
   },
   "11": {
     "class_type": "RepeatLatentBatch",

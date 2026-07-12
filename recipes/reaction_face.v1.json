@@ -1,0 +1,17 @@
+{
+  "id": "reaction_face",
+  "version": 1,
+  "kind": "image.generate",
+  "_note": "Close-up reaction face: the highest-CTR thumbnail format on YouTube. A single face filling most of the frame with an extreme emotion — shock, awe, anger, joy. The face IS the hook. Everything else is background. Pair with a composited title for the full thumbnail.",
+  "template": "extreme close-up portrait of {subject}, {reaction} facial expression with {reaction_detail}, face filling 70% of the frame, eyes wide and looking at camera, {game} aesthetic in the blurred background, {palette} palette, {lighting}, photorealistic detail on the face, sharp focus on eyes and expression, cinematic depth of field",
+  "negative": "text, letters, words, watermark, blurry face, closed eyes, looking away, full body, medium shot, generic background, flat lighting, dull expression",
+  "vary": {
+    "palette": ["warm vivid", "cool dramatic", "high-contrast teal-orange", "black-and-gold"],
+    "lighting": ["hard flash with catchlights in eyes", "dramatic side light", "golden rim light", "vibrant neon glow on one side"],
+    "reaction": ["jaw-dropped shocked", "furious screaming", "mind-blown amazed", "evil grinning"],
+    "reaction_detail": ["mouth wide open", "eyebrows raised to forehead", "veins visible with intensity", "tears of joy"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 34, "batch": 4 },
+  "compose": { "text_zone": "bottom", "max_words": 3, "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "emotion_clarity": "1-5 — is the emotion instantly readable at thumbnail size?", "eye_contact": "1-5 — looking at camera?", "face_fill": "1-5 — face fills most of the frame?", "hook": "1-5" }
+}

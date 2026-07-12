@@ -1,0 +1,14 @@
+{
+  "id": "fast_preview",
+  "version": 1,
+  "kind": "image.generate",
+  "_note": "Speed run: 12 steps, euler sampler, batch of 8. Use to quickly preview compositions and prompts before committing to a full-quality run. Expect rougher textures but correct layout/framing in under 30 seconds per batch. Follow up with the hires_art recipe on the winners.",
+  "template": "{prompt}, {palette} palette, {lighting}, clean zone left empty for composited text",
+  "negative": "text, letters, words, watermark, blurry",
+  "vary": {
+    "palette": ["vivid", "gold-red", "electric-blue", "pastel-punch", "teal-orange", "black-gold"],
+    "lighting": ["rim light", "golden hour", "neon glow", "hard flash", "soft daylight", "ember backlight"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 12, "batch": 8 },
+  "rubric": { "prompt_fidelity": "1-5", "composition": "1-5 — is the layout thumbnail-ready?", "hook": "1-5" }
+}

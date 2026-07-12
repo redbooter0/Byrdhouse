@@ -1,0 +1,22 @@
+{
+  "id": "cinematic_me",
+  "version": 1,
+  "kind": "image.generate",
+  "subject_profile": "me",
+  "category": "Cinematic",
+  "_note": "Dramatic cinematic portraits of you. Uses IP-Adapter FaceID to keep your face recognizable across moody hero shots, editorial lighting, and premium compositions. The FACE is the star. Pair with your front-facing reference photo for best results.",
+  "workflow": "workflows/sdxl_ipadapter_face_api.json",
+  "template": "cinematic portrait of {subject}, {mood} mood, {composition}, {lighting}, premium photography, shallow depth of field, film grain, dramatic shadows, professional studio quality, 8K detail",
+  "negative": "text, letters, words, watermark, blurry, low quality, deformed face, extra limbs, cartoon, anime, painting, illustration, wrong person, different person",
+  "slots": {
+    "subject": { "required": false, "default": "a confident man", "label": "Subject description" }
+  },
+  "vary": {
+    "mood": ["dark and powerful", "warm and approachable", "cold and mysterious", "bold and commanding"],
+    "composition": ["tight close-up face filling the frame", "head and shoulders with negative space", "medium shot showing upper body and hands", "profile view with dramatic rim light"],
+    "lighting": ["single hard key light with deep shadows", "golden hour warm backlight", "neon-accented dramatic split lighting", "soft diffused studio light with catch lights"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 34, "batch": 4 },
+  "compose": { "text_zone": "bottom", "max_words": 3, "style": "accent", "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "identity": "1-5 — does this look like the same person as the reference?", "cinematic_quality": "1-5", "postability": "1-5 — would you post this?", "mood": "1-5 — does the mood land?" }
+}

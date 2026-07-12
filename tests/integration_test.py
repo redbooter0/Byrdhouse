@@ -57,6 +57,18 @@ def main():
     ROOT.mkdir(parents=True)
     for d in ("recipes", "workflows", "scripts", "router", "dashboard"):
         shutil.copytree(REPO / d, ROOT / d)
+    # Give the root a minimal .git so router/worker build_sha resolves exactly as
+    # it does on the machines (both run from a git checkout). Only HEAD + refs are
+    # needed — repo_build() never touches objects/.
+    gsrc, gdst = REPO / ".git", ROOT / ".git"
+    if gsrc.is_dir():
+        gdst.mkdir(exist_ok=True)
+        if (gsrc / "HEAD").exists():
+            shutil.copy(gsrc / "HEAD", gdst / "HEAD")
+        if (gsrc / "refs").exists():
+            shutil.copytree(gsrc / "refs", gdst / "refs", dirs_exist_ok=True)
+        if (gsrc / "packed-refs").exists():
+            shutil.copy(gsrc / "packed-refs", gdst / "packed-refs")
     cfg = json.loads((REPO / "byrdhouse.config.json").read_text())
     cfg["services"].update(comfyui=f"http://127.0.0.1:{CP}",
                            lmstudio=f"http://127.0.0.1:{LP}/v1",
@@ -485,13 +497,70 @@ def main():
         st = api("/status")
         check("/status reads BOM'd status.json", st["machine"].get("host") == "TEST")
 
+        # ── 2-PC coordination: the belt spans MINI (router) and GAMING (worker).
+        #    These lock the machine-to-machine contract so a silent version split,
+        #    a duplicate-work requeue, or an invisible upscale can't regress. ──
+        print("== 2-PC coordination (version drift, requeue fencing, refine res)")
+        h = api("/health")
+        check("/health carries api_version + real build_sha",
+              h.get("api_version") == "1" and h.get("build_sha") not in (None, "", "unknown"),
+              str(h))
+        router_sha = h["build_sha"]
+        st = api("/status")
+        check("/status reports the router build", st.get("router", {}).get("sha") == router_sha)
+        check("/status carries a drift list", isinstance(st.get("drift"), list))
+        # the real worker (run many times above) heartbeats its build; same repo
+        # as the router, so it must match and NOT drift
+        wrow = [w for w in st["workers"] if w.get("build_sha")]
+        check("worker heartbeats its build_sha", bool(wrow), str(st["workers"]))
+        check("matched worker/router builds do not drift",
+              not any(d["issue"] == "commit_mismatch" and d.get("worker_sha") == router_sha
+                      for d in st["drift"]))
+        # a worker on another commit lights up the drift list (the silent-split guard)
+        api("/workers/heartbeat", {"id": "worker-ghost", "host": "byrd-gaming",
+                                   "caps": ["comfyui"], "mode": "IMAGE",
+                                   "build_sha": "deadbeef1234", "api_version": "1"})
+        drift = api("/status")["drift"]
+        check("drift flags a worker on a different commit",
+              any(d["worker"] == "worker-ghost" and d["issue"] == "commit_mismatch" for d in drift),
+              str(drift))
+        # requeue fencing: a live worker's running job cannot be requeued (would
+        # duplicate work on the one GPU); a crashed (offline) worker's job can
+        api("/workers/heartbeat", {"id": "worker-live", "host": "h", "caps": [],
+                                   "mode": "ANY", "build_sha": router_sha, "api_version": "1"})
+        fj = api("/jobs", {"type": "report.daily", "payload": {}})
+        api("/jobs/claim", {"worker_id": "worker-live", "caps": [], "mode": "ANY"})
+        api(f"/jobs/{fj['id']}/status", {"status": "running"})
+        try:
+            api(f"/jobs/{fj['id']}/requeue", {})
+            check("requeue of a live running job is refused", False)
+        except urllib.error.HTTPError as e:
+            check("requeue of a live running job is refused (409)", e.code == 409, str(e.code))
+        import sqlite3 as _sq
+        _c = _sq.connect(ROOT / "db" / "byrdhouse.db")
+        _c.execute("UPDATE workers SET last_heartbeat='2000-01-01T00:00:00+00:00' WHERE id='worker-live'")
+        _c.commit(); _c.close()
+        rq = api(f"/jobs/{fj['id']}/requeue", {})
+        check("requeue allowed once the worker is offline (crash recovery)",
+              rq["status"] == "queued" and rq["attempts"] == 0)
+        # refine records the resolution change so an upscale is visible + on the card
+        rsrc = [a for a in api("/artifacts?limit=80")
+                if a["kind"] == "image" and a["path"] and str(ROOT) in a["path"]][0]
+        rrj = api(f"/artifacts/{rsrc['id']}/refine", {"strength": 0.4, "scale": 1.5})
+        run_worker()
+        rref = [a for a in api("/artifacts?limit=120")
+                if a["job_id"] == rrj["id"] and a["kind"] == "image"]
+        check("refine records in_size/out_size/steps on the card",
+              rref and all(k in json.loads(rref[0]["meta"]) for k in ("in_size", "out_size", "steps")),
+              str(json.loads(rref[0]["meta"]) if rref else {}))
+
         print("== stats + report + dashboard")
         st = api("/stats")
         check("stats counts artifacts", st["artifacts_total"] >= 4, str(st))
         rep = api("/reports/daily")
         check("daily report markdown", rep["markdown"].startswith("# ByrdHouse daily report"))
         with urllib.request.urlopen(f"http://127.0.0.1:{RP}/", timeout=10) as r:
-            check("dashboard serves", r.status == 200 and b"Command Center" in r.read())
+            check("dashboard serves", r.status == 200 and b"ByrdHouse" in r.read())
 
     finally:
         router.terminate()

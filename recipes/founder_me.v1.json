@@ -1,0 +1,22 @@
+{
+  "id": "founder_me",
+  "version": 1,
+  "kind": "image.generate",
+  "subject_profile": "me",
+  "category": "Founder",
+  "_note": "Tech founder / ByrdHouse command center aesthetic. You in futuristic environments, premium tech setups, or branded compositions. IP-Adapter FaceID preserves your identity. The vibe is 'the person running this operation.'",
+  "workflow": "workflows/sdxl_ipadapter_face_api.json",
+  "template": "professional portrait of {subject} as a tech founder, {setting}, {style}, {lighting}, premium quality, sharp focus, confident posture, modern aesthetic, 8K detail",
+  "negative": "text, letters, words, watermark, blurry, low quality, deformed face, extra limbs, cartoon, anime, old fashioned, cluttered, messy, generic office",
+  "slots": {
+    "subject": { "required": false, "default": "a confident man", "label": "Subject description" }
+  },
+  "vary": {
+    "setting": ["futuristic command center with holographic displays", "sleek modern studio with premium monitors", "rooftop overlooking a city skyline at night", "clean minimalist workspace with ambient lighting"],
+    "style": ["cyberpunk tech aesthetic with neon accents", "clean Apple-style minimalism", "dark luxury with metallic and glass", "editorial magazine cover look"],
+    "lighting": ["cool blue-teal ambient with warm key light on face", "dramatic backlit silhouette with rim light", "soft premium studio lighting", "neon glow reflecting off surfaces"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 34, "batch": 4 },
+  "compose": { "text_zone": "bottom", "max_words": 3, "style": "banner", "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "identity": "1-5 — does this look like the same person as the reference?", "founder_vibe": "1-5 — does it read as 'the person running this'?", "postability": "1-5", "premium_quality": "1-5" }
+}

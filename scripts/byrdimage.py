@@ -52,6 +52,19 @@ def load_json(path: Path):
         return json.load(f)
 
 
+def _png_size(path):
+    """(width, height) from a PNG's IHDR header — stdlib only, no Pillow, so the
+    refine layer can record output resolution without a pip dependency."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(24)
+        if head[:8] == b"\x89PNG\r\n\x1a\n" and head[12:16] == b"IHDR":
+            return int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+    except Exception:
+        pass
+    return None
+
+
 def new_id(prefix: str) -> str:
     ts = format(int(time.time() * 1000), "x")
     rand = "".join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(6))
@@ -216,7 +229,8 @@ def http_json(url: str, payload=None, timeout=30):
 def generate(root, recipe_name, slots, project, purpose,
              batch=None, checkpoint=None, dry_run=False, job_id=None,
              aspect=None, width=None, height=None, negative_extra=None,
-             lora=None, lora_strength=0.9, seed=None, reference=None):
+             lora=None, lora_strength=0.9, seed=None, reference=None,
+             engine=None):
     """Run one image.generate: recipe -> ComfyUI -> archived PNGs + cards.
     Returns (job_id, [(png_path, card_dict), ...]). Raises SystemExit on
     validation errors (via die) — callers that need exceptions can catch it."""
@@ -252,19 +266,20 @@ def generate(root, recipe_name, slots, project, purpose,
         negative = f"{negative}, {negative_extra}" if negative else str(negative_extra)
 
     defaults = recipe.get("defaults", {})
-    ckpt_requested = checkpoint or defaults.get("checkpoint") or die("no checkpoint")
+    engine = engine or {}
+    ckpt_requested = checkpoint or engine.get("checkpoint") or defaults.get("checkpoint") or die("no checkpoint")
     checkpoint, ckpt_matched = resolve_checkpoint_info(root, ckpt_requested, comfy=comfy)
     batch = batch or defaults.get("batch", 1)
-    steps = defaults.get("steps", 30)
+    steps = int(engine.get("steps") or defaults.get("steps", 30))
 
     # ── Build the graph ───────────────────────────────────────────────────────
-    # A reference image routes through the IP-Adapter graph: the base checkpoint
-    # borrows the reference's look (the 'make it look like THIS game' path) — no
-    # per-game LoRA, no training. Everything else about generation is unchanged.
-    if reference:
-        workflow_rel = img_cfg.get("reference_workflow", "workflows/sdxl_ipadapter_api.json")
-    else:
-        workflow_rel = img_cfg.get("workflow", "workflows/sdxl_base_api.json")
+    # Recipe can specify its own workflow graph; falls back to config defaults.
+    workflow_rel = recipe.get("workflow")
+    if not workflow_rel:
+        if reference:
+            workflow_rel = img_cfg.get("reference_workflow", "workflows/sdxl_ipadapter_api.json")
+        else:
+            workflow_rel = img_cfg.get("workflow", "workflows/sdxl_base_api.json")
     graph = load_json(root / workflow_rel)
     graph.pop("_comment", None)
 
@@ -272,6 +287,13 @@ def generate(root, recipe_name, slots, project, purpose,
     seed = int(seed) if seed else secrets.randbits(63)  # fix 1: random per job (or pinned for reruns)
     prefix = f"{datetime.now():%Y%m%d}_{recipe['id']}_{job_id}"  # fix 2: unique
     gen_w, gen_h = pick_dims(aspect, width, height, img_cfg)
+
+    # Hires workflows generate at a smaller base size and upscale within the
+    # graph (LatentUpscaleBy). base_scale > 1 means EmptyLatentImage is set to
+    # target / scale, and the workflow's upscale node recovers target res.
+    base_scale = float(defaults.get("base_scale", 1.0))
+    base_w = round(gen_w / base_scale / 8) * 8 if base_scale > 1.0 else gen_w
+    base_h = round(gen_h / base_scale / 8) * 8 if base_scale > 1.0 else gen_h
 
     clip_nodes = sampler_nodes = 0
     for node in graph.values():
@@ -284,14 +306,14 @@ def generate(root, recipe_name, slots, project, purpose,
             sampler_nodes += 1
             inputs["seed"] = seed
             inputs["steps"] = steps
-            inputs["cfg"] = img_cfg.get("cfg", 7.0)
-            inputs["sampler_name"] = img_cfg.get("sampler", "dpmpp_2m")
-            inputs["scheduler"] = img_cfg.get("scheduler", "karras")
+            inputs["cfg"] = float(engine.get("cfg") or img_cfg.get("cfg", 7.0))
+            inputs["sampler_name"] = engine.get("sampler_name") or img_cfg.get("sampler", "dpmpp_2m")
+            inputs["scheduler"] = engine.get("scheduler") or img_cfg.get("scheduler", "karras")
         elif ct == "CheckpointLoaderSimple":
             inputs["ckpt_name"] = checkpoint          # fix 4 source of truth
         elif ct == "EmptyLatentImage":
-            inputs["width"] = gen_w
-            inputs["height"] = gen_h
+            inputs["width"] = base_w
+            inputs["height"] = base_h
             inputs["batch_size"] = batch
         elif ct == "SaveImage":
             inputs["filename_prefix"] = prefix
@@ -345,9 +367,15 @@ def generate(root, recipe_name, slots, project, purpose,
         "recipe": recipe_tag, "purpose": purpose, "prompt": prompt,
         "negative": negative, "seed": seed, "checkpoint": checkpoint,
         "workflow": workflow_rel, "slots": user_slots, "vary_picks": vary_picks,
-        "size": f"{gen_w}x{gen_h}", **({"lora": lora} if lora else {}),
+        "size": f"{gen_w}x{gen_h}",
+        "steps": steps,
+        "cfg": float(engine.get("cfg") or img_cfg.get("cfg", 7.0)),
+        "sampler": engine.get("sampler_name") or img_cfg.get("sampler", "dpmpp_2m"),
+        "scheduler": engine.get("scheduler") or img_cfg.get("scheduler", "karras"),
+        **({"lora": lora} if lora else {}),
         **({"reference": str(reference)} if reference else {}),
-        # honest checkpoint record: what was asked vs what actually ran
+        **({"subject_profile": recipe.get("subject_profile")} if recipe.get("subject_profile") else {}),
+        **({"category": recipe.get("category")} if recipe.get("category") else {}),
         **({"checkpoint_requested": ckpt_requested, "checkpoint_fallback": True}
            if not ckpt_matched else {}),
     }
@@ -447,6 +475,7 @@ def refine(root, source_path, project, purpose, prompt=None, negative=None,
     workflow_rel = "workflows/sdxl_img2img_api.json"
     graph = load_json(root / workflow_rel)
     graph.pop("_comment", None)
+    steps_used = 30
     for node in graph.values():
         ct, inputs = node.get("class_type"), node.get("inputs", {})
         if ct == "LoadImage":
@@ -461,6 +490,7 @@ def refine(root, source_path, project, purpose, prompt=None, negative=None,
             inputs["cfg"] = img_cfg.get("cfg", 7.0)
             inputs["sampler_name"] = img_cfg.get("sampler", "dpmpp_2m")
             inputs["scheduler"] = img_cfg.get("scheduler", "karras")
+            steps_used = int(inputs.get("steps", 30))
         elif ct == "CheckpointLoaderSimple":
             inputs["ckpt_name"] = checkpoint
         elif ct == "SaveImage":
@@ -477,13 +507,26 @@ def refine(root, source_path, project, purpose, prompt=None, negative=None,
     if lora:
         insert_lora(graph, resolve_lora(root, lora), lora_strength)
 
-    print(f"[byrdimage] refine {source.name}  strength {strength}  scale {scale}")
+    # Record the resolution change so the dashboard can SHOW that an upscale did
+    # something (a 1.5× on a gallery thumbnail is otherwise invisible) and so the
+    # card honestly carries the pixels that ran.
+    in_wh = _png_size(source)
+    size_fields = {}
+    if in_wh:
+        size_fields["in_size"] = f"{in_wh[0]}x{in_wh[1]}"
+        size_fields["out_size"] = f"{round(in_wh[0] * scale)}x{round(in_wh[1] * scale)}"
+    print(f"[byrdimage] refine {source.name}  strength {strength}  scale {scale}"
+          + (f"  {size_fields['in_size']} -> {size_fields['out_size']}" if size_fields else ""))
     card_base = {
         "recipe": src_card.get("recipe", "refine"), "purpose": purpose,
         "prompt": prompt, "negative": negative, "seed": seed,
         "checkpoint": checkpoint, "workflow": workflow_rel,
         "slots": src_card.get("slots", {}), "vary_picks": {},
         "refined_from": str(source), "strength": strength, "scale": scale,
+        "steps": steps_used, "cfg": img_cfg.get("cfg", 7.0),
+        "sampler": img_cfg.get("sampler", "dpmpp_2m"),
+        "scheduler": img_cfg.get("scheduler", "karras"),
+        **size_fields,
         **({"lora": lora} if lora else {}),
     }
     return job_id, run_graph(root, comfy, graph, job_id, project, card_base)

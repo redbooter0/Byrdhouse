@@ -1,0 +1,23 @@
+{
+  "id": "fantasy_me",
+  "version": 1,
+  "kind": "image.generate",
+  "subject_profile": "me",
+  "category": "Fantasy",
+  "_note": "Fantasy / game-character versions of you. Warrior, mage, rogue, game poster hero. IP-Adapter FaceID keeps your face while the prompt transforms the setting and outfit. Great for social content, profile images, game-themed thumbnails.",
+  "workflow": "workflows/sdxl_ipadapter_face_api.json",
+  "template": "epic fantasy portrait of {subject} as a {character_class}, {scene}, {palette} palette, {lighting}, intricate armor and costume detail, cinematic game art quality, dramatic depth, 8K detail",
+  "negative": "text, letters, words, watermark, blurry, low quality, deformed face, extra limbs, generic, bland, modern clothing, office setting, different person",
+  "slots": {
+    "subject": { "required": false, "default": "a powerful warrior", "label": "Subject description" },
+    "character_class": { "required": false, "default": "dark paladin", "label": "Character class" }
+  },
+  "vary": {
+    "scene": ["ancient throne room with shafts of light", "battlefield at dusk with fire and smoke", "enchanted forest with glowing runes", "mountain fortress overlooking a vast kingdom"],
+    "palette": ["dark fantasy black-and-gold", "ethereal blue-silver", "blood-red and iron", "emerald and bronze"],
+    "lighting": ["dramatic god rays through stone arches", "campfire rim light with warm shadows", "magical glow emanating from weapons", "storm lightning with volumetric fog"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 34, "batch": 4 },
+  "compose": { "text_zone": "bottom", "max_words": 3, "style": "accent", "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "identity": "1-5 — does this look like the same person as the reference?", "fantasy_quality": "1-5 — is the fantasy convincing?", "postability": "1-5", "hook": "1-5 — would this work as a profile image?" }
+}

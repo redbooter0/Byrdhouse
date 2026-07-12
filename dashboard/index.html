@@ -3,49 +3,44 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ByrdHouse Command Center</title>
+<title>ByrdHouse</title>
 <style>
   :root { --bg:#0a0812; --panel:#141021; --panel2:#1b1530; --line:#2c2347;
           --text:#ece7fb; --dim:#9a8fc0; --accent:#8b5cf6; --accent2:#a78bfa;
           --green:#34d399; --yellow:#fbbf24; --red:#f87171; }
   * { box-sizing:border-box; margin:0; }
-  body { color:var(--text); font:14px/1.5 -apple-system,'Segoe UI',sans-serif; display:flex; min-height:100vh;
+  body { color:var(--text); font:14px/1.5 -apple-system,'Segoe UI',sans-serif; display:flex; flex-direction:column; min-height:100vh;
          background:radial-gradient(1200px 600px at 80% -10%, #1e1440 0%, var(--bg) 55%) fixed var(--bg); }
   a { color:var(--accent2); }
-  #brand { width:170px; margin:2px 8px 2px; display:block;
-           filter:drop-shadow(0 0 14px rgba(139,92,246,.35)); }
-  .ricon { font-size:15px; width:20px; text-align:center; flex-shrink:0; }
 
-  /* sidebar */
-  #side { width:225px; background:var(--panel); border-right:1px solid var(--line); padding:16px 10px; flex-shrink:0; }
-  #side h1 { font-size:16px; letter-spacing:.06em; padding:0 8px 4px; }
-  #side h1 span { color:var(--accent2); }
-  #side .sub { font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.14em; padding:0 8px 14px; }
-  #side .cap { font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:.12em; margin:14px 8px 6px; }
-  .room { display:flex; align-items:center; gap:8px; width:100%; text-align:left; background:none; border:0; color:var(--text);
-          padding:8px 10px; border-radius:8px; cursor:pointer; font-size:13px; }
-  .room small { display:block; color:var(--dim); font-size:10px; }
-  .room:hover { background:var(--panel2); }
-  .room.on { background:linear-gradient(90deg,#2d1f57,#1b1530); outline:1px solid var(--accent); }
-  .room .lock { margin-left:auto; font-size:10px; color:var(--dim); border:1px solid var(--line); border-radius:8px; padding:0 6px; }
+  /* ── top nav bar ── */
+  #topnav { display:flex; align-items:center; gap:0; border-bottom:1px solid var(--line);
+            background:var(--panel); padding:0 16px; height:52px; flex-shrink:0; }
+  #brand { height:32px; margin-right:8px; filter:drop-shadow(0 0 10px rgba(139,92,246,.3)); }
+  .navtabs { display:flex; gap:2px; flex:1; }
+  .tab { background:none; border:0; color:var(--dim); padding:14px 16px; cursor:pointer;
+         font-size:14px; font-weight:500; border-bottom:2px solid transparent; transition:all .15s; }
+  .tab:hover { color:var(--text); }
+  .tab.on { color:var(--accent2); border-bottom-color:var(--accent); }
+  .tab .ticon { margin-right:6px; }
+  .sysbar { display:flex; align-items:center; gap:10px; margin-left:auto; }
+  .sysdot { width:8px; height:8px; border-radius:50%; display:inline-block; }
+  #sysLabel { font-size:11px; color:var(--dim); cursor:pointer; display:flex; align-items:center; gap:5px; }
+  #sysLabel:hover { color:var(--text); }
+  .gear { background:none; border:0; color:var(--dim); font-size:16px; cursor:pointer; padding:4px 6px; }
+  .gear:hover { color:var(--accent2); }
 
-  /* main */
-  #main { flex:1; padding:18px; min-width:0; }
-  .topbar { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; align-items:center; }
-  .chip { background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:7px 12px; font-size:12px;
-          display:flex; align-items:center; gap:7px; }
-  .light { width:9px; height:9px; border-radius:50%; display:inline-block; flex-shrink:0; }
-  .green{background:var(--green)} .yellow{background:var(--yellow)} .red{background:var(--red)}
+  /* ── main ── */
+  #main { flex:1; padding:20px; max-width:1200px; width:100%; margin:0 auto; min-width:0; }
   .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px; }
   .panel { background:linear-gradient(180deg, rgba(139,92,246,.05), transparent 42%) var(--panel);
-           border:1px solid var(--line); border-radius:12px; padding:14px;
-           transition:border-color .18s; }
+           border:1px solid var(--line); border-radius:12px; padding:16px; transition:border-color .18s; }
   .panel:hover { border-color:#3b2f63; }
   .wide { grid-column:1/-1; }
   h2 { font-size:12px; color:var(--dim); text-transform:uppercase; letter-spacing:.1em; margin-bottom:10px; }
-  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; }
-  .stat { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:12px; }
-  .stat b { font-size:26px; display:block; color:var(--accent2); text-shadow:0 0 18px rgba(139,92,246,.35); }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:10px; }
+  .stat { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:12px; text-align:center; }
+  .stat b { font-size:28px; display:block; color:var(--accent2); text-shadow:0 0 18px rgba(139,92,246,.35); }
   .stat span { color:var(--dim); font-size:11px; }
   table { width:100%; border-collapse:collapse; font-size:12.5px; }
   td,th { padding:4px 6px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; }
@@ -57,16 +52,64 @@
              padding:6px 12px; cursor:pointer; font-size:12.5px; }
   button.s:hover { border-color:var(--accent); }
   button:disabled { opacity:.45; cursor:default; }
-  .busy { border:1px dashed var(--accent); border-radius:10px; background:var(--panel2);
-          display:flex; flex-direction:column; align-items:center; justify-content:center;
-          aspect-ratio:16/11; gap:6px; color:var(--dim); font-size:12px;
-          animation:pulse 1.6s ease-in-out infinite; }
-  .busy b { color:var(--accent2); }
-  @keyframes pulse { 0%,100%{opacity:.55} 50%{opacity:1} }
   button.ok{color:var(--green)} button.no{color:var(--red)}
   input,select,textarea { background:#0d0a18; color:var(--text); border:1px solid var(--line); border-radius:8px;
                           padding:7px 9px; font-size:13px; width:100%; }
   label { font-size:11px; color:var(--dim); display:block; margin:8px 0 2px; }
+  #msg { color:var(--yellow); font-size:12.5px; min-height:18px; margin-top:8px; }
+  .muted { color:var(--dim); font-size:12px; }
+
+  /* ── cards (gallery) ── */
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; }
+  .art { border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--panel2);
+         transition:transform .15s, border-color .15s, box-shadow .15s; }
+  .art:hover { transform:translateY(-2px); border-color:var(--accent);
+               box-shadow:0 6px 22px rgba(124,58,237,.22); }
+  .art img { width:100%; aspect-ratio:16/9; object-fit:cover; display:block; background:#000; cursor:zoom-in; }
+  .art .m { padding:10px; font-size:12px; color:var(--dim); }
+  .art .m b { color:var(--text); }
+  .row { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
+
+  /* ── lightbox ── */
+  .lightbox { position:fixed; inset:0; background:rgba(6,4,14,.92); z-index:50;
+              display:flex; align-items:center; justify-content:center; cursor:zoom-out;
+              padding:max(16px, env(safe-area-inset-top)); }
+  .lightbox img { max-width:96vw; max-height:92vh; border-radius:10px;
+                  box-shadow:0 0 60px rgba(124,58,237,.35); }
+
+  /* ── busy/progress cards ── */
+  .busy { border:1px dashed var(--accent); border-radius:12px; background:var(--panel2);
+          display:flex; flex-direction:column; align-items:center; justify-content:center;
+          aspect-ratio:16/9; gap:6px; color:var(--dim); font-size:12px;
+          animation:pulse 1.6s ease-in-out infinite; }
+  .busy b { color:var(--accent2); font-size:14px; }
+  @keyframes pulse { 0%,100%{opacity:.55} 50%{opacity:1} }
+
+  /* ── hero section (Home) ── */
+  .hero { text-align:center; padding:24px 0 20px; }
+  .hero h1 { font-size:22px; font-weight:600; color:var(--text); margin-bottom:4px; }
+  .hero p { color:var(--dim); font-size:13px; }
+  .approval-card { border:2px solid var(--yellow); border-radius:12px; }
+  .approval-card .badge { background:var(--yellow); color:#000; font-size:10px; font-weight:700;
+                           padding:2px 8px; border-radius:0 0 8px 8px; display:inline-block; margin-bottom:4px; }
+
+  /* ── chat ── */
+  .chatlog { max-height:56vh; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding:6px 2px 12px; }
+  .bubble { max-width:82%; padding:9px 12px; border-radius:12px; font-size:13.5px; white-space:pre-wrap; word-break:break-word; }
+  .bubble.user { align-self:flex-end; background:linear-gradient(90deg,#7c3aed,#6d28d9); color:#fff; }
+  .bubble.assistant { align-self:flex-start; background:var(--panel2); border:1px solid var(--line); }
+  .bubble .who { display:block; font-size:10px; color:var(--dim); margin-top:5px; }
+
+  /* ── system panel (overlay) ── */
+  #sysOverlay { display:none; position:fixed; inset:0; z-index:40; }
+  #sysOverlay.open { display:flex; }
+  #sysBg { position:absolute; inset:0; background:rgba(6,4,14,.7); }
+  #sysPanel { position:absolute; right:0; top:0; bottom:0; width:min(480px,90vw); background:var(--panel);
+              border-left:1px solid var(--line); overflow-y:auto; padding:20px; z-index:1; }
+  #sysPanel h2 { margin-top:16px; }
+  #sysPanel h2:first-child { margin-top:0; }
+
+  /* ── tooltip ── */
   .q { display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px;
        border-radius:50%; border:1px solid var(--line); color:var(--dim); font-size:10px;
        cursor:pointer; margin-left:5px; vertical-align:middle; user-select:none; }
@@ -75,94 +118,75 @@
                border:1px solid var(--accent); border-radius:9px; padding:9px 11px;
                font-size:12px; color:var(--text); line-height:1.45;
                box-shadow:0 6px 24px rgba(0,0,0,.5); }
+
   details.opts { margin-top:12px; border-top:1px solid var(--line); padding-top:8px; }
   details.opts > summary { cursor:pointer; font-size:11px; color:var(--dim);
        text-transform:uppercase; letter-spacing:.1em; list-style:none; }
   details.opts > summary::-webkit-details-marker { display:none; }
-  details.opts > summary::before { content:'▸ '; }
-  details.opts[open] > summary::before { content:'▾ '; }
-  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:10px; }
-  .art { border:1px solid var(--line); border-radius:10px; overflow:hidden; background:var(--panel2);
-         transition:transform .15s, border-color .15s, box-shadow .15s; }
-  .art:hover { transform:translateY(-2px); border-color:var(--accent);
-               box-shadow:0 6px 22px rgba(124,58,237,.22); }
-  .art img { width:100%; aspect-ratio:16/9; object-fit:cover; display:block; background:#000; }
-  .art .m { padding:8px; font-size:11.5px; color:var(--dim); }
-  .art .m b { color:var(--text); }
-  .row { display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; }
-  #msg { color:var(--yellow); font-size:12.5px; min-height:18px; margin-top:8px; }
-  .muted { color:var(--dim); font-size:12px; }
+  details.opts > summary::before { content:'+ '; }
+  details.opts[open] > summary::before { content:'- '; }
   .note { background:var(--panel2); border:1px dashed var(--line); border-radius:10px; padding:12px; color:var(--dim); font-size:13px; }
-  .chatlog { max-height:56vh; overflow-y:auto; display:flex; flex-direction:column; gap:8px; padding:6px 2px 12px; }
-  .bubble { max-width:82%; padding:9px 12px; border-radius:12px; font-size:13.5px; white-space:pre-wrap; word-break:break-word; }
-  .bubble.user { align-self:flex-end; background:linear-gradient(90deg,#7c3aed,#6d28d9); color:#fff; }
-  .bubble.assistant { align-self:flex-start; background:var(--panel2); border:1px solid var(--line); }
-  .bubble.tool { align-self:flex-start; background:none; border:1px dashed var(--line); color:var(--dim); font-size:12px; }
-  .bubble .who { display:block; font-size:10px; color:var(--dim); margin-top:5px; }
-  .art img { cursor:zoom-in; }
-  .lightbox { position:fixed; inset:0; background:rgba(6,4,14,.92); z-index:50;
-              display:flex; align-items:center; justify-content:center; cursor:zoom-out;
-              padding:max(16px, env(safe-area-inset-top)); }
-  .lightbox img { max-width:96vw; max-height:92vh; border-radius:10px;
-                  box-shadow:0 0 60px rgba(124,58,237,.35); }
+  .filter-bar { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; align-items:center; }
+  .filter-btn { background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:5px 12px;
+                color:var(--dim); font-size:12px; cursor:pointer; }
+  .filter-btn:hover, .filter-btn.on { border-color:var(--accent); color:var(--accent2); }
+
   @media (max-width:820px){
-    body{flex-direction:column}
-    /* slim top bar: tiny brand, rooms scroll horizontally as compact chips */
-    #side{width:100%; display:flex; flex-direction:row; align-items:center; gap:8px;
-          border-right:0; border-bottom:1px solid var(--line);
-          padding:8px max(10px, env(safe-area-inset-right)) 8px max(10px, env(safe-area-inset-left))}
-    #brand{width:78px; margin:0; flex-shrink:0}
-    #side .sub,#side .cap{display:none}
-    /* the room list itself becomes the horizontal scroller */
-    #rooms{display:flex; flex-direction:row; gap:6px; overflow-x:auto; flex:1;
-           -webkit-overflow-scrolling:touch; scrollbar-width:none}
-    #rooms::-webkit-scrollbar{display:none}
-    .room{flex-shrink:0; white-space:nowrap; padding:8px 12px; border-radius:10px;
-          background:var(--panel2); border:1px solid var(--line)}
-    .room small,.room .lock{display:none}
-    .room b{font-size:13px}
-    /* admin token: compact, at the end of the bar */
-    #side > div[style]{margin-left:auto; flex-shrink:0; padding:0!important; width:130px}
-    #side > div[style] label{display:none}
-    #main{padding:12px max(12px, env(safe-area-inset-right))
-                  max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left))}
-    /* 16px inputs stop Safari's focus auto-zoom */
-    input,select,textarea{font-size:16px}
+    #topnav { padding:0 max(8px, env(safe-area-inset-left)); height:48px; }
+    .tab { padding:12px 10px; font-size:13px; }
+    .tab .ticon { margin-right:3px; }
+    #brand { height:26px; }
+    #main { padding:12px max(12px, env(safe-area-inset-right))
+                  max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+    .cards { grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; }
+    input,select,textarea { font-size:16px; }
+    .hero h1 { font-size:18px; }
+    .stats { grid-template-columns:repeat(3,1fr); }
   }
   * { -webkit-tap-highlight-color:transparent; }
   button { touch-action:manipulation; }
 </style>
 </head>
 <body>
-<nav id="side">
-  <img id="brand" src="/logo.png" alt="ByrdHouse" onerror="this.outerHTML='<h1>🦅 BYRD<span>HOUSE</span></h1>'">
-  <div class="sub">Control Center · local mode</div>
-  <div id="rooms"></div>
-  <div class="cap">Admin</div>
-  <div style="padding:0 8px"><label>Admin token</label><input id="token" type="password" placeholder="admin token"></div>
+
+<nav id="topnav">
+  <img id="brand" src="/logo.png" alt="ByrdHouse" onerror="this.outerHTML='<span style=\"font-size:18px;font-weight:700;margin-right:8px\">&#x1F985;</span>'">
+  <div class="navtabs">
+    <button class="tab on" data-tab="home" onclick="go('home')"><span class="ticon">&#x1F3E0;</span>Home</button>
+    <button class="tab" data-tab="create" onclick="go('create')"><span class="ticon">&#x2728;</span>Create</button>
+    <button class="tab" data-tab="library" onclick="go('library')"><span class="ticon">&#x1F4DA;</span>Library</button>
+  </div>
+  <div class="sysbar">
+    <span id="sysLabel" onclick="toggleSystem()"><span class="sysdot green" id="sysDot"></span> <span id="sysText">OK</span></span>
+    <button class="gear" onclick="toggleSystem()" title="System &amp; diagnostics">&#x2699;&#xFE0F;</button>
+  </div>
 </nav>
 
 <main id="main">
-  <div class="topbar" id="statusChips"></div>
   <div id="view"></div>
   <div id="msg"></div>
 </main>
 
+<div id="sysOverlay">
+  <div id="sysBg" onclick="toggleSystem()"></div>
+  <div id="sysPanel"></div>
+</div>
+
 <script>
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-$('token').value = localStorage.getItem('bh_token') || '';
-$('token').addEventListener('change', e => localStorage.setItem('bh_token', e.target.value));
-const hdrs = () => ({ 'Content-Type':'application/json', 'Authorization':'Bearer '+$('token').value, 'X-Actor':'dashboard' });
+
+/* ── admin token: stored, never shown on main UI ── */
+let _adminToken = localStorage.getItem('bh_token') || '';
+const hdrs = () => ({ 'Content-Type':'application/json', 'Authorization':'Bearer '+_adminToken, 'X-Actor':'dashboard' });
 const jget = async p => (await fetch(p)).json();
 const jpost = async (p, body) => {
   const r = await fetch(p, { method:'POST', headers:hdrs(), body:JSON.stringify(body) });
   const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status); return j;
 };
-const say = t => { $('msg').textContent = t;
-  const g = $('genMsg'); if (g) g.textContent = t; };  // mirror status next to the button
+const say = t => { $('msg').textContent = t; };
 
-/* ── tooltips: clean labels + a ? that pops the description (tap or hover) ── */
+/* ── tooltips ── */
 const qtip = text => `<span class="q" onclick="showTip(event)" data-tip="${esc(text)}">?</span>`;
 function showTip(e) {
   e.stopPropagation();
@@ -171,79 +195,96 @@ function showTip(e) {
   b.id = 'tipbubble'; b.textContent = e.currentTarget.dataset.tip;
   document.body.appendChild(b);
   const r = e.currentTarget.getBoundingClientRect();
-  const bw = b.offsetWidth, bh = b.offsetHeight;
-  b.style.left = Math.max(8, Math.min(window.innerWidth - bw - 8, r.left)) + 'px';
-  b.style.top = (r.bottom + bh + 8 > window.innerHeight ? r.top - bh - 6 : r.bottom + 6) + 'px';
+  b.style.left = Math.max(8, Math.min(window.innerWidth - b.offsetWidth - 8, r.left)) + 'px';
+  b.style.top = (r.bottom + b.offsetHeight + 8 > window.innerHeight ? r.top - b.offsetHeight - 6 : r.bottom + 6) + 'px';
 }
 document.addEventListener('click', () => { const b = $('tipbubble'); if (b) b.remove(); });
 
-/* ── Rooms (ROOM_MAP.md — the rooms are the product) ── */
-const ROOMS = [
-  { id:'command',  icon:'🛰️', name:'Command Center', sub:'Overview & Status' },
-  { id:'image',    icon:'🎨', name:'Image Studio',   sub:'Generate & Thumbnails' },
-  { id:'items',    icon:'🖼️', name:'Generated Items',sub:'Gallery & Review' },
-  { id:'chat',     icon:'💬', name:'Operator Chat',  sub:'Local model, live' },
-  { id:'content',  icon:'📦', name:'Content Pipeline', sub:'Research → Package' },
-  { id:'exports',  icon:'📤', name:'Exports Room',   sub:'CSV & Reports' },
-  { id:'memory',   icon:'🧠', name:'Memory Room',    sub:'via Cherry Studio' },
-  { id:'mcp',      icon:'🔌', name:'MCP Tools',      sub:'Roster & Pings' },
-  { id:'events',   icon:'⚙️', name:'System Room',    sub:'Events & Workers' },
-  { id:'realms',   icon:'🗺️', name:'Realms Room',    sub:'Weekend Lane', lock:'U6 belt' },
-  { id:'video',    icon:'🎬', name:'Video Studio',   sub:'Motion', lock:'U5' },
-  { id:'coder',    icon:'⌨️', name:'Coder Room',     sub:'Claude Code', lock:'config' },
-  { id:'business', icon:'💰', name:'Business Room',  sub:'Money Map', lock:'R2' },
-  { id:'users',    icon:'👥', name:'Users Room',     sub:'Frozen', lock:'demand' },
-  { id:'bot',      icon:'🤖', name:'Bot Room',       sub:'Autonomy Ladder', lock:'after U3' },
-];
-let room = 'command';
-function renderRooms() {
-  $('rooms').innerHTML = ROOMS.map(r =>
-    `<button class="room ${room===r.id?'on':''}" onclick="go('${r.id}')">
-       <span class="ricon">${r.icon||''}</span>
-       <span><b>${r.name}</b><small>${r.sub}</small></span>${r.lock?`<span class="lock">${r.lock}</span>`:''}
-     </button>`).join('');
-}
-function go(r) { room = r; renderRooms(); render();
-  const on = $('rooms').querySelector('.room.on');  // keep active room visible in the mobile strip
-  if (on) on.scrollIntoView({ block: 'nearest', inline: 'center' });
+/* ── navigation ── */
+let room = 'home';
+function go(r) {
+  room = r;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.dataset.tab === r));
+  render();
 }
 
-/* ── status chips (always visible) ── */
-async function chips() {
+/* ── system indicator (compact — replaces the old chip bar) ── */
+async function updateSystemDot() {
   try {
     const s = await jget('/status');
-    const checks = (s.machine && s.machine.checks) || [];
-    const svc = n => { const c = checks.find(x => x.name === 'svc_'+n); return c ? c.state : 'yellow'; };
-    const q = s.queue || {};
-    $('statusChips').innerHTML =
-      `<span class="chip"><span class="light ${(s.machine&&s.machine.overall)||'yellow'}"></span><b>System</b> ${esc(s.machine.host||'no status.json')}</span>`
-      + ['lmstudio','comfyui','qdrant','router'].map(n =>
-          `<span class="chip"><span class="light ${svc(n)}"></span>${n}</span>`).join('')
-      + `<span class="chip">queue: ${Object.entries(q).map(([k,v])=>`${esc(k)} ${v}`).join(' · ') || 'empty'}</span>`
-      + (s.workers||[]).map(w => `<span class="chip"><span class="light ${w.status==='online'?'green':'red'}"></span>${esc(w.id)} <span class="pill">${esc(w.status==='online'?w.mode:'offline')}</span></span>`).join('');
     window._status = s;
-  } catch(e) { say('status error: '+e.message); }
+    const overall = (s.machine && s.machine.overall) || 'yellow';
+    $('sysDot').className = 'sysdot ' + overall;
+    const q = s.queue || {};
+    const active = (q.queued||0) + (q.claimed||0) + (q.running||0);
+    if (overall === 'green' && active === 0) $('sysText').textContent = 'OK';
+    else if (overall === 'green' && active > 0) $('sysText').textContent = active + ' working';
+    else if (overall === 'yellow') $('sysText').textContent = 'check system';
+    else $('sysText').textContent = 'issue';
+  } catch(e) { $('sysDot').className = 'sysdot red'; $('sysText').textContent = 'offline'; }
 }
 
-/* ── shared renderers ── */
-function artCard(a) {
-  const meta = JSON.parse(a.meta || '{}');
-  let jn = {}; try { jn = JSON.parse(a.judge_notes || '{}') || {}; } catch (e) {}
-  const img = a.kind === 'image' || a.kind === 'thumbnail'
-    ? `<img src="/artifacts/${a.id}/file" loading="lazy" onclick="zoom(this.src)" onerror="this.style.display='none'">` : '';
-  const when = (a.job_finished_at || a.created_at || '').slice(5, 16).replace('T', ' ');
-  return `<div class="art">${img}<div class="m">
-    <b>${esc(meta.recipe || a.kind)}</b> · ${esc(a.project_id)}<br>
-    ${a.score != null ? 'score <b>'+a.score+'</b> · ' : (jn.unjudged ? '<span style="color:var(--yellow)">unjudged</span> · ' : '')}<span class="pill">${esc(a.status)}</span><br>
-    ${a.gen_seconds != null ? '⏱ '+fmtDur(a.gen_seconds)+' · ' : ''}<span class="muted">${esc(when)}</span><br>
-    ${meta.checkpoint_fallback ? `<span style="color:var(--yellow)">⚠ ran ${esc(meta.checkpoint)} (asked ${esc(meta.checkpoint_requested)})</span><br>` : ''}
-    ${esc(meta.purpose || meta.title || '')}
+/* ── system panel (slide-out) ── */
+function toggleSystem() {
+  const o = $('sysOverlay');
+  if (o.classList.contains('open')) { o.classList.remove('open'); return; }
+  o.classList.add('open');
+  renderSystemPanel();
+}
+async function renderSystemPanel() {
+  const s = window._status || {};
+  const checks = (s.machine && s.machine.checks) || [];
+  const ev = await jget('/events?limit=30');
+  const jobs = await jget('/jobs?limit=20');
+  const workers = s.workers || [];
+
+  $('sysPanel').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2 style="margin:0">System &amp; Diagnostics</h2>
+      <button class="s" onclick="toggleSystem()">Close</button>
+    </div>
+    <div style="margin-bottom:16px">
+      <label>Admin token</label>
+      <input type="password" value="${esc(_adminToken)}" onchange="_adminToken=this.value;localStorage.setItem('bh_token',this.value)" placeholder="paste token here">
+    </div>
+    <h2>Service Health</h2>
+    <table>${checks.map(c =>
+      `<tr><td><span class="sysdot ${c.state}" style="display:inline-block"></span></td>
+       <td>${esc(c.name)}</td><td class="muted">${esc(c.detail)}</td></tr>`).join('')
+      || '<tr><td class="muted">run byrd-status.ps1 to populate</td></tr>'}</table>
+    <h2>Workers</h2>
+    <table>${workers.map(w =>
+      `<tr><td><span class="sysdot ${w.status==='online'?'green':'red'}" style="display:inline-block"></span></td>
+       <td>${esc(w.id)}</td><td><span class="pill">${esc(w.status==='online'?w.mode:'offline')}</span></td></tr>`).join('')
+      || '<tr><td class="muted">no workers connected</td></tr>'}</table>
+    <h2>Jobs</h2>
+    <table><tr><th>type</th><th>status</th><th>when</th><th></th></tr>${
+      jobs.map(j => `<tr>
+        <td>${esc(j.type)}</td>
+        <td><span class="pill">${esc(j.status)}</span></td>
+        <td class="muted">${esc((j.created_at||'').slice(5,16).replace('T',' '))}</td>
+        <td>${['dead','cancelled','claimed','running'].includes(j.status)
+              ? `<button class="s ok" onclick="jobAct('${j.id}','requeue')">requeue</button>` : ''}
+            ${j.status==='queued'
+              ? `<button class="s no" onclick="jobAct('${j.id}','cancel')">cancel</button>` : ''}</td></tr>`).join('')}</table>
+    <h2>Event Log</h2>
+    <table>${ev.map(e =>
+      `<tr><td class="muted">${esc((e.ts||'').slice(5,19))}</td><td>${esc(e.actor)}</td>
+       <td>${esc(e.action)}</td><td>${e.ok?'':'<span class="pill" style="color:var(--red)">fail</span>'}</td></tr>`).join('')}</table>
+    <h2>Exports</h2>
     <div class="row">
-      <button class="s ok" ${a.status==='approved'?'disabled':''} onclick="review(this,'${a.id}','approve')">${a.status==='approved'?'✓ approved':'approve'}</button>
-      <button class="s no" ${a.status==='rejected'?'disabled':''} onclick="review(this,'${a.id}','reject')">${a.status==='rejected'?'✗ rejected':'reject'}</button>
-      <button class="s" onclick="refineArt('${a.id}',0.3,2.0)" title="hi-res polish">⬆ upscale</button>
-      <button class="s" onclick="refineArt('${a.id}',0.55,1.0)" title="variations near this image">≈ riff</button>
-    </div></div></div>`;
+      <button class="s" onclick="queueSimple('export.csv',{what:'artifacts'},'ANY')">Export artifacts CSV</button>
+      <button class="s" onclick="queueSimple('export.csv',{what:'jobs'},'ANY')">Export jobs CSV</button>
+      <button class="s" onclick="queueSimple('report.daily',{},'ANY')">Daily report</button>
+    </div>`;
+}
+
+/* ── helpers ── */
+function fmtDur(s) { return s >= 90 ? Math.floor(s/60)+'m '+(s%60)+'s' : s+'s'; }
+function ago(ts) {
+  if (!ts) return '';
+  const m = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 60000));
+  return m < 1 ? 'just now' : m + 'm ago';
 }
 function zoom(src) {
   const o = document.createElement('div');
@@ -252,177 +293,213 @@ function zoom(src) {
   o.onclick = () => o.remove();
   document.body.appendChild(o);
 }
+async function jobAct(id, action) {
+  try { await jpost(`/jobs/${id}/${action}`, {}); say(action + 'd'); render(); }
+  catch (e) { say('error: ' + e.message); }
+}
+async function queueSimple(type, payload, mode) {
+  try {
+    const j = await jpost('/jobs', { type, required_mode:mode, payload,
+      required_caps: mode==='OPERATOR' ? ['lmstudio'] : [] });
+    say('queued');
+  } catch (e) { say('error: ' + e.message); }
+}
+
+/* ── artifact card (shared across views) ── */
+function artCard(a, opts) {
+  opts = opts || {};
+  const meta = JSON.parse(a.meta || '{}');
+  let jn = {}; try { jn = JSON.parse(a.judge_notes || '{}') || {}; } catch (e) {}
+  const img = a.kind === 'image' || a.kind === 'thumbnail'
+    ? `<img src="/artifacts/${a.id}/file" loading="lazy" onclick="zoom(this.src)" onerror="this.style.display='none'">` : '';
+  const when = (a.job_finished_at || a.created_at || '').slice(5, 16).replace('T', ' ');
+  const needsReview = a.status === 'needs_review';
+  const cls = needsReview && opts.showApproval ? 'art approval-card' : 'art';
+  return `<div class="${cls}">
+    ${needsReview && opts.showApproval ? '<span class="badge">NEEDS YOUR REVIEW</span>' : ''}
+    ${img}<div class="m">
+    <b>${esc(meta.recipe || a.kind)}</b> · ${esc(a.project_id)}<br>
+    ${a.score != null ? 'score <b>'+a.score+'</b> · ' : (jn.unjudged ? '<span style="color:var(--yellow)">waiting for judge</span> · ' : '')}<span class="pill">${esc(a.status)}</span>
+    ${a.gen_seconds != null ? ' · ' + fmtDur(a.gen_seconds) : ''}<br>
+    ${(meta.out_size || meta.size) ? '<span class="muted">' + esc(meta.out_size || meta.size) + '</span><br>' : ''}
+    ${esc(meta.purpose || meta.title || '')}
+    <div class="row">
+      <button class="s ok" ${a.status==='approved'?'disabled':''} onclick="review(this,'${a.id}','approve')">approve</button>
+      <button class="s no" ${a.status==='rejected'?'disabled':''} onclick="review(this,'${a.id}','reject')">reject</button>
+      <button class="s" onclick="refineArt('${a.id}',0.4,1.5)" title="upscale 1.5x">upscale</button>
+      <button class="s" onclick="refineArt('${a.id}',0.55,1.0)" title="variations near this image">riff</button>
+    </div></div></div>`;
+}
+async function review(btn, id, action) {
+  btn.disabled = true; btn.textContent = '...';
+  try { await jpost(`/artifacts/${id}/review`, { action }); render(); }
+  catch (e) { btn.disabled = false; say('error: ' + e.message); }
+}
 async function refineArt(id, strength, scale) {
   try {
     const j = await jpost(`/artifacts/${id}/refine`, { strength, scale });
-    say(`queued ${j.id} (${strength <= 0.35 ? 'upscale' : 'riff'} of ${id})`);
+    say('queued ' + (scale > 1.0 ? 'upscale' : 'riff'));
     render();
-  } catch (e) { say('error: '+e.message); }
-}
-async function review(btn, id, action) {
-  btn.disabled = true; btn.textContent = '…';
-  try { await jpost(`/artifacts/${id}/review`, { action }); render(); }
-  catch (e) { btn.disabled = false; say('error: '+e.message); }
-}
-async function jobAct(id, action) {
-  try { await jpost(`/jobs/${id}/${action}`, {}); say(action+'d '+id); render(); }
-  catch (e) { say('error: '+e.message); }
+  } catch (e) { say('error: ' + e.message); }
 }
 
-/* ── views ── */
+/* ══════════════════════════════════════════════════
+   VIEW: HOME — living command center
+   ══════════════════════════════════════════════════ */
 const V = {};
-V.command = async () => {
-  const st = await jget('/stats');
-  const arts = await jget('/artifacts?limit=8');
-  const ev = await jget('/events?limit=12');
-  const learn = await jget('/learn?by=palette');
-  const learned = (learn.buckets || []).filter(b => b.labeled >= 1).slice(0, 5);
+V.home = async () => {
+  const [st, jobs, arts] = await Promise.all([
+    jget('/stats'), jget('/jobs?limit=30'), jget('/artifacts?limit=12')
+  ]);
+  const pending = arts.filter(a => a.status === 'needs_review');
+  const approved = arts.filter(a => a.status === 'approved').slice(0, 4);
+  const inflight = jobs.filter(j => ['queued','claimed','running'].includes(j.status)
+    && (j.type === 'image.generate' || j.type === 'content.thumbnail' || j.type === 'image.refine'));
+  const recent = arts.filter(a => a.kind === 'image' || a.kind === 'thumbnail').slice(0, 6);
+
   return `
+  <div class="hero">
+    <h1>What are we making today?</h1>
+    <p>${st.artifacts_total ? st.artifacts_total + ' artifacts created' : 'Your AI studio is ready'}</p>
+  </div>
   <div class="grid">
-    <div class="panel wide"><h2>Mission Overview — ByrdHouse is Active</h2>
+    ${inflight.length ? `<div class="panel wide"><h2>In Progress</h2>
+      <div class="cards">${inflight.map(j =>
+        `<div class="busy"><b>${j.status === 'queued' ? 'Queued' : 'Creating...'}</b>
+        <span>${friendlyType(j.type)}</span>
+        <span>${esc(j.status === 'queued' ? 'queued ' + ago(j.created_at) : 'started ' + ago(j.claimed_at))}</span></div>`
+      ).join('')}</div></div>` : ''}
+
+    ${pending.length ? `<div class="panel wide"><h2>Ready for Your Review (${pending.length})</h2>
+      <div class="cards">${pending.map(a => artCard(a, {showApproval:true})).join('')}</div></div>` : ''}
+
+    <div class="panel"><h2>This Week</h2>
       <div class="stats">
-        <div class="stat"><b>${st.artifacts_total}</b><span>artifacts total</span></div>
-        <div class="stat"><b>${st.artifacts_week}</b><span>this week</span></div>
-        <div class="stat"><b>${st.by_kind.image||0}</b><span>images</span></div>
-        <div class="stat"><b>${st.by_kind.thumbnail||0}</b><span>thumbnails</span></div>
-        <div class="stat"><b>${st.jobs_done_week}</b><span>jobs finished (7d)</span></div>
-        <div class="stat"><b>${st.avg_score ?? '—'}</b><span>avg judge score</span></div>
+        <div class="stat"><b>${st.artifacts_week}</b><span>created</span></div>
         <div class="stat"><b>${st.approved}</b><span>approved</span></div>
+        <div class="stat"><b>${st.avg_score ?? '--'}</b><span>avg score</span></div>
       </div></div>
-    <div class="panel"><h2>Machine health</h2><table>${
-      ((window._status||{}).machine?.checks||[]).map(c =>
-        `<tr><td><span class="light ${c.state}"></span></td><td>${esc(c.name)}</td><td class="muted">${esc(c.detail)}</td></tr>`).join('')
-      || '<tr><td class="muted">run byrd-status.ps1 (or start-byrdhouse.ps1) to populate</td></tr>'}</table></div>
-    <div class="panel"><h2>Recent activity</h2><table>${ev.map(e =>
-      `<tr><td class="muted">${esc((e.ts||'').slice(5,16))}</td><td>${esc(e.actor)}</td><td>${esc(e.action)}</td>
-       <td>${e.ok?'':'<span class="pill" style="color:var(--red)">failed</span>'}</td></tr>`).join('')}</table></div>
-    <div class="panel"><h2>What's working — approval rate by palette</h2><table>${
-      learned.map(b => `<tr><td>${esc(b.value)}</td>
-        <td><b>${b.approval_rate!=null?Math.round(b.approval_rate*100)+'%':'—'}</b></td>
-        <td class="muted">${b.approved}✓ ${b.rejected}✗ · ${b.labeled} judged</td></tr>`).join('')
-      || '<tr><td class="muted">approve/reject a few images and the belt learns your taste here</td></tr>'}</table></div>
-    <div class="panel wide"><h2>Latest artifacts</h2><div class="cards">${arts.map(artCard).join('') || '<span class="muted">nothing yet — visit the Image Studio</span>'}</div></div>
+
+    <div class="panel"><h2>Quick Actions</h2>
+      <div class="row">
+        <button class="b" onclick="go('create')">Create something new</button>
+        <button class="s" onclick="go('library')">Browse library</button>
+      </div></div>
+
+    ${recent.length ? `<div class="panel wide"><h2>Recent Work</h2>
+      <div class="cards">${recent.map(a => artCard(a)).join('')}</div></div>` : ''}
   </div>`;
 };
+function friendlyType(t) {
+  return { 'image.generate':'Image generation', 'content.thumbnail':'Thumbnail',
+           'image.refine':'Upscale / riff', 'image.judge':'Auto-judging',
+           'content.enhance':'Prompt enhancement', 'report.daily':'Daily report' }[t] || t;
+}
 
-function fmtDur(s) { return s >= 90 ? Math.floor(s/60)+'m '+(s%60)+'s' : s+'s'; }
-function ago(ts) {
-  if (!ts) return '';
-  const m = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 60000));
-  return m < 1 ? 'just now' : m + 'm ago';
-}
-function busyCards(jobs) {
-  const gen = t => t==='image.generate'||t==='content.thumbnail';
-  return jobs.filter(j => ['queued','claimed','running'].includes(j.status) && gen(j.type))
-    .map(j => `<div class="busy"><b>${esc(j.status==='queued'?'queued':'generating…')}</b>
-      <span>${esc(j.type)}</span><span>${esc(j.id.slice(-8))}</span>
-      <span>${esc(j.status==='queued' ? 'queued '+ago(j.created_at) : 'started '+ago(j.claimed_at))}</span></div>`).join('');
-}
-async function imgOutHtml() {
-  const jobs = await jget('/jobs?limit=30');
-  const inflight = busyCards(jobs);
-  const arts = (await jget('/artifacts?limit=18')).filter(a => a.kind==='image'||a.kind==='thumbnail');
-  return `${inflight}${arts.map(artCard).join('') || (inflight ? '' : '<span class="muted">no images yet</span>')}`;
-}
-V.image = async () => {
+/* ══════════════════════════════════════════════════
+   VIEW: CREATE — image generation, thumbnails, refinement
+   ══════════════════════════════════════════════════ */
+V.create = async () => {
   const recipes = await jget('/recipes');
-  // newest version of each recipe first — and the value pins id@version so
-  // the version you pick is the version the worker runs
   window._recipes = recipes.filter(r => r.kind === 'image.generate')
     .sort((a, b) => a.id === b.id ? b.version - a.version : a.id.localeCompare(b.id));
   return `
   <div class="grid">
-    <div class="panel" id="genForm"><h2>Generate ${qtip('Recipes over prompts: pick a recipe, fill its slots, hit Queue. The belt generates a batch, the local model judges it, you approve the keepers.')}</h2>
-      <label>Recipe ${qtip('A versioned prompt template with slots and a rubric. The version you pick is exactly what runs — the card records it.')}</label>
-      <select id="recipe" onchange="slotFields()">${window._recipes.map(r =>
-        `<option value="${esc(r.id)}@${r.version}">${esc(r.id)} v${r.version}</option>`).join('')}</select>
+    <div class="panel" id="genForm"><h2>New Image</h2>
+      <label>Style ${qtip('Pick a recipe — each one is a different visual style and workflow. The version is pinned so results are reproducible.')}</label>
+      <select id="recipe" onchange="slotFields();showRecipeInfo()">${window._recipes.map(r => {
+        const me = r.subject_profile ? '\u{1F464} ' : '';
+        const cat = r.category ? ' · ' + esc(r.category) : '';
+        return `<option value="${esc(r.id)}@${r.version}">${me}${esc(r.id)} v${r.version}${cat}</option>`;
+      }).join('')}</select>
+      <div id="recipeInfo" style="font-size:11px;color:var(--dim);margin:4px 0 6px;min-height:14px"></div>
+      <div id="profileStatus" style="font-size:11px;min-height:14px;margin-bottom:4px"></div>
       <div id="slots"></div>
-      <label>Purpose ${qtip('Why this batch exists — one line. Required, and kept on every card so months from now you know what a thumbnail was for.')}</label>
-      <input id="purpose" placeholder="why this batch exists">
-      <label>Thumbnail title ${qtip('Optional. Real text composited on top of the art in a second pass — never diffused, so it is always crisp and readable. Leave empty for art only.')}</label>
+      <label>What is this for? ${qtip('One line — kept on every image so you know why you made it months later.')}</label>
+      <input id="purpose" placeholder="e.g. CareyRPG episode 12 thumbnail">
+      <label>Thumbnail text (optional) ${qtip('Real text composited on top — never diffused, always crisp. Leave blank for art only.')}</label>
       <input id="thumbTitle" placeholder="e.g. BEST BUILDS TIER LIST">
-      <div class="row" style="margin-top:10px"><button class="b" onclick="submitGen()">Queue generation</button></div>
+      <div class="row" style="margin-top:12px"><button class="b" onclick="submitGen()">Create</button></div>
       <div id="genMsg" style="color:var(--yellow);font-size:12.5px;min-height:16px;margin-top:8px"></div>
       <div class="cards" id="genActivity" style="margin-top:6px"></div>
+
       <details class="opts"><summary>More options</summary>
-        <label>Project ${qtip('Which channel/project this belongs to — groups artifacts in the gallery and exports.')}</label>
+        <label>Project</label>
         <input id="project" value="careyrpg">
-        <label>Shape ${qtip('Output aspect ratio, snapped to SDXL-native sizes. 16:9 for YouTube, 9:16 for TikTok/Shorts, 2:3 for portraits/player models.')}</label>
+        <label>Shape</label>
         <select id="aspect">
-          <option value="">16:9 thumbnail (default)</option>
-          <option value="9:16">9:16 TikTok / Shorts</option>
+          <option value="">16:9 (default)</option>
+          <option value="9:16">9:16 vertical</option>
           <option value="1:1">1:1 square</option>
-          <option value="2:3">2:3 portrait / player model</option>
-          <option value="3:2">3:2 landscape photo</option>
+          <option value="2:3">2:3 portrait</option>
+          <option value="3:2">3:2 landscape</option>
           <option value="21:9">21:9 banner</option>
         </select>
-        <label>Source image ${qtip('Upload a real screenshot or box art from your phone. It is saved, recorded in the gallery at top grade (real pixels beat diffused lookalikes), and your title is composited onto it — no generation needed. Add a Thumbnail title above, then Queue.')}</label>
+        <label>Upload source image</label>
         <input id="srcFile" type="file" accept="image/*" onchange="uploadSource(this)">
         <div id="srcPreview" class="muted" style="margin-top:6px"></div>
-        <label>Checkpoint ${qtip('Optional. Name of a .safetensors model installed on the worker. Leave empty for the recipe default. Swap in a stylized model (e.g. Animagine) for anime/game looks.')}</label>
-        <input id="ckpt" placeholder="leave empty for the recipe default">
-        <label>LoRA ${qtip('Optional. A .safetensors LoRA in the worker models/loras folder — game-style LoRAs are the key to nailing a specific game accurately.')}</label>
-        <input id="lora" placeholder="e.g. palworld_style">
         <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
           <input type="checkbox" id="enhance" style="width:auto">
-          ✨ Rewrite my prompt first ${qtip('Sends your prompt to the local model to expand into a full SDXL prompt before generating. Runs the freeform recipe. Adds one OPERATOR-mode step.')}</label>
+          Rewrite my prompt first ${qtip('Sends your prompt to the local model for expansion before generating.')}</label>
+      </details>
+      <details class="opts" id="engineDetails"><summary>Engine controls ${qtip('Direct ComfyUI parameters — checkpoint, sampler, steps, CFG. Only for power users.')}</summary>
+        <div id="engineControls" style="opacity:.5;font-size:12px;color:var(--dim)">loading from ComfyUI...</div>
       </details>
     </div>
-    <div class="panel"><h2>Reference library ${qtip('Upload thumbnails you love. The judge scores every new image against them, so approvals converge on your taste. Tag by game so the right references apply.')}</h2>
-      <label>Tag ${qtip('Game or recipe family, e.g. palworld. References with a matching tag are shown to the judge for those images.')}</label>
+
+    <div class="panel"><h2>References ${qtip('Upload thumbnails you love. The judge scores new images against these so approvals match your taste.')}</h2>
+      <label>Tag (game or category)</label>
       <input id="refTag" placeholder="palworld">
-      <label>Add thumbnails you love</label>
+      <label>Upload references</label>
       <input id="refFile" type="file" accept="image/*" multiple onchange="uploadRefs(this)">
       <div class="cards" id="refList" style="margin-top:10px">${await refListHtml()}</div>
     </div>
-    <div class="panel wide"><h2>Image Studio output</h2><div class="cards" id="imgOut">${await imgOutHtml()}</div></div>
+
+    <div class="panel wide"><h2>Results</h2>
+      <div class="cards" id="imgOut">${await createOutputHtml()}</div>
+    </div>
   </div>`;
 };
+
+/* ── Create helpers ── */
 async function refListHtml() {
   const refs = await jget('/references');
   return refs.map(r => `<div class="art"><img src="/references/${esc(r.tag)}/${esc(r.name)}/file" loading="lazy">
     <div class="m"><b>${esc(r.tag)}</b> · ${esc(r.name)}</div></div>`).join('')
-    || '<span class="muted">no references yet — add the thumbnails you wish you\'d made</span>';
+    || '<span class="muted">upload the thumbnails you wish you had made</span>';
 }
 async function uploadRefs(input) {
   const tag = ($('refTag').value.trim().toLowerCase().replace(/[^\w-]+/g, '-')) || 'general';
   try {
     for (const f of input.files) {
       const name = f.name.replace(/[^\w. -]+/g, '_');
-      const r = await fetch(`/references/${tag}/${name}`, {
-        method: 'POST', headers: { 'Authorization': 'Bearer ' + $('token').value, 'X-Actor': 'dashboard' },
-        body: f });
-      if (!r.ok) throw new Error((await r.json()).error || r.status);
+      await fetch(`/references/${tag}/${name}`, {
+        method: 'POST', headers: { 'Authorization': 'Bearer ' + _adminToken, 'X-Actor': 'dashboard' }, body: f });
     }
-    say(`added ${input.files.length} reference(s) under "${tag}"`);
+    say(`added ${input.files.length} reference(s)`);
     input.value = '';
     $('refList').innerHTML = await refListHtml();
   } catch (e) { say('reference upload error: ' + e.message); }
 }
-/* Upload a real source image straight from the phone: the router saves it,
-   records it in the gallery at top grade, and hands back an artifact id the
-   belt composites the title onto. Endpoint-first — the operator model will
-   call this same /sources endpoint once its tool roster is unlocked. */
 async function uploadSource(input) {
   const f = input.files && input.files[0];
   if (!f) return;
   const name = f.name.replace(/[^\w. -]+/g, '_');
   const project = $('project') ? $('project').value.trim() || 'careyrpg' : 'careyrpg';
-  say('uploading source image…');
+  say('uploading...');
   try {
     const r = await fetch(`/sources/${encodeURIComponent(name)}?project=${encodeURIComponent(project)}`, {
-      method: 'POST', headers: { 'Authorization': 'Bearer ' + $('token').value, 'X-Actor': 'dashboard' },
-      body: f });
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + _adminToken, 'X-Actor': 'dashboard' }, body: f });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || r.status);
     window._srcArtifact = { id: j.id, name };
     $('srcPreview').innerHTML =
-      `<span style="color:var(--green)">✓ saved &amp; recorded · grade A (score 5)</span> ${esc(name)}`
+      `<span style="color:var(--green)">saved</span> ${esc(name)}`
       + `<br><img src="/artifacts/${esc(j.id)}/file" style="height:52px;border-radius:6px;margin-top:4px">`
       + `<br><button class="s" onclick="clearSource()" style="margin-top:4px">remove</button>`;
-    say('source saved — add a Thumbnail title above, then Queue to composite onto it');
+    say('source saved — add a title above, then Create');
     saveDraft();
-  } catch (e) { say('source upload error: ' + e.message); }
+  } catch (e) { say('upload error: ' + e.message); }
 }
 function clearSource() {
   window._srcArtifact = null;
@@ -430,49 +507,152 @@ function clearSource() {
   if ($('srcPreview')) $('srcPreview').innerHTML = '';
   saveDraft();
 }
-/* The recipe currently selected in the form (id@version pinned). */
 function currentRecipe() {
   return (window._recipes||[]).find(
     x => x.id + '@' + x.version === ($('recipe') ? $('recipe').value : ''));
 }
-/* Slots the recipe needs but does NOT vary — the founder must supply these.
-   These are exactly the fields rendered as required inputs. */
 function requiredSlots(r) {
   r = r || currentRecipe();
   return r ? r.slots.filter(s => !r.vary.includes(s)) : [];
 }
-/* Required slots left blank in the given values map. */
 function missingRequiredSlots(vals) {
   return requiredSlots().filter(s => !String((vals && vals[s]) || '').trim());
 }
 function slotFields() {
   const r = currentRecipe();
   if (!r) return;
-  const keep = {};  // survive a recipe change without losing typed slot values
+  const keep = {};
   document.querySelectorAll('#slots input').forEach(i => { keep[i.dataset.slot] = i.value; });
-  // every non-vary slot is a REQUIRED input (vary slots byrdimage fills itself)
-  $('slots').innerHTML = requiredSlots(r).map(s =>
-    `<label>${esc(s)} <span style="color:var(--red)">*</span></label>` +
-    `<input data-slot="${esc(s)}" required placeholder="${esc(s)} — required">`).join('');
+  const slotMeta = r.slot_meta || {};
+  $('slots').innerHTML = requiredSlots(r).map(s => {
+    const meta = slotMeta[s] || {};
+    const lbl = meta.label || s;
+    const def = meta.default || '';
+    return `<label>${esc(lbl)} <span style="color:var(--red)">*</span></label>` +
+      `<input data-slot="${esc(s)}" required placeholder="${esc(def || lbl)}">`;
+  }).join('');
   document.querySelectorAll('#slots input').forEach(i => { if (keep[i.dataset.slot]) i.value = keep[i.dataset.slot]; });
 }
+async function showRecipeInfo() {
+  const r = currentRecipe();
+  const el = $('recipeInfo');
+  if (!el || !r) return;
+  const note = (r.note || '').split('.')[0];
+  el.innerHTML = note ? esc(note) : '';
+  const ps = $('profileStatus');
+  if (!ps) return;
+  if (r.subject_profile) {
+    try {
+      const profiles = await jget('/profiles');
+      const p = profiles.find(x => x.id === r.subject_profile);
+      if (p && p.has_references) {
+        ps.innerHTML = `<span style="color:var(--green)">Identity: ${esc(p.display_name)} (${p.references} photo${p.references>1?'s':''})</span>`;
+      } else if (p) {
+        ps.innerHTML = `<span style="color:var(--yellow)">Identity: ${esc(p.display_name)} — add reference photos first</span>`;
+      } else {
+        ps.innerHTML = `<span style="color:var(--red)">Profile "${esc(r.subject_profile)}" not found</span>`;
+      }
+    } catch(e) { ps.innerHTML = ''; }
+  } else { ps.innerHTML = ''; }
+}
+function busyCards(jobs) {
+  const gen = t => t==='image.generate'||t==='content.thumbnail'||t==='image.refine';
+  return jobs.filter(j => ['queued','claimed','running'].includes(j.status) && gen(j.type))
+    .map(j => `<div class="busy"><b>${j.status==='queued'?'Queued':'Creating...'}</b>
+      <span>${friendlyType(j.type)}</span>
+      <span>${esc(j.status==='queued' ? 'queued '+ago(j.created_at) : 'started '+ago(j.claimed_at))}</span></div>`).join('');
+}
+async function createOutputHtml() {
+  const jobs = await jget('/jobs?limit=30');
+  const inflight = busyCards(jobs);
+  const arts = (await jget('/artifacts?limit=18')).filter(a => a.kind==='image'||a.kind==='thumbnail');
+  return `${inflight}${arts.map(a => artCard(a)).join('') || (inflight ? '' : '<span class="muted">nothing yet — pick a style and create</span>')}`;
+}
 
-/* ── draft-persistence: the Image Studio form survives polling, room
-      changes, and reloads; cleared only after a successful queue ── */
+/* ── engine controls (power-user panel) ── */
+window._engineData = null;
+async function loadEngineControls() {
+  const el = $('engineControls');
+  if (!el) return;
+  try {
+    const [nodesResp, ckptResp, loraResp] = await Promise.all([
+      jget('/comfy/nodes'), jget('/comfy/models/checkpoints'), jget('/comfy/models/loras')
+    ]);
+    if (nodesResp.error) {
+      el.innerHTML = '<span style="color:var(--yellow)">ComfyUI offline — defaults will be used</span>';
+      el.style.opacity = '.6'; return;
+    }
+    const ks = (nodesResp.nodes || {}).KSampler || {};
+    const ckpts = (ckptResp.models || []);
+    const loras = (loraResp.models || []);
+    window._engineData = { nodes: nodesResp.nodes, checkpoints: ckpts, loras: loras };
+
+    const samplerOpts = (ks.sampler_name && ks.sampler_name.options || []);
+    const schedulerOpts = (ks.scheduler && ks.scheduler.options || []);
+    const stepsInfo = ks.steps || {};
+    const cfgInfo = ks.cfg || {};
+    let html = '';
+    html += '<label>Checkpoint</label><select id="engCkpt"><option value="">recipe default</option>';
+    ckpts.forEach(c => { html += `<option value="${esc(c)}">${esc(c.replace(/\.safetensors$/,''))}</option>`; });
+    html += '</select>';
+    html += '<label>LoRA</label><select id="engLora"><option value="">none</option>';
+    loras.forEach(l => { html += `<option value="${esc(l)}">${esc(l.replace(/\.safetensors$/,''))}</option>`; });
+    html += '</select>';
+    if (samplerOpts.length) {
+      html += '<label>Sampler</label><select id="engSampler"><option value="">default</option>';
+      samplerOpts.forEach(s => { html += `<option value="${esc(s)}">${esc(s)}</option>`; });
+      html += '</select>';
+    }
+    if (schedulerOpts.length) {
+      html += '<label>Scheduler</label><select id="engScheduler"><option value="">default</option>';
+      schedulerOpts.forEach(s => { html += `<option value="${esc(s)}">${esc(s)}</option>`; });
+      html += '</select>';
+    }
+    const stDef = stepsInfo.default || 30;
+    html += `<label>Steps</label><input type="number" id="engSteps" min="${stepsInfo.min||1}" max="${Math.min(stepsInfo.max||150,150)}" placeholder="default (${stDef})" inputmode="numeric">`;
+    const cfDef = cfgInfo.default || 7;
+    html += `<label>CFG</label><input type="number" id="engCfg" min="${cfgInfo.min||1}" max="${Math.min(cfgInfo.max||30,30)}" step="0.5" placeholder="default (${cfDef})" inputmode="decimal">`;
+    html += '<label>Extra negative prompt</label><input id="engNeg" placeholder="e.g. text, watermark">';
+    html += '<label>Seed (blank = random)</label><input id="engSeed" placeholder="random" inputmode="numeric">';
+    el.innerHTML = html;
+    el.style.opacity = '1'; el.style.fontSize = ''; el.style.color = '';
+  } catch (e) {
+    el.innerHTML = '<span style="color:var(--yellow)">Could not load engine controls</span>';
+    el.style.opacity = '.6';
+  }
+}
+function collectEngine() {
+  const eng = {};
+  const v = id => { const e = $(id); return e ? e.value.trim() : ''; };
+  if (v('engCkpt')) eng.checkpoint = v('engCkpt');
+  if (v('engLora')) eng.lora = v('engLora');
+  if (v('engSampler')) eng.sampler_name = v('engSampler');
+  if (v('engScheduler')) eng.scheduler = v('engScheduler');
+  const steps = v('engSteps'); if (steps) eng.steps = parseInt(steps);
+  const cfg = v('engCfg'); if (cfg) eng.cfg = parseFloat(cfg);
+  if (v('engNeg')) eng.negative = v('engNeg');
+  if (v('engSeed')) eng.seed = v('engSeed');
+  return Object.keys(eng).length ? eng : null;
+}
+
+/* ── draft persistence ── */
 const DRAFT_KEY = 'bh_draft';
 function readForm() {
   const slots = {};
   document.querySelectorAll('#slots input').forEach(i => { if (i.value) slots[i.dataset.slot] = i.value; });
+  const eng = {};
+  ['engCkpt','engLora','engSampler','engScheduler','engSteps','engCfg','engNeg','engSeed'].forEach(id => {
+    const e = $(id); if (e && e.value) eng[id] = e.value;
+  });
   return { recipe: $('recipe') ? $('recipe').value : '', slots,
            title: $('thumbTitle') ? $('thumbTitle').value : '',
            srcArtifact: window._srcArtifact || null,
            project: $('project') ? $('project').value : 'careyrpg',
-           purpose: $('purpose') ? $('purpose').value : '' };
+           purpose: $('purpose') ? $('purpose').value : '',
+           engine: Object.keys(eng).length ? eng : null };
 }
 function saveDraft() { localStorage.setItem(DRAFT_KEY, JSON.stringify(readForm())); }
-function loadDraft() {
-  try { return JSON.parse(localStorage.getItem(DRAFT_KEY)) || null; } catch (e) { return null; }
-}
+function loadDraft() { try { return JSON.parse(localStorage.getItem(DRAFT_KEY)) || null; } catch(e) { return null; } }
 function clearDraft() { localStorage.removeItem(DRAFT_KEY); }
 function applyDraft(d) {
   if (!d) return;
@@ -481,242 +661,126 @@ function applyDraft(d) {
   slotFields();
   document.querySelectorAll('#slots input').forEach(i => {
     if (d.slots && d.slots[i.dataset.slot] != null) i.value = d.slots[i.dataset.slot]; });
-  $('thumbTitle').value = d.title || '';
-  $('project').value = d.project || 'careyrpg';
-  $('purpose').value = d.purpose || '';
-  // restore a previously-uploaded source image (survives reload/room switches)
+  if ($('thumbTitle')) $('thumbTitle').value = d.title || '';
+  if ($('project')) $('project').value = d.project || 'careyrpg';
+  if ($('purpose')) $('purpose').value = d.purpose || '';
   window._srcArtifact = d.srcArtifact || null;
   if (window._srcArtifact && $('srcPreview'))
     $('srcPreview').innerHTML =
-      `<span style="color:var(--green)">✓ saved &amp; recorded · grade A</span> ${esc(window._srcArtifact.name || '')}`
+      `<span style="color:var(--green)">saved</span> ${esc(window._srcArtifact.name || '')}`
       + `<br><img src="/artifacts/${esc(window._srcArtifact.id)}/file" style="height:52px;border-radius:6px;margin-top:4px">`
       + `<br><button class="s" onclick="clearSource()" style="margin-top:4px">remove</button>`;
+  if (d.engine) {
+    Object.entries(d.engine).forEach(([id, val]) => {
+      const e = $(id); if (e) { e.value = val; e.dispatchEvent(new Event('input')); }
+    });
+  }
 }
-/* ── end draft-persistence ── */
 
 async function submitGen() {
   try {
     const d = readForm();
-    if (!d.purpose) throw new Error('purpose is required');
+    if (!d.purpose) throw new Error('tell me what this is for (purpose)');
     const title = d.title.trim();
     const srcArt = d.srcArtifact && d.srcArtifact.id ? d.srcArtifact : null;
     if (srcArt && !title) throw new Error('a source image needs a title to composite');
     const payload = { recipe:d.recipe, slots:d.slots, project:d.project, purpose:d.purpose };
     if (title) payload.title = title;
     if (srcArt) payload.source_artifact = srcArt.id;
-    const ckpt = $('ckpt') ? $('ckpt').value.trim() : '';
-    if (ckpt) payload.checkpoint = ckpt;
+    const eng = collectEngine();
+    if (eng) {
+      if (eng.checkpoint) payload.checkpoint = eng.checkpoint;
+      if (eng.lora) payload.lora = eng.lora;
+      if (eng.negative) payload.negative = eng.negative;
+      if (eng.seed) payload.seed = eng.seed;
+      payload.engine = {};
+      if (eng.sampler_name) payload.engine.sampler_name = eng.sampler_name;
+      if (eng.scheduler) payload.engine.scheduler = eng.scheduler;
+      if (eng.steps) payload.engine.steps = eng.steps;
+      if (eng.cfg) payload.engine.cfg = eng.cfg;
+      if (eng.checkpoint) payload.engine.checkpoint = eng.checkpoint;
+    }
     const aspect = $('aspect') ? $('aspect').value : '';
     if (aspect) payload.aspect = aspect;
-    const lora = $('lora') ? $('lora').value.trim() : '';
-    if (lora) payload.lora = lora;
+    const cr = currentRecipe();
+    if (cr && cr.subject_profile) payload.subject_profile = cr.subject_profile;
     const enhance = $('enhance') && $('enhance').checked && !title && !srcArt && payload.slots.prompt;
     const type = (srcArt || title) ? 'content.thumbnail' : enhance ? 'content.enhance' : 'image.generate';
-    // The dashboard is the recipe's first gate. Every required (non-vary) slot
-    // must be filled HERE, or the job dies deep in byrdimage with
-    // "unfilled slots [...]". Skip only when a source image composites directly
-    // (no recipe generation) or the enhance path substitutes the freeform recipe.
     if (!srcArt && type !== 'content.enhance') {
       const missing = missingRequiredSlots(d.slots);
-      if (missing.length)
-        throw new Error('fill the required slot(s): ' + missing.join(', '));
+      if (missing.length) throw new Error('fill required: ' + missing.join(', '));
     }
-    const j = await jpost('/jobs', { type,
-      project:d.project,
+    await jpost('/jobs', { type, project:d.project,
       required_mode: srcArt ? 'ANY' : enhance ? 'OPERATOR' : 'IMAGE',
       required_caps: srcArt ? [] : enhance ? ['lmstudio'] : ['comfyui'], payload });
-    say('queued '+j.id+(srcArt?' (title onto your uploaded image)':title?' (two-pass thumbnail)':enhance?' (prompt enhancement first)':''));
-    window._srcArtifact = null;         // consumed — next batch starts clean
-    clearDraft();                       // only a successful queue clears the draft
-    $('view').innerHTML = '';           // force a fresh (empty) form
+    say('creating...');
+    window._srcArtifact = null;
+    clearDraft();
+    $('view').innerHTML = '';
     render();
-  } catch (e) { say('error: '+e.message); }
+  } catch (e) { say(e.message); }
 }
 
-/* ── Operator Chat: talks to the local model through POST /chat ── */
-function chatLog() {
-  try { return JSON.parse(localStorage.getItem('bh_chat')) || []; } catch (e) { return []; }
-}
-function chatBubbles() {
-  const msgs = chatLog();
-  return msgs.map(m => `<div class="bubble ${m.role}">${esc(m.content)}${
-      m.model ? `<span class="who">${esc(m.model)}</span>` : ''}</div>`).join('')
-    || '<span class="muted">Ask the operator anything — it sees the live queue. '
-     + 'If the GPU is mid-generation, chat resumes when it finishes.</span>';
-}
-V.chat = async () => `
-  <div class="panel">
-    <img src="/logo-chat.png" alt="ByrdHouse Chat" style="width:150px;display:block;margin:0 0 6px;filter:drop-shadow(0 0 10px rgba(139,92,246,.3))" onerror="this.remove()">
-    <h2>Operator Chat — sees the belt, queues real jobs</h2>
-    <div id="chatLogView" class="chatlog">${chatBubbles()}</div>
-    <div class="row" style="align-items:stretch">
-      <input id="chatIn" placeholder="e.g. which of today's thumbnails should I post?" style="flex:1"
-             onkeydown="if(event.key==='Enter')sendChat()">
-      <button class="b" id="chatSend" onclick="sendChat()">Send</button>
-      <button class="s" onclick="localStorage.removeItem('bh_chat');render()">clear</button>
-    </div></div>`;
-async function sendChat() {
-  if (window._chatBusy) return;
-  const input = $('chatIn');
-  const text = input.value.trim();
-  if (!text) return;
-  window._chatBusy = true;
-  const msgs = chatLog();
-  msgs.push({ role: 'user', content: text });
-  localStorage.setItem('bh_chat', JSON.stringify(msgs));
-  input.value = ''; $('chatSend').disabled = true;
-  $('chatLogView').innerHTML = chatBubbles() + '<div class="bubble assistant">…</div>';
-  $('chatLogView').scrollTop = 1e9;
-  try {
-    const j = await jpost('/chat', { messages: msgs.filter(m => m.role !== 'tool').slice(-12) });
-    if (j.actions && j.actions.length)
-      msgs.push({ role: 'tool', content: '🔧 ' + j.actions.map(a =>
-        a.tool + (a.args && a.args.prompt ? ': ' + a.args.prompt.slice(0, 60) : '')).join(' · ') });
-    msgs.push({ role: 'assistant', content: j.reply, model: j.model });
-  } catch (e) {
-    msgs.push({ role: 'assistant', content: '[' + e.message + ']' });
-  }
-  localStorage.setItem('bh_chat', JSON.stringify(msgs.slice(-40)));
-  window._chatBusy = false;
-  if ($('chatSend')) $('chatSend').disabled = false;
-  $('chatLogView').innerHTML = chatBubbles();
-  $('chatLogView').scrollTop = 1e9;
-}
+/* ══════════════════════════════════════════════════
+   VIEW: LIBRARY — everything ByrdHouse has produced
+   ══════════════════════════════════════════════════ */
+let _libFilter = 'all';
+V.library = async () => {
+  const arts = await jget('/artifacts?limit=60');
+  const kinds = [...new Set(arts.map(a => a.kind))];
+  const statuses = [...new Set(arts.map(a => a.status))];
+  const filtered = _libFilter === 'all' ? arts
+    : _libFilter === 'approved' ? arts.filter(a => a.status === 'approved')
+    : _libFilter === 'review' ? arts.filter(a => a.status === 'needs_review')
+    : arts.filter(a => a.kind === _libFilter);
 
-V.items = async () => {
-  const arts = await jget('/artifacts?limit=40');
-  return `<div class="panel"><h2>Generated Items — everything with a card</h2>
-    <div class="cards">${arts.map(artCard).join('') || '<span class="muted">empty</span>'}</div></div>`;
-};
-
-V.content = async () => {
-  const arts = (await jget('/artifacts?limit=30')).filter(a => ['ideas','package'].includes(a.kind));
   return `
-  <div class="grid">
-    <div class="panel"><h2>content.research — outliers → ideas</h2>
-      <label>CSV path on the worker PC (export from your Outliers tool)</label>
-      <input id="csvPath" placeholder="E:\\ByrdHouse\\inbox\\outliers.csv">
-      <div class="row"><button class="b" onclick="queueSimple('content.research',{csv_path:$('csvPath').value,top:5},'ANY')">Rank this week's ideas</button></div>
+  <div class="panel wide">
+    <h2>Library &mdash; ${arts.length} items</h2>
+    <div class="filter-bar">
+      <button class="filter-btn ${_libFilter==='all'?'on':''}" onclick="_libFilter='all';render()">All</button>
+      <button class="filter-btn ${_libFilter==='review'?'on':''}" onclick="_libFilter='review';render()">Needs review</button>
+      <button class="filter-btn ${_libFilter==='approved'?'on':''}" onclick="_libFilter='approved';render()">Approved</button>
+      ${kinds.map(k => `<button class="filter-btn ${_libFilter===k?'on':''}" onclick="_libFilter='${esc(k)}';render()">${esc(k)}</button>`).join('')}
     </div>
-    <div class="panel"><h2>content.package — transcript → titles/tags (your voice)</h2>
-      <label>Transcript file path on the worker PC</label>
-      <input id="trPath" placeholder="E:\\ByrdHouse\\inbox\\video_transcript.txt">
-      <div class="row"><button class="b" onclick="queueSimple('content.package',{transcript_path:$('trPath').value},'OPERATOR')">Write packaging</button></div>
-      <div class="muted" style="margin-top:8px">Voice pack: recipes/voice_carey.json — put 15-20 of YOUR real titles in it.</div>
-    </div>
-    <div class="panel wide"><h2>Research & packaging artifacts</h2><table>${arts.map(a =>
-      `<tr><td>${esc(a.kind)}</td><td>${esc(a.project_id)}</td><td class="muted">${esc(a.path)}</td>
-       <td><span class="pill">${esc(a.status)}</span></td></tr>`).join('') || '<tr><td class="muted">none yet</td></tr>'}</table></div>
-  </div>`;
-};
-async function queueSimple(type, payload, mode) {
-  try {
-    const j = await jpost('/jobs', { type, required_mode:mode, payload,
-      required_caps: mode==='OPERATOR' ? ['lmstudio'] : [] });
-    say('queued '+j.id);
-  } catch (e) { say('error: '+e.message); }
-}
-
-V.exports = async () => {
-  const arts = (await jget('/artifacts?limit=20')).filter(a => ['export','report'].includes(a.kind));
-  return `<div class="grid">
-    <div class="panel"><h2>Exports Room</h2>
-      <div class="row">
-        <button class="b" onclick="queueSimple('export.csv',{what:'artifacts'},'ANY')">Export artifacts CSV</button>
-        <button class="s" onclick="queueSimple('export.csv',{what:'jobs'},'ANY')">Export jobs CSV</button>
-        <button class="s" onclick="queueSimple('report.daily',{},'ANY')">Run daily report</button>
-      </div></div>
-    <div class="panel wide"><h2>Exports & reports</h2><table>${arts.map(a =>
-      `<tr><td>${esc(a.kind)}</td><td class="muted">${esc(a.path)}</td><td class="muted">${esc((a.created_at||'').slice(0,16))}</td></tr>`).join('')
-      || '<tr><td class="muted">none yet</td></tr>'}</table></div></div>`;
-};
-
-V.memory = async () => {
-  const checks = ((window._status||{}).machine?.checks||[]).filter(c => c.name.includes('memory')||c.name.includes('qdrant'));
-  return `<div class="grid"><div class="panel"><h2>Memory Room — live via MCP</h2>
-    <div class="note">Your memory system (SQLite + Qdrant + custom MCP on BYRD-MINI) stays where it is — Cherry Studio is its interface.
-    The belt only watches its health:</div>
-    <table style="margin-top:10px">${checks.map(c =>
-      `<tr><td><span class="light ${c.state}"></span></td><td>${esc(c.name)}</td><td class="muted">${esc(c.detail)}</td></tr>`).join('')
-      || '<tr><td class="muted">memory drift check appears here once BYRD-MINI is set up</td></tr>'}</table></div></div>`;
-};
-
-V.mcp = async () => {
-  const checks = ((window._status||{}).machine?.checks||[]).filter(c => c.name.startsWith('mcp_'));
-  return `<div class="grid"><div class="panel"><h2>MCP Tools — roster (max 8, every server earns a room)</h2>
-    <div class="note">Core six: Memory · Filesystem · Fetch · Brave Search · SQLite · LM Studio bridge.<br>
-    Weekend two: Godot MCP · Godot Docs. Configure ping URLs in byrdhouse.config.json → byrd-status shows green here.</div>
-    <table style="margin-top:10px">${checks.map(c =>
-      `<tr><td><span class="light ${c.state}"></span></td><td>${esc(c.name.replace('mcp_',''))}</td><td class="muted">${esc(c.detail)}</td></tr>`).join('')
-      || '<tr><td class="muted">no MCP pings configured yet</td></tr>'}</table></div></div>`;
-};
-
-V.events = async () => {
-  const ev = await jget('/events?limit=60');
-  const jobs = await jget('/jobs?limit=30');
-  return `<div class="grid">
-    <div class="panel wide"><h2>Jobs</h2><table><tr><th>id</th><th>type</th><th>status</th><th>queued</th><th>took</th><th>worker</th><th>error</th><th></th></tr>${
-      jobs.map(j => `<tr><td class="muted">${esc(j.id)}</td><td>${esc(j.type)}</td>
-        <td><span class="pill">${esc(j.status)}</span></td>
-        <td class="muted">${esc((j.created_at||'').slice(5,16).replace('T',' '))}</td>
-        <td class="muted">${j.finished_at && j.claimed_at ? fmtDur(Math.round((new Date(j.finished_at)-new Date(j.claimed_at))/1000)) : ''}</td>
-        <td class="muted">${esc(j.worker_id||'')}</td>
-        <td class="muted">${esc((j.error||'').slice(0,60))}</td>
-        <td>${['dead','cancelled','claimed','running'].includes(j.status)
-              ? `<button class="s ok" onclick="jobAct('${j.id}','requeue')">requeue</button>` : ''}
-            ${j.status==='queued'
-              ? `<button class="s no" onclick="jobAct('${j.id}','cancel')">cancel</button>` : ''}</td></tr>`).join('')}</table></div>
-    <div class="panel wide"><h2>Event log (the bot's future training ground)</h2><table>${ev.map(e =>
-      `<tr><td class="muted">${esc((e.ts||'').slice(5,19))}</td><td>${esc(e.actor)}</td><td>${esc(e.action)}</td>
-       <td class="muted">${esc(e.subject)}</td><td>${e.ok?'':'<span class="pill" style="color:var(--red)">failed</span>'}</td></tr>`).join('')}</table></div>
+    <div class="cards">${filtered.map(a => artCard(a, {showApproval: a.status === 'needs_review'})).join('')
+      || '<span class="muted">nothing matches</span>'}</div>
   </div>`;
 };
 
-const LOCKED = {
-  realms:  ['Realms / Game Studio', 'Weekend Lane is open NOW in Cherry Studio (Godot MCP) — belt jobs (game.godot_task) land at U6. This room shows the edit→run→fix reports once the loop is wired.'],
-  video:   ['Video Studio', 'U5 MOTION: approved images become short clips (video.i2v). Also home of video.assemble editing. Unlocks after the Image Lab proves the judge loop.'],
-  coder:   ['Coder Room', 'Already yours: Claude Code on BYRD-GAMING with the memory MCP + LM Studio MCP attached. A custom in-dashboard coder is deferred until a real gap survives a month of daily use.'],
-  business:['Business Room', 'Layer 0 Money Map lives in docs/STATE.md: debt falling, cash-gate law, R0 = first output used on your own channel. LLC/trademark unfreezes at R2.'],
-  users:   ['Users Room', 'Frozen by decision until a real outsider wants access. No accounts, credits, or tiers before demand exists.'],
-  bot:     ['Bot Room', 'The Autonomy Ladder (A0→A3) is a permissions change on this API, never a new build. Pilot after U3: read-only suggestions fed by the event log. Every endpoint already carries its access tier.'],
-};
-for (const [k, [title, text]] of Object.entries(LOCKED)) {
-  V[k] = async () => `<div class="panel"><h2>${title}</h2><div class="note">${text}</div></div>`;
-}
-
+/* ══════════════════════════════════════════════════
+   RENDER + POLL LOOP
+   ══════════════════════════════════════════════════ */
 function typingInView() {
   const ae = document.activeElement;
   return ae && $('view').contains(ae) && ['INPUT','TEXTAREA','SELECT'].includes(ae.tagName);
 }
 async function render() {
   try {
-    if (room === 'image' && $('genForm')) {
-      // form already on screen: refresh only the outputs, never the form.
-      // In-flight jobs surface right under the Queue button (#genActivity) AND
-      // in the wide output panel, so activity is visible from the button that
-      // started it — not stranded at the bottom of the page.
+    if (room === 'create' && $('genForm')) {
       const jobs = await jget('/jobs?limit=30');
       const inflight = busyCards(jobs);
       if ($('genActivity')) $('genActivity').innerHTML = inflight;
       const arts = (await jget('/artifacts?limit=18')).filter(a => a.kind==='image'||a.kind==='thumbnail');
-      $('imgOut').innerHTML = `${inflight}${arts.map(artCard).join('') || (inflight ? '' : '<span class="muted">no images yet</span>')}`;
+      $('imgOut').innerHTML = `${inflight}${arts.map(a => artCard(a)).join('') || (inflight ? '' : '<span class="muted">nothing yet</span>')}`;
       return;
     }
-    if (typingInView()) return;  // never replace controls under the user's cursor
+    if (typingInView()) return;
     $('view').innerHTML = await V[room]();
-    if (room === 'image') {
+    if (room === 'create') {
       slotFields();
-      applyDraft(loadDraft());
+      showRecipeInfo();
+      loadEngineControls().then(() => applyDraft(loadDraft()));
       $('genForm').addEventListener('input', saveDraft);
       $('genForm').addEventListener('change', saveDraft);
     }
-  } catch (e) { say('render error: '+e.message); }
+  } catch (e) { say('render error: ' + e.message); }
 }
 let _refreshing = false;
 async function tick() {
-  if (_refreshing) return;  // no overlapping refresh cycles
+  if (_refreshing) return;
   _refreshing = true;
-  try { await chips(); await render(); } finally { _refreshing = false; }
+  try { await updateSystemDot(); await render(); } finally { _refreshing = false; }
 }
 function activeJobs() {
   const q = (window._status||{}).queue || {};
@@ -724,10 +788,10 @@ function activeJobs() {
 }
 async function loop() {
   if (!document.hidden) await tick();
-  setTimeout(loop, activeJobs() ? 4000 : 15000);  // poll fast only while jobs are in flight
+  setTimeout(loop, activeJobs() ? 4000 : 15000);
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
-renderRooms(); loop();
+loop();
 </script>
 </body>
 </html>
