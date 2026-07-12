@@ -560,7 +560,7 @@ def main():
         rep = api("/reports/daily")
         check("daily report markdown", rep["markdown"].startswith("# ByrdHouse daily report"))
         with urllib.request.urlopen(f"http://127.0.0.1:{RP}/", timeout=10) as r:
-            check("dashboard serves", r.status == 200 and b"Command Center" in r.read())
+            check("dashboard serves", r.status == 200 and b"ByrdHouse" in r.read())
 
     finally:
         router.terminate()
