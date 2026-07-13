@@ -1,0 +1,117 @@
+{
+  "id": "real_to_gaming",
+  "version": 1,
+  "kind": "image.generate",
+  "subject_profile": "me",
+  "category": "Gaming Character",
+  "_note": "Converts a real photograph into a recognizable video-game character using Flux2 Klein dual-reference style transfer. Reference 1 is the real person (identity anchor). Reference 2 is a game-character image (style target). The prompt controls transformation direction. Use the style presets and intensity profiles below to control the output without rewiring the graph.",
+  "workflow": "workflows/flux2_klein/safe_first_run.json",
+  "api_workflow": "workflows/flux2_klein/real_to_gaming_api_v1.json",
+
+  "base_prompt": "Transform the real subject into a high-quality video-game character. Preserve recognizable facial identity, face structure, hairstyle, skin tone, body proportions, pose, and core outfit silhouette. Use Reference 2 only for gaming style, costume materials, lighting language, and visual genre. Do not copy the face or body identity from Reference 2. Render the subject with readable game-character materials, cinematic lighting, clean silhouette separation, detailed clothing surfaces, and professional promotional character presentation.",
+
+  "styles": {
+    "AAA": {
+      "label": "AAA Semi-Realistic",
+      "suffix": "AAA semi-realistic game rendering, physically-based materials, subsurface scattering on skin, cinematic depth of field, hero key lighting, clean character silhouette separation, Unreal Engine 5 quality.",
+      "reference_2_guidance": "Use a screenshot or promotional render from a AAA game (Horizon, God of War, Final Fantasy XVI)."
+    },
+    "HERO": {
+      "label": "Stylized Hero Character",
+      "suffix": "Stylized hero-shooter character rendering, slightly exaggerated proportions, bold material reads, strong rim lighting, saturated color palette, clean character design language, Overwatch-quality presentation.",
+      "reference_2_guidance": "Use a hero-shooter character render (Overwatch, Valorant, Apex Legends)."
+    },
+    "FANTASY": {
+      "label": "Fantasy RPG",
+      "suffix": "High-fantasy RPG character rendering, ornate armor details, enchanted material effects, warm dramatic lighting, rich jewel-tone palette, painterly texture quality, Baldur's Gate 3 character quality.",
+      "reference_2_guidance": "Use a fantasy RPG character render or concept art (Baldur's Gate, Elder Scrolls, Dragon Age)."
+    },
+    "SCIFI": {
+      "label": "Sci-Fi Operative",
+      "suffix": "Sci-fi operative character rendering, hard-surface armor panels, holographic interface elements, cool blue-teal lighting, matte-and-gloss material contrast, cybernetic detail accents, Mass Effect character quality.",
+      "reference_2_guidance": "Use a sci-fi character render (Mass Effect, Halo, Cyberpunk 2077, Destiny)."
+    },
+    "CEL_SHADED": {
+      "label": "Cel-Shaded Game Character",
+      "suffix": "Cel-shaded game character rendering, clean ink outlines, flat color zones with sharp shadow boundaries, limited color palette, cartoon material reads, bright saturated lighting, Genshin Impact character quality.",
+      "reference_2_guidance": "Use a cel-shaded game character (Genshin Impact, Breath of the Wild, Borderlands, Jet Set Radio)."
+    },
+    "GRITTY": {
+      "label": "Dark Action-Game Character",
+      "suffix": "Dark action-game character rendering, worn leather and weathered metal textures, desaturated earth tones, harsh directional lighting, gritty surface detail, visible damage and environmental wear, The Last of Us character quality.",
+      "reference_2_guidance": "Use a dark action game character (The Last of Us, Dark Souls, Resident Evil, Sekiro)."
+    },
+    "SPLASH_ART": {
+      "label": "Promotional Splash Art",
+      "suffix": "Promotional splash-art character rendering, dramatic action pose preservation, painterly background, volumetric lighting, heroic composition, saturated key colors, dynamic energy, League of Legends splash art quality.",
+      "reference_2_guidance": "Use a game splash art or promotional character illustration (League of Legends, Dota 2, fighting game key art)."
+    }
+  },
+
+  "intensities": {
+    "IDENTITY_LOCK": {
+      "label": "Identity Lock — Maximum Likeness",
+      "description": "Maximum identity preservation with subtle game conversion. Conservative costume changes. The person is immediately recognizable.",
+      "guidance": 0.7,
+      "ref1_megapixels": 3,
+      "ref2_megapixels": 2,
+      "prompt_prefix": "Maximally preserve the exact facial identity, precise face proportions, exact hairstyle, and skin tone of the real subject. Apply only subtle game-rendering treatment. Keep the original outfit mostly intact. "
+    },
+    "BALANCED_GAMING": {
+      "label": "Balanced Gaming — Strong Identity + Obvious Game Style",
+      "description": "Strong identity retention with obvious game-character conversion. Moderate costume and material redesign. The person remains clearly recognizable while looking like a game character.",
+      "guidance": 0.9,
+      "ref1_megapixels": 2,
+      "ref2_megapixels": 3,
+      "prompt_prefix": ""
+    },
+    "FULL_CHARACTER_REDESIGN": {
+      "label": "Full Character Redesign — Playable Character",
+      "description": "Identity remains recognizable but with stronger costume transformation and stylization. More dramatic game-world presentation. The subject looks like a redesigned playable character.",
+      "guidance": 1.1,
+      "ref1_megapixels": 2,
+      "ref2_megapixels": 4,
+      "prompt_prefix": "Transform the subject into a fully redesigned playable game character. Preserve core facial identity but allow stronger costume redesign, bolder material choices, and more dramatic game-world presentation. "
+    }
+  },
+
+  "build_prompt": "Concatenate: intensity.prompt_prefix + base_prompt + ' ' + style.suffix + ' High detail, clean edges, no extra limbs, no warped hands, no text, no watermark.'",
+
+  "api_node_ids": {
+    "prompt": "92:74",
+    "reference_1": "76",
+    "reference_2": "81",
+    "guidance": "92:63",
+    "seed": "113",
+    "steps": "115",
+    "ref1_scale": "92:80",
+    "ref2_scale": "92:85",
+    "raw_save": "126"
+  },
+
+  "defaults": {
+    "steps": 28,
+    "guidance": 0.9,
+    "batch": 1,
+    "sampler": "euler",
+    "seed": -1,
+    "style": "AAA",
+    "intensity": "BALANCED_GAMING"
+  },
+
+  "rubric": {
+    "identity": "1-5 — is the person immediately recognizable from the original photo?",
+    "game_style": "1-5 — does the output clearly look like a video-game character, not a photograph?",
+    "costume_coherence": "1-5 — are materials, armor, and clothing details clean and readable?",
+    "anatomy": "1-5 — correct hands, fingers, limbs, face proportions?",
+    "composition": "1-5 — clean silhouette, good lighting, professional presentation?"
+  },
+
+  "failure_guide": {
+    "face_changed_too_much": "Increase ref1_megapixels, decrease ref2_megapixels, lower guidance, strengthen identity language in prompt.",
+    "still_looks_like_photo": "Increase guidance slightly, use a clearer game-character Reference 2, add stronger material and rendering language to prompt.",
+    "chaotic_costume": "Reduce ref2_megapixels, use a cleaner reference, simplify prompt to one material system and one genre.",
+    "anatomy_broken": "Reduce guidance, return to SAFE steps/dimensions, avoid extreme pose references, do not depend on upscale to fix anatomy.",
+    "vram_oom": "Unload LM Studio models, keep batch size 1, keep SeedVR2 bypassed, keep upscale bypassed, return to safe workflow defaults."
+  }
+}

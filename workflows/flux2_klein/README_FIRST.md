@@ -1,71 +1,115 @@
-# ByrdHouse Flux2 Klein Style Transfer + Upscale
+# ByrdHouse Flux2 Klein — Real to Gaming Character
 
-This package turns the uploaded workflow into a reusable ByrdHouse operator workflow for **BYRD-GAMING / RTX 3070 8GB**.
+Converts a real photograph into a recognizable video-game character using Flux2 Klein dual-reference style transfer on **BYRD-GAMING / RTX 3070 8GB**.
 
-## Use this order
+## Quick Start
 
-1. Load `ByrdHouse_Flux2_Klein_3070_SAFE_FIRST_RUN.json` first.
-2. Select a subject image in **REFERENCE 1 — SUBJECT / POSE / COMPOSITION**.
-3. Select a costume or style image in **REFERENCE 2 — COSTUME / STYLE / MATERIALS**.
-4. Edit **BYRDHOUSE TRANSFORMATION PROMPT** only when the job needs special instructions.
-5. Queue once. The raw result saves under `output/ByrdHouse/Flux2Klein/raw/`.
-6. After the safe workflow succeeds, load `ByrdHouse_Flux2_Klein_3070_PRODUCTION_ALL_IN_ONE.json` to generate and create a 4x Remacri upscale in the same queue.
+1. Run `use-image-mode.ps1` to free VRAM.
+2. Load `safe_first_run.json` in ComfyUI.
+3. Set **REFERENCE 1** to a clear photograph of the subject.
+4. Set **REFERENCE 2** to a game-character reference matching the desired style.
+5. Queue once. Output saves to `output/ByrdHouse/Flux2Klein/gaming/`.
 
-## What was changed
+## Styles
 
-- Replaced the example character-specific prompt with a general subject + costume transfer prompt.
-- Clearly labeled Reference 1 and Reference 2.
-- Added persistent `SaveImage` output for the raw generation.
-- Added persistent `SaveImage` output for the 4x production upscale.
-- Activated the lighter `4x_foolhardy_Remacri.pth` branch in the production file.
-- Kept SeedVR2 present but bypassed by default because its 7B upscaler is the risky branch on an RTX 3070.
-- Preserved the visual comparison workspace and the original full node canvas.
+Paste the style suffix into the prompt after the base transformation text, or use the API adapter's `--style` flag.
 
-## Required model filenames
+| Style | Look |
+|-------|------|
+| `AAA` | Semi-realistic PBR rendering (Horizon, God of War) |
+| `HERO` | Stylized hero-shooter (Overwatch, Valorant) |
+| `FANTASY` | High-fantasy RPG (Baldur's Gate 3, Elder Scrolls) |
+| `SCIFI` | Sci-fi operative (Mass Effect, Halo) |
+| `CEL_SHADED` | Cel-shaded cartoon (Genshin Impact, BotW) |
+| `GRITTY` | Dark action (The Last of Us, Dark Souls) |
+| `SPLASH_ART` | Promotional splash art (League of Legends) |
+
+Full prompt text for each style is in `recipes/real_to_gaming.v1.json`.
+
+## Intensity Profiles
+
+| Profile | Guidance | Ref1 MP | Ref2 MP | Effect |
+|---------|----------|---------|---------|--------|
+| `IDENTITY_LOCK` | 0.7 | 3 | 2 | Maximum likeness, subtle game conversion |
+| `BALANCED_GAMING` | 0.9 | 2 | 3 | Strong identity + obvious game style (default) |
+| `FULL_CHARACTER_REDESIGN` | 1.1 | 2 | 4 | Recognizable but dramatic game-world redesign |
+
+Adjust in the UI by changing the GUIDANCE slider and the megapixel values on the two ImageScaleToTotalPixels nodes.
+
+## Reference Image Guidelines
+
+**Reference 1 — Subject (identity anchor):**
+- Clear real photograph with visible face
+- Adequate lighting, minimal motion blur
+- Chest-up, waist-up, or full-body framing
+- Unobstructed hairstyle and clothing silhouette
+
+**Reference 2 — Gaming Target (style anchor):**
+- Clean game-character screenshot or promotional render
+- Matching the desired visual genre
+- Should define style and materials, not replace identity
+
+## API Automation
+
+```powershell
+python api_adapter.py `
+  --workflow real_to_gaming_api_v1.json `
+  --output patched.json `
+  --reference-1 carey_photo.png `
+  --reference-2 game_hero_ref.png `
+  --style FANTASY `
+  --intensity BALANCED_GAMING
+```
+
+Or provide a fully custom prompt:
+
+```powershell
+python api_adapter.py `
+  --workflow real_to_gaming_api_v1.json `
+  --output patched.json `
+  --reference-1 carey_photo.png `
+  --reference-2 game_hero_ref.png `
+  --prompt "Your custom transformation prompt here."
+```
+
+## API-Controllable Node IDs
+
+| Node ID | Title | Controls |
+|---------|-------|----------|
+| `92:74` | BYRDHOUSE TRANSFORMATION PROMPT | Prompt text |
+| `76` | REFERENCE 1 | Subject photo filename |
+| `81` | REFERENCE 2 | Game-style reference filename |
+| `92:63` | GUIDANCE | CFG value (0.7–1.1) |
+| `113` | SEED | Integer seed (-1 = random) |
+| `115` | STEPS | Step count (default 28) |
+| `92:80` | REF1 SCALE | Subject megapixels (identity strength) |
+| `92:85` | REF2 SCALE | Style megapixels (style strength) |
+| `126` | SAVE | Output filename prefix |
+
+## Required Models
 
 - `flux-2-klein-9b-fp8.safetensors`
 - `qwen_3_8b_fp8mixed.safetensors`
 - `flux2-vae.safetensors`
-- `4x_foolhardy_Remacri.pth` for the production all-in-one file
+- `4x_foolhardy_Remacri.pth` (for production upscale, bypassed by default)
 
-SeedVR2 models are optional and intentionally bypassed.
+SeedVR2 models are optional and bypassed.
 
-## Required node packs
+## Required Node Packs
 
 - ComfyUI-Use-Everywhere (`GetNode`, `SetNode`)
 - rgthree-comfy
 - comfyui_xiser_nodes
 
-Optional:
+## Output Locations
 
-- seedvr2_videoupscaler
+- Gaming raw: `output/ByrdHouse/Flux2Klein/gaming/`
+- Production upscale: `output/ByrdHouse/Flux2Klein/upscaled/` (after enabling upscale)
 
-Use ComfyUI Manager's missing-node installer after loading the workflow. Restart ComfyUI after installing node packs.
+## 3070 Safety Rules
 
-## ByrdHouse locations
-
-Gaming workflow destination:
-
-`E:\ByrdHouse\Images\Workflows\`
-
-ComfyUI root used by the current ByrdHouse setup:
-
-`E:\ByrdHouse\Generators\ComfyUI\`
-
-## API / byrdimage-full handoff
-
-The uploaded JSON is the editable **ComfyUI UI graph** format. ByrdHouse's `/prompt` submission requires **API-format JSON**.
-
-After the SAFE file completes one successful queue:
-
-1. Open ComfyUI settings and enable developer options if `Save (API Format)` is hidden.
-2. Save the loaded workflow as API format.
-3. Name it `byrdhouse_flux2_klein_api_v1.json`.
-4. Put it in `E:\ByrdHouse\Images\Workflows\` and sync the same file to `D:\ByrdHouse\Images\Workflows\` on BYRD-MINI.
-5. Use `byrdhouse_flux2_klein_api_adapter.py` to inject the prompt and two reference filenames without hardcoding node IDs.
-
-The adapter looks for the node titles embedded in the API export, so keep the prepared titles intact.
-
-## 3070 operating rule
-
-Run `use-image-mode.ps1` first so LM Studio unloads the operator model and releases VRAM. Start with the SAFE file. Do not enable SeedVR2 until the Flux2 generation and Remacri upscale have both passed independently.
+- Keep batch size 1.
+- Keep SeedVR2 bypassed until base generation succeeds.
+- Keep upscale bypassed until identity and anatomy are validated.
+- Run `use-image-mode.ps1` before generating.
+- Do not load LM Studio models concurrently.

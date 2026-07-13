@@ -1,17 +1,37 @@
 {
-  "ByrdHouse_Flux2_Klein_3070_SAFE_FIRST_RUN.json": {
+  "safe_first_run.json": {
     "nodes": 53,
     "links": 50,
     "errors": [],
-    "valid": true
+    "valid": true,
+    "profile": "SAFE_FIRST_RUN",
+    "purpose": "Real-to-gaming character transformation with AAA default style"
   },
-  "ByrdHouse_Flux2_Klein_3070_PRODUCTION_ALL_IN_ONE.json": {
+  "real_to_gaming_api_v1.json": {
+    "nodes": 27,
+    "errors": [],
+    "valid": true,
+    "purpose": "API-format export for byrdimage/adapter automation",
+    "checks": {
+      "no_canvas_nodes_array": true,
+      "no_canvas_links_array": true,
+      "all_nodes_have_class_type": true,
+      "has_reference_1_loadimage": true,
+      "has_reference_2_loadimage": true,
+      "has_transformation_prompt": true,
+      "has_raw_save_output": true,
+      "seedvr2_excluded": true,
+      "titles_preserved": true,
+      "accepts_new_inputs": true
+    }
+  },
+  "production_all_in_one.json": {
     "nodes": 54,
     "links": 51,
     "errors": [],
     "valid": true
   },
-  "ByrdHouse_Flux2_Klein_MASTER_OPERATOR.json": {
+  "master_operator.json": {
     "nodes": 54,
     "links": 51,
     "errors": [],

@@ -2024,7 +2024,7 @@
         }
       },
       "widgets_values": [
-        "Use Reference 1 as the subject, identity, pose, camera angle, body proportions, and composition. Use Reference 2 as the costume, clothing design, materials, colors, texture, styling, and visual treatment. Transform the subject naturally while preserving recognizable facial identity and anatomy. Make the transferred outfit fit the subject correctly with believable seams, folds, layering, shadows, and material response. Keep the scene coherent and production-ready. Do not copy the face or body identity from Reference 2. High detail, clean edges, natural lighting, cinematic depth, realistic texture, no extra limbs, no warped hands, no text, no watermark."
+        "Transform the real subject into a high-quality video-game character. Preserve recognizable facial identity, face structure, hairstyle, skin tone, body proportions, pose, and core outfit silhouette. Use Reference 2 only for gaming style, costume materials, lighting language, and visual genre. Do not copy the face or body identity from Reference 2. Render the subject with readable game-character materials, cinematic lighting, clean silhouette separation, detailed clothing surfaces, and professional promotional character presentation. AAA semi-realistic game rendering, physically-based materials, cinematic depth of field, hero key lighting, clean character separation from background. High detail, clean edges, no extra limbs, no warped hands, no text, no watermark."
       ],
       "color": "#432",
       "bgcolor": "#653"
@@ -2481,7 +2481,7 @@
         }
       },
       "widgets_values": [
-        "ByrdHouse/Flux2Klein/raw/ByrdHouse_Flux2Klein_RAW"
+        "ByrdHouse/Flux2Klein/gaming/ByrdHouse_RealToGame"
       ],
       "color": "#232",
       "bgcolor": "#353"
@@ -2970,7 +2970,7 @@
     },
     {
       "id": 8,
-      "title": "RESULT — RAW GENERATION",
+      "title": "RESULT — RAW GAMING CHARACTER",
       "bounding": [
         467.69323250391693,
         180.8232633414564,
@@ -3000,18 +3000,25 @@
     "VHS_MetadataImage": true,
     "VHS_KeepIntermediate": true,
     "byrdhouse": {
-      "workflow_name": "ByrdHouse Flux2 Klein Style Transfer + Upscale",
-      "workflow_version": "1.0.0",
+      "workflow_name": "ByrdHouse Flux2 Klein — Real to Gaming Character",
+      "workflow_version": "2.0.0",
       "prepared_for": "BYRD-GAMING RTX 3070 8GB",
-      "reference_1_role": "subject / identity / pose / composition",
-      "reference_2_role": "costume / style / materials",
+      "reference_1_role": "real-person identity anchor: face, hairstyle, pose, body proportions, outfit silhouette",
+      "reference_2_role": "gaming-style target: rendering style, costume design, armor/clothing materials, color palette, lighting mood, visual genre",
       "default_steps": 28,
       "default_guidance": 0.9,
+      "default_style": "AAA",
+      "default_intensity": "BALANCED_GAMING",
       "seedvr2_default": "bypassed",
+      "upscale_default": "bypassed",
       "api_status": "Load in ComfyUI and Save (API Format) after dependencies are installed.",
-      "source_file": "Flux2 Klein Style Transfer & Upscale(1).json",
+      "source_file": "safe_first_run.json",
       "profile": "SAFE_FIRST_RUN",
-      "upscale_default": "bypassed"
+      "supported_styles": ["AAA", "HERO", "FANTASY", "SCIFI", "CEL_SHADED", "GRITTY", "SPLASH_ART"],
+      "supported_intensities": ["IDENTITY_LOCK", "BALANCED_GAMING", "FULL_CHARACTER_REDESIGN"],
+      "output_dir": "ByrdHouse/Flux2Klein/gaming/",
+      "filename_prefix": "ByrdHouse_RealToGame_",
+      "recipe_file": "recipes/real_to_gaming.v1.json"
     }
   },
   "version": 0.4
