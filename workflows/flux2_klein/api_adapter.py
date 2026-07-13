@@ -19,7 +19,7 @@ REF2_TITLE = "REFERENCE 2 — COSTUME / STYLE / MATERIALS"
 RAW_SAVE_TITLE = "SAVE — BYRDHOUSE RAW OUTPUT"
 UPSCALE_SAVE_TITLE = "SAVE — BYRDHOUSE 4X UPSCALED OUTPUT"
 
-RECIPE_PATH = Path(__file__).resolve().parent.parent.parent / "recipes" / "real_to_gaming.v1.json"
+RECIPE_PATH = Path(__file__).resolve().parent / "real_to_gaming.v1.json"
 
 STYLE_SUFFIXES = {
     "AAA": "AAA semi-realistic game rendering, physically-based materials, subsurface scattering on skin, cinematic depth of field, hero key lighting, clean character silhouette separation, Unreal Engine 5 quality.",

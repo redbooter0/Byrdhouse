@@ -3018,7 +3018,7 @@
       "supported_intensities": ["IDENTITY_LOCK", "BALANCED_GAMING", "FULL_CHARACTER_REDESIGN"],
       "output_dir": "ByrdHouse/Flux2Klein/gaming/",
       "filename_prefix": "ByrdHouse_RealToGame_",
-      "recipe_file": "recipes/real_to_gaming.v1.json"
+      "recipe_file": "workflows/flux2_klein/real_to_gaming.v1.json"
     }
   },
   "version": 0.4

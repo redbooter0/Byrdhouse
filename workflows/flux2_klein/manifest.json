@@ -15,7 +15,7 @@
   "recommended_first_file": "safe_first_run.json",
   "api_workflow": "real_to_gaming_api_v1.json",
   "production_file": "production_all_in_one.json",
-  "recipe_file": "../../recipes/real_to_gaming.v1.json",
+  "recipe_file": "real_to_gaming.v1.json",
   "models_required": [
     {
       "file": "flux-2-klein-9b-fp8.safetensors",
