@@ -507,6 +507,7 @@ function clearSource() {
   if ($('srcPreview')) $('srcPreview').innerHTML = '';
   saveDraft();
 }
+/* The recipe currently selected in the form (id@version pinned). */
 function currentRecipe() {
   return (window._recipes||[]).find(
     x => x.id + '@' + x.version === ($('recipe') ? $('recipe').value : ''));
@@ -635,7 +636,8 @@ function collectEngine() {
   return Object.keys(eng).length ? eng : null;
 }
 
-/* ── draft persistence ── */
+/* ── draft-persistence: the Create form survives polling, tab
+      changes, and reloads; cleared only after a successful queue ── */
 const DRAFT_KEY = 'bh_draft';
 function readForm() {
   const slots = {};
@@ -676,6 +678,7 @@ function applyDraft(d) {
     });
   }
 }
+/* ── end draft-persistence ── */
 
 async function submitGen() {
   try {

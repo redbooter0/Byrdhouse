@@ -1,4 +1,4 @@
-# setup-gaming.ps1 — BYRD-GAMING bootstrap (Blueprint v2 §8 directory map, U0 kit)
+﻿# setup-gaming.ps1 — BYRD-GAMING bootstrap (Blueprint v2 §8 directory map, U0 kit)
 #
 # TWO ways to use this repo on a machine:
 #   A) Clone directly:  git clone https://github.com/redbooter0/Byrdhouse.git E:\ByrdHouse
