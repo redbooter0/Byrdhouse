@@ -110,6 +110,29 @@ Known flow items, staged (small steps, in order):
 - v2 two-pass graph left untouched (proven + suite-locked); batching lands
   there only after v3's batch path proves out on hardware.
 
+## Staged 2026-07-15 (avenues): two more ways to the same result (UNTESTED on hardware)
+
+Founder rule: the main plan carries 3–5 backups; avenues ride as per-job
+parameters (`engine.workflow`, `facelab.ps1 quality -Workflow ...`) so the
+proven default never moves while new ways get tested.
+
+- **Avenue A `sd15_face_zone_diffdiff_api.json`** — v3 guided + core
+  `DifferentialDiffusion`: the graded mask becomes a per-pixel denoise strength
+  map (full rebuild at the face core, feather at the boundary ring). This is
+  the community's standard inpaint-seam fix, aimed squarely at the jaw/ear
+  seam that failed the visual gate. Zero new models.
+- **Avenue B `sd15_face_zone_ipadapter_api.json`** — v3 guided + IP-Adapter
+  PLUS FACE conditioning from a REAL identity photo (`engine.identity_photo`,
+  else the reviewed reference). CLIP-embedding based (h94, Apache-2.0) — not
+  the insightface FaceID variant, so it stays funded-lane-eligible. Gives
+  identity a third anchor (seed pixels + LoRA + photo embedding) while no LoRA
+  candidate is approved. Models: ip-adapter-plus-face_sd15 + SD1.5 CLIP-ViT-H
+  image encoder.
+- PhotoMaker (SDXL, Codex's smoke assets already on the branch) is the D
+  avenue: license + VRAM verify before any funded use.
+- Hardware test order: rerun the Gojo/Vegeta pair per avenue (A, then B, then
+  A+B judgment call), batch 2, canvas auto; record verdicts here.
+
 Parser replacement candidates for the ParseNet license gap (both LICENSE-UNVERIFIED
 — treat exactly like ParseNet, private local evaluation only, until the license is
 confirmed): `jonathandinu/face-parsing` (SegFormer/CelebAMask-HQ via HF

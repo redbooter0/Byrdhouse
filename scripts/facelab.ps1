@@ -27,6 +27,7 @@ param(
     [string]$Image,
     [string]$Mask,
     [string]$Preset = "auto",
+    [string]$Workflow,
     [int]$FaceIndex = 0,
     [string]$Lora,
     [string]$Prompt,
@@ -72,6 +73,7 @@ switch ($Command.ToLower()) {
         Need-Image
         $args2 = @($byrdimage, "--edit-face-zone", $Image, "--face-preset", $Preset,
                    "--face-index", "$FaceIndex", "--project", $Project, "--purpose", $Purpose)
+        if ($Workflow) { $args2 += @("--workflow", $Workflow) }
         if ($Lora) { $args2 += @("--lora", $Lora) }
         & $sysPython @args2
         exit $LASTEXITCODE

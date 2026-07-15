@@ -438,6 +438,19 @@ def main():
               v3_graph.get("15", {}).get("class_type") == "RepeatLatentBatch"
               and v3_graph["15"]["inputs"]["samples"] == ["8", 0]
               and v3_graph["9"]["inputs"]["latent_image"] == ["15", 0])
+        check("avenues ride as parameters: workflow override + identity photo anchor",
+              'engine.get("workflow") or recipe.get(' in byrdimage_source.replace("(engine or {})", "engine")
+              or '(engine or {}).get("workflow") or recipe.get(' in byrdimage_source)
+        check("avenue graphs are valid and keep the adapter contract",
+              all(json.loads((ROOT / "workflows" / name).read_text(encoding="utf-8-sig"))
+                  .get("1", {}).get("_meta", {}).get("title") == "IDENTITY MESH SEED"
+                  for name in ("sd15_face_zone_diffdiff_api.json",
+                               "sd15_face_zone_ipadapter_api.json"))
+              and json.loads((ROOT / "workflows" / "sd15_face_zone_diffdiff_api.json")
+                             .read_text(encoding="utf-8-sig"))["16"]["class_type"] == "DifferentialDiffusion"
+              and json.loads((ROOT / "workflows" / "sd15_face_zone_ipadapter_api.json")
+                             .read_text(encoding="utf-8-sig"))["21"]["class_type"] == "IPAdapterUnifiedLoader"
+              and '"IDENTITY PHOTO"' in byrdimage_source)
         check("quality lane is drivable by hand (facelab.ps1 + --edit-face-zone CLI)",
               "--edit-face-zone" in byrdimage_source
               and (ROOT / "scripts" / "facelab.ps1").is_file()

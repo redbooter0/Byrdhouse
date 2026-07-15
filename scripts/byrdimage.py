@@ -864,7 +864,13 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         if not identity_reference_path.is_file():
             die(f"identity mesh reference not found: {identity_reference_path}")
 
-    workflow_rel = recipe.get("workflow", "workflows/sd15_face_zone_inpaint_api.json")
+    # Founder rule: extra avenues ride as PARAMETERS, never as new defaults —
+    # a job may pick any staged face-zone graph (diffdiff, ipadapter, controlnet)
+    # while the recipe's proven default stays the recipe's default.
+    workflow_rel = (engine or {}).get("workflow") or recipe.get(
+        "workflow", "workflows/sd15_face_zone_inpaint_api.json")
+    if (engine or {}).get("workflow") and not (root / workflow_rel).is_file():
+        die(f"engine.workflow does not exist: {workflow_rel}")
     if "mesh_seed" in workflow_rel and identity_reference_path is None:
         die("face-zone mesh workflow requires a reviewed identity reference; refusing generic inpaint fallback")
 
@@ -1030,6 +1036,25 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         if not edge_mask_artifact:
             die("face-zone workflow requires a saved skin-match ring")
         edge_mask_node["inputs"]["image"] = upload_image(comfy, Path(edge_mask_artifact))
+    identity_photo_node = next(
+        (
+            node for node in graph.values()
+            if node.get("class_type") == "LoadImage"
+            and node.get("_meta", {}).get("title") == "IDENTITY PHOTO"
+        ),
+        None,
+    )
+    if identity_photo_node is not None:
+        # the IP-Adapter avenue anchors identity to a REAL photo embedding —
+        # prefer an explicit engine.identity_photo, fall back to the reviewed
+        # identity reference; never run the avenue without an anchor image
+        identity_photo = engine.get("identity_photo") or (
+            str(identity_reference_path) if identity_reference_path else None)
+        if not identity_photo or not Path(identity_photo).is_file():
+            die("this face-zone workflow needs an identity photo: pass "
+                "engine.identity_photo (a real photo of the founder) or use a "
+                "preset with a reviewed identity reference")
+        identity_photo_node["inputs"]["image"] = upload_image(comfy, Path(identity_photo))
 
     identity_model_weight = float(
         identity_strength or engine.get("identity_strength") or identity.get("strength", 1.0)
@@ -1813,6 +1838,9 @@ def main() -> None:
                     help="which face when the examiner reports several (0 = largest)")
     ap.add_argument("--face-recipe", default="anime_face_zone_edit",
                     help="quality-lane recipe (pin a version with name@N)")
+    ap.add_argument("--workflow",
+                    help="quality-lane avenue override: a workflows/ path or a "
+                         "shorthand — controlnet | diffdiff | ipadapter")
     ap.add_argument("--denoise", type=float, help="zone edit denoise (default 0.7)")
     ap.add_argument("--blend", type=float, default=0.0,
                     help="face swap style blend 0-0.65 (0.3-0.45 for anime targets)")
@@ -1826,10 +1854,18 @@ def main() -> None:
         die("BYRDHOUSE_ROOT not set — run the setup script first")
 
     if args.edit_face_zone:
+        engine = {"face_index": args.face_index}
+        shorthand = {
+            "controlnet": "workflows/sd15_face_zone_controlnet_api.json",
+            "diffdiff": "workflows/sd15_face_zone_diffdiff_api.json",
+            "ipadapter": "workflows/sd15_face_zone_ipadapter_api.json",
+        }
+        if args.workflow:
+            engine["workflow"] = shorthand.get(args.workflow, args.workflow)
         edit_face_zone(root, args.face_recipe, args.edit_face_zone,
                        args.project, args.purpose,
                        identity_lora=args.lora, target_preset=args.face_preset,
-                       engine={"face_index": args.face_index})
+                       engine=engine)
         return
     if args.swap_target:
         if args.preview:

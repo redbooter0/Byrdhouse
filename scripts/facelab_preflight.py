@@ -185,6 +185,30 @@ def main():
                     "(control_v11p_sd15_canny.safetensors, openrail/commercial-OK) into "
                     "ComfyUI\\models\\controlnet — see docs/MODELS.md")
 
+    # ── 3d. avenue checks: diff-diffusion (core) + IP-Adapter PLUS FACE ──────
+    try:
+        dd_info = get_json(f"{comfy}/object_info/DifferentialDiffusion")
+    except Exception:
+        dd_info = {}
+    if dd_info.get("DifferentialDiffusion"):
+        ok("DifferentialDiffusion available (avenue A: seam-killer variant)")
+    else:
+        problem("DifferentialDiffusion node missing — avenue A needs it",
+                "it is a CORE ComfyUI node — update ComfyUI itself (git pull / "
+                "update_comfyui.bat), no pack or model required")
+    try:
+        ipa_info = get_json(f"{comfy}/object_info/IPAdapterUnifiedLoader")
+    except Exception:
+        ipa_info = {}
+    if ipa_info.get("IPAdapterUnifiedLoader"):
+        ok("IPAdapter nodes available (avenue B: real-photo identity anchor)")
+    else:
+        problem("ComfyUI_IPAdapter_plus missing — avenue B (IP-Adapter PLUS FACE) needs it",
+                "ComfyUI Manager -> install 'ComfyUI_IPAdapter_plus' (cubiq), restart; "
+                "models: ip-adapter-plus-face_sd15.safetensors -> models\\ipadapter and "
+                "the SD1.5 CLIP-ViT-H image encoder -> models\\clip_vision "
+                "(h94/IP-Adapter, Apache-2.0 — docs/MODELS.md)")
+
     # ── 4. face photo ─────────────────────────────────────────────────────────
     refs = root / "profiles" / "me" / "references"
     photos = [f for f in refs.glob("*") if f.suffix.lower() in (".jpg", ".jpeg", ".png")] \

@@ -74,6 +74,26 @@ index — then run the chosen lane per face: `facelab.ps1 quality -Image X -Face
   sample N, every candidate composited + carded (`candidate x/N`); pick the
   keeper in the gallery. VRAM-clamped for the 3070.
 
+## 2c. Extra avenues on the quality lane (reverse-engineered from proven 8GB setups)
+
+The lane's default never changes — avenues ride as PARAMETERS
+(`-Workflow` on facelab.ps1, `engine.workflow` on a job), so we test new ways
+while the proven way keeps working:
+
+| Avenue | Command | What it replicates | Needs |
+|---|---|---|---|
+| A — Seam killer | `facelab.ps1 quality -Image X -Workflow diffdiff` | the community's standard inpaint stack: DifferentialDiffusion turns our graded mask into a strength MAP (full rebuild at the core, feather at the ring) — aimed at the exact jaw/ear seam failure | core ComfyUI only |
+| B — Photo anchor | `facelab.ps1 quality -Image X -Workflow ipadapter` | the most-replicated consistent-face stack: IP-Adapter PLUS FACE conditions on a REAL photo embedding (CLIP-based, Apache-2.0, NOT insightface) — identity no longer rides the unapproved LoRA alone | IPAdapter_plus pack + 2 models (§0) |
+| C — Guided | `facelab.ps1 quality -Image X -Workflow controlnet` | ControlNet-canny geometry hold at 0.55 denoise (the v3 lane as a parameter) | canny model (§0) |
+| D — PhotoMaker (SDXL) | Codex's smoke assets: `run-private-photomaker-smoke.py` + `sdxl_photomaker_v1_target_smoke_api.json` | TencentARC PhotoMaker stacked-ID embeddings | SDXL VRAM headroom; license verify before funded use |
+
+Avenue-B model downloads:
+
+```powershell
+Invoke-WebRequest -Uri "https://huggingface.co/h94/IP-Adapter/resolve/main/models/ip-adapter-plus-face_sd15.safetensors" -OutFile "E:\ByrdHouse\Generators\ComfyUI\models\ipadapter\ip-adapter-plus-face_sd15.safetensors"
+Invoke-WebRequest -Uri "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors" -OutFile "E:\ByrdHouse\Generators\ComfyUI\models\clip_vision\CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
+```
+
 ## 3. Identity (the LoRA that makes it YOU)
 
 ```powershell
