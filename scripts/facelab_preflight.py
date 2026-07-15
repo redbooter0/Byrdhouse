@@ -142,6 +142,15 @@ def main():
         fd_info, det_info = {}, {}
     if fd_info.get("FaceDetailer") and det_info.get("UltralyticsDetectorProvider"):
         ok("Impact Pack installed (FaceDetailer + UltralyticsDetectorProvider)")
+        try:
+            seg_info = get_json(f"{comfy}/object_info/BboxDetectorSEGS")
+        except Exception:
+            seg_info = {}
+        if seg_info.get("BboxDetectorSEGS"):
+            ok("zone preview nodes available (BboxDetectorSEGS)")
+        else:
+            problem("BboxDetectorSEGS missing — the CPU zone-preview route needs it",
+                    "it ships with Impact Pack; update the pack via ComfyUI Manager")
         det_live = node_inputs(det_info["UltralyticsDetectorProvider"])
         det_models = det_live.get("model_name") if isinstance(det_live.get("model_name"), list) else []
         det_want = img_cfg.get("faceswap_detector", "bbox/face_yolov8m.pt")

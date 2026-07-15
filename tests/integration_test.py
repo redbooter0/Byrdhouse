@@ -556,6 +556,44 @@ def main():
                   and "facezone_auto" in am.get("workflow", "")
                   and "Vegeta" in am.get("prompt", ""), str(am))
 
+        # PREVIEW route (the CPU pre-step): detection only, archives the zone
+        # overlay + the soft mask for approval — the GPU never decides the mask
+        api("/jobs", {"type": "image.faceswap", "project": "careyrpg",
+                      "required_mode": "ANY", "required_caps": ["comfyui"],
+                      "payload": {"target_artifact": src_id, "route": "preview",
+                                  "project": "careyrpg", "purpose": "zone preview test"}})
+        run_worker()
+        previews = [a for a in api("/artifacts?limit=300") if a["kind"] == "image"
+                    and json.loads(a["meta"] or "{}").get("recipe") == "facezone_preview@1"]
+        check("zone preview archived overlay + mask (two artifacts)",
+              len(previews) == 2, str(len(previews)))
+        if len(previews) == 2:
+            paths = sorted(a["path"] for a in previews)
+            check("preview outputs are tellable apart (_mask/_overlay)",
+                  any("_mask" in p for p in paths) and any("_overlay" in p for p in paths),
+                  str(paths))
+            pm = json.loads(previews[0]["meta"])
+            check("preview card records detector + threshold, no seed",
+                  pm.get("detector", "").startswith("bbox/")
+                  and pm.get("threshold") == 0.5 and pm.get("seed") is None, str(pm))
+            # the approved mask feeds the zone route by artifact id — the full
+            # founder loop: preview -> approve -> GPU edits only that zone
+            mask_art = next(a for a in previews if "_mask" in a["path"])
+            api("/jobs", {"type": "image.faceswap", "project": "careyrpg",
+                          "required_mode": "IMAGE", "required_caps": ["comfyui"],
+                          "payload": {"target_artifact": src_id,
+                                      "mask_artifact": mask_art["id"],
+                                      "prompt": "the same man, cel shading",
+                                      "project": "careyrpg",
+                                      "purpose": "preview-mask zone edit"}})
+            run_worker()
+            chained = [a for a in api("/artifacts?limit=300")
+                       if json.loads(a["meta"] or "{}").get("purpose") == "preview-mask zone edit"]
+            check("preview mask chains into a zone edit by artifact id",
+                  len(chained) == 1
+                  and json.loads(chained[0]["meta"]).get("recipe") == "facezone@1",
+                  str(len(chained)))
+
         # facelab_preflight: the on-PC proof tool must diagnose a ComfyUI
         # without ReActor (what the mock is) precisely and exit 2
         pf = subprocess.run([sys.executable, str(ROOT / "scripts" / "facelab_preflight.py")],

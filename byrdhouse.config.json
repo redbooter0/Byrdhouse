@@ -44,6 +44,7 @@
     "faceswap_inpaint_workflow": "workflows/faceswap_inpaint_api.json",
     "faceswap_inpaint_denoise": 0.7,
     "faceswap_auto_workflow": "workflows/facezone_auto_api.json",
+    "faceswap_preview_workflow": "workflows/facezone_preview_api.json",
     "faceswap_detector": "bbox/face_yolov8m.pt"
   },
   "training": {

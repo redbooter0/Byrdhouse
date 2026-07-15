@@ -838,6 +838,67 @@ def facezone_auto(root, target_path, project, purpose,
     return job_id, run_graph(root, comfy, graph, job_id, project, card_base)
 
 
+def facezone_preview(root, target_path, project, purpose,
+                     detector=None, threshold=None, job_id=None, dry_run=False):
+    """The CPU pre-step, inspectable (Codex's rule: the GPU must not decide the
+    mask). Runs ONLY detection on the target — no checkpoint, no diffusion —
+    and archives TWO artifacts: a diagnostic overlay (the zone glowing on the
+    character) and the soft mask itself. The founder approves the zone, then
+    the swap runs with exactly that mask (image.faceswap mask_artifact).
+    Returns (job_id, [(png_path, card_dict), ...])."""
+    root = Path(root)
+    cfg = load_json(root / "byrdhouse.config.json")
+    comfy = cfg["services"]["comfyui"].rstrip("/")
+    img_cfg = cfg.get("image", {})
+
+    target = Path(target_path)
+    if not target.exists():
+        die(f"zone preview target not found: {target}")
+
+    workflow_rel = img_cfg.get("faceswap_preview_workflow",
+                               "workflows/facezone_preview_api.json")
+    graph = load_json(root / workflow_rel)
+    graph.pop("_comment", None)
+    if "target" not in graph or not any(
+            n.get("class_type") == "BboxDetectorSEGS" for n in graph.values()):
+        die(f"{workflow_rel} must have a 'target' LoadImage node and a "
+            "BboxDetectorSEGS node")
+
+    job_id = job_id or new_id("job")
+    prefix = f"{datetime.now():%Y%m%d}_zone_{job_id}"
+    detector = detector or img_cfg.get("faceswap_detector", "bbox/face_yolov8m.pt")
+    threshold = float(threshold or 0.5)
+
+    for nid, node in graph.items():
+        ct, inputs = node.get("class_type"), node.get("inputs", {})
+        if ct == "UltralyticsDetectorProvider":
+            inputs["model_name"] = detector
+        elif ct == "BboxDetectorSEGS":
+            inputs["threshold"] = threshold
+        elif ct == "SaveImage":
+            # keep the two outputs tellable apart in the archive: _overlay/_mask
+            tag = "mask" if "mask" in str(nid) else "overlay"
+            inputs["filename_prefix"] = f"{prefix}_{tag}"
+
+    print(f"[byrdimage] zone-preview {job_id}  target {target.name}  "
+          f"detector {detector}  threshold {threshold}  (CPU only, no diffusion)")
+    if dry_run:
+        print(json.dumps(graph, indent=2))
+        print("[byrdimage] dry run — nothing submitted")
+        return job_id, []
+
+    graph["target"]["inputs"]["image"] = upload_image(comfy, target)
+
+    card_base = {
+        "recipe": "facezone_preview@1", "purpose": purpose,
+        "prompt": "", "negative": "", "seed": None,
+        "workflow": workflow_rel, "slots": {}, "vary_picks": {},
+        "swap_target": str(target), "detector": detector,
+        "threshold": threshold,
+    }
+    return job_id, run_graph(root, comfy, graph, job_id, project, card_base)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--recipe")
@@ -853,6 +914,9 @@ def main() -> None:
     ap.add_argument("--auto", action="store_true",
                     help="auto route: detector finds the face, masks and redraws it "
                          "as you (--lora + --prompt) — no mask, no face photo")
+    ap.add_argument("--preview", action="store_true",
+                    help="CPU zone preview: detection only — saves the zone overlay "
+                         "+ mask for approval, no checkpoint, no diffusion")
     ap.add_argument("--denoise", type=float, help="zone edit denoise (default 0.7)")
     ap.add_argument("--blend", type=float, default=0.0,
                     help="face swap style blend 0-0.65 (0.3-0.45 for anime targets)")
@@ -866,6 +930,10 @@ def main() -> None:
         die("BYRDHOUSE_ROOT not set — run the setup script first")
 
     if args.swap_target:
+        if args.preview:
+            facezone_preview(root, args.swap_target, args.project, args.purpose,
+                             dry_run=args.dry_run)
+            return
         if args.auto:
             facezone_auto(root, args.swap_target, args.project, args.purpose,
                           prompt=args.prompt, denoise=args.denoise,

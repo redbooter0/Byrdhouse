@@ -455,6 +455,7 @@ V.create = async () => {
       <label>Route ${qtip('Auto: the detector finds the character’s face, masks it and redraws it as you in the picture’s own art style — one step, use with your identity LoRA. Direct swap: ReActor puts your photo’s face on (use blend for anime). A zone mask below overrides both.')}</label>
       <select id="swapRoute">
         <option value="auto" selected>Auto — find the face, redraw as me</option>
+        <option value="preview">Preview zone first (CPU only — see the mask)</option>
         <option value="swap">Direct swap (photo face + blend)</option>
       </select>
       <label>Art blend (direct swap only) ${qtip('0 = photo target (plain swap). Anime/stylized characters (Gojo, Vegeta, Luffy) want 0.35 so the swapped face adopts the art style. 0.45 melts harder but drifts more.')}</label>
@@ -467,9 +468,11 @@ V.create = async () => {
       <input id="swapPrompt" placeholder="e.g. Gojo Satoru, white hair, black blindfold">
       <label>Identity LoRA (optional) ${qtip('A trained LoRA of your face (train-lora.ps1) keeps the blend pass looking like YOU. Loose name match, e.g. carey_face_v2.')}</label>
       <input id="swapLora" placeholder="e.g. carey_face_v2">
-      <label>Edit-zone mask (optional) ${qtip('The zone lane: WHITE = change here, black = keep target-authentic (hair, blindfold, collar). With a mask the GPU edits ONLY inside the zone and identity comes from your LoRA + notes — masks come from byrdfacezone.py or hand-drawn.')}</label>
+      <label>Edit-zone mask (optional) ${qtip('The zone lane: WHITE = change here, black = keep target-authentic (hair, blindfold, collar). With a mask the GPU edits ONLY inside the zone and identity comes from your LoRA + notes — masks come from a zone preview, byrdfacezone.py, or hand-drawn.')}</label>
       <input id="swapMask" type="file" accept="image/*" onchange="uploadSwapMask(this)">
       <div id="swapMaskPreview" class="muted" style="margin-top:6px"></div>
+      <label>...or zone from a preview (artifact id) ${qtip('Run the Preview route first — it archives the zone overlay + mask for approval. Paste the mask artifact id here and the swap uses exactly that approved zone.')}</label>
+      <input id="swapMaskId" placeholder="e.g. art.job_xxx.1">
       <label>What is this for?</label>
       <input id="swapPurpose" placeholder="e.g. gojo face swap test">
       <div class="row" style="margin-top:12px"><button class="b" onclick="submitSwap()">Swap my face on</button></div>
@@ -579,6 +582,7 @@ async function submitSwap() {
   const t = window._swapTarget;
   if (!t) return swapSay('upload a picture to swap onto first');
   const project = ($('project') ? $('project').value.trim() : '') || 'careyrpg';
+  const route = $('swapRoute') ? $('swapRoute').value : 'auto';
   const payload = {
     target_artifact: t.id, subject_profile: 'me',
     style_blend: parseFloat($('swapBlend').value || '0') || 0,
@@ -588,12 +592,19 @@ async function submitSwap() {
   if (notes) payload.prompt = notes;
   const lora = $('swapLora').value.trim();
   if (lora) payload.lora = lora;
-  if (window._swapMask) payload.mask_artifact = window._swapMask.id;
-  else if ($('swapRoute') && $('swapRoute').value === 'auto') payload.route = 'auto';
+  const maskId = $('swapMaskId') ? $('swapMaskId').value.trim() : '';
+  if (route === 'preview') payload.route = 'preview';   // CPU only: overlay + mask
+  else if (window._swapMask) payload.mask_artifact = window._swapMask.id;
+  else if (maskId) payload.mask_artifact = maskId;
+  else if (route === 'auto') payload.route = 'auto';
   try {
+    // a preview is pure CPU detection — any mode may run it, no GPU ritual
     await jpost('/jobs', { type: 'image.faceswap', project,
-      required_mode: 'IMAGE', required_caps: ['comfyui'], payload });
-    swapSay('queued — watch Results below');
+      required_mode: route === 'preview' ? 'ANY' : 'IMAGE',
+      required_caps: ['comfyui'], payload });
+    swapSay(route === 'preview'
+      ? 'zone preview queued — approve the mask in Results, then swap with it'
+      : 'queued — watch Results below');
     window._swapTarget = null; window._swapMask = null;
     if ($('swapFile')) $('swapFile').value = '';
     if ($('swapPreview')) $('swapPreview').innerHTML = '';

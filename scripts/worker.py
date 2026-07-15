@@ -373,6 +373,23 @@ def run_faceswap(job) -> None:
     if not target:
         raise RuntimeError("image.faceswap needs target_path or target_artifact")
 
+    # PREVIEW route (the CPU pre-step): detection only — archives the zone
+    # overlay + soft mask for approval, no checkpoint, no diffusion. The GPU
+    # never decides the mask (the founder rule); the approved mask artifact
+    # then feeds the zone route below.
+    if p.get("route") == "preview":
+        _, saved = byrdimage.facezone_preview(
+            ROOT, target, p.get("project", "sandbox"),
+            p.get("purpose", "zone preview"),
+            detector=p.get("detector"), threshold=p.get("threshold"),
+            job_id=job["id"])
+        cards = []
+        for png, card in saved:
+            card["path"] = str(png)
+            cards.append(card)
+        register_cards(job, cards)
+        return
+
     # AUTO route (the daily driver): detector finds the face, masks it, redraws
     # it as the founder (LoRA + prompt) in the target's art style — one step.
     if p.get("route") == "auto" or p.get("auto"):

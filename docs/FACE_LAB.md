@@ -54,9 +54,12 @@ python scripts\facelab_preflight.py --run E:\path\to\link.png   --route auto --l
 # 3a. comparison — ReActor direct swap + anime blend
 python scripts\facelab_preflight.py --run E:\path\to\gojo.png --blend 0.35
 
-# 3b. zone route (the founder lane): GPU edits ONLY inside the mask; identity
-#     from the trained LoRA + notes. Mask from byrdfacezone.py or hand-drawn
-#     (white = change zone).
+# 3b. CPU zone preview (inspect the mask BEFORE any GPU): saves _overlay + _mask
+python scripts\byrdimage.py --swap-target E:\path\to\link.png --preview --purpose "link zone preview"
+
+# 3c. zone route (the founder lane): GPU edits ONLY inside the mask; identity
+#     from the trained LoRA + notes. Mask from the preview above, byrdfacezone.py,
+#     or hand-drawn (white = change zone).
 python scripts\byrdimage.py --swap-target E:\path\to\gojo.png --swap-mask E:\path\to\gojo_mask.png --lora carey_face --prompt "Gojo Satoru, cel shading, Jujutsu Kaisen style" --purpose "gojo zone edit"
 ```
 
@@ -91,7 +94,15 @@ the dashboard's **Face Swap** panel (Create tab) with auto-judge + approval queu
   that is `workflows/reactor_faceswap_blend_api.json`, driven by
   `payload.style_blend`. Attach your identity LoRA to the blend pass so the
   face stays YOU through the diffusion.
-- **Four routes, all in the belt now** (all `image.faceswap` except the last):
+- **The CPU pre-step, formalized** (Codex's rule: *the GPU must not decide the
+  mask*): the **Preview route** (`route:"preview"`, CLI `--preview`) runs ONLY
+  detection — seconds, no checkpoint, works in any GPU mode — and archives two
+  artifacts: the **zone overlay** (the mask glowing on the character, failures
+  inspectable before the GPU spends a step) and the **soft mask** itself. Approve
+  the mask in the gallery, then paste its artifact id into the Face Swap panel's
+  "zone from a preview" box (or `mask_artifact` in the payload) and the GPU edits
+  exactly that zone. Original, overlay, mask, result, sidecar card — all kept.
+- **Four execution routes, all in the belt now** (all `image.faceswap` except the last):
   - **AUTO (the daily driver, dashboard default)**: detector finds the
     character's face → masks it → redraws it as YOU (identity LoRA + notes) in
     the picture's own art style → composites back. One upload, one step.
