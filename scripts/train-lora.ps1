@@ -73,7 +73,20 @@ if (-not $images) {
 }
 Write-Host ""
 Write-Host "ByrdHouse LoRA trainer" -ForegroundColor Cyan
-Write-Host ("  dataset : {0} ({1} images)" -f $Dataset, @($images).Count)
+$imgCount = @($images).Count
+Write-Host ("  dataset : {0} ({1} images)" -f $Dataset, $imgCount)
+
+# Auto-size repeats to ~2,500 total steps (identity-LoRA sweet spot) unless the
+# founder pinned -Repeats. 300 collected images at the small-dataset default of
+# 12 repeats x 8 epochs would be ~29k steps — days of GPU and an overbaked LoRA.
+if (-not $PSBoundParameters.ContainsKey('Repeats')) {
+    $Repeats = [Math]::Max(1, [Math]::Round(2500 / ([Math]::Max(1, $imgCount) * $Epochs)))
+}
+$estSteps = $imgCount * $Repeats * $Epochs
+Write-Host ("  steps   : ~{0} ({1} images x {2} repeats x {3} epochs, batch 1)" -f $estSteps, $imgCount, $Repeats, $Epochs)
+if ($estSteps -gt 6000) {
+    Write-Host "  WARNING: very high step count for an identity LoRA — overtraining bakes in artifacts. Lower -Repeats or -Epochs." -ForegroundColor Yellow
+}
 
 # ── VERSION: always a new file, never overwrite (scan BOTH output dirs) ──────
 $outDir = Join-Path $root ($lorasRel -replace "/", "\")

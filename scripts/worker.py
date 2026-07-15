@@ -372,6 +372,27 @@ def run_faceswap(job) -> None:
         target = str(fetch_artifact_file(p["target_artifact"], dest))
     if not target:
         raise RuntimeError("image.faceswap needs target_path or target_artifact")
+
+    # Zone route (the founder lane): a mask means the GPU edits ONLY inside the
+    # approved zone — identity comes from the LoRA + prompt, no face photo needed.
+    mask = p.get("mask_path")
+    if not mask and p.get("mask_artifact"):
+        mask = str(fetch_artifact_file(p["mask_artifact"], dest))
+    if mask:
+        _, saved = byrdimage.faceswap_inpaint(
+            ROOT, target, mask, p.get("project", "sandbox"),
+            p.get("purpose", "zone edit"),
+            prompt=p.get("prompt"), negative=p.get("negative"),
+            denoise=p.get("denoise"), checkpoint=p.get("checkpoint"),
+            lora=p.get("lora"), lora_strength=float(p.get("lora_strength", 0.9)),
+            seed=p.get("seed"), job_id=job["id"])
+        cards = []
+        for png, card in saved:
+            card["path"] = str(png)
+            cards.append(card)
+        register_cards(job, cards)
+        return
+
     face = p.get("face_path")
     if not face and p.get("face_artifact"):
         face = str(fetch_artifact_file(p["face_artifact"], dest))

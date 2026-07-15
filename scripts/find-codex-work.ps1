@@ -82,6 +82,29 @@ foreach ($root in $scanRoots) {
 }
 if ($found -eq 0) { Say "  none found under the roots" }
 
+# ── 2b. known Codex work files (seen in its sessions on 2026-07-14) ──────────
+Say "" ; Say "[2b] Known Codex files: byrdfacezone.py (CPU mask pipeline), build-100-* dataset builders" "Cyan"
+$hits = 0
+foreach ($root in $scanRoots) {
+    Get-ChildItem $root -Recurse -File -Depth 5 -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -eq "byrdfacezone.py" -or $_.Name -like "build-100-*.ps1" `
+                       -or $_.Name -like "*skit*manifest*" } |
+        ForEach-Object {
+            $hits++
+            Say ("  {0}  (modified {1})" -f $_.FullName, $_.LastWriteTime.ToString("yyyy-MM-dd HH:mm")) "Yellow"
+        }
+}
+if ($hits -eq 0) { Say "  none found — check the session logs in [1] for where they were written" }
+# Codex also edited byrdimage.py IN PLACE (edit_face_zone) — flag any copy carrying it
+foreach ($root in $scanRoots) {
+    Get-ChildItem $root -Recurse -Filter "byrdimage.py" -File -Depth 4 -ErrorAction SilentlyContinue |
+        ForEach-Object {
+            if (Select-String -Path $_.FullName -Pattern "edit_face_zone" -Quiet -ErrorAction SilentlyContinue) {
+                Say ("  {0} contains Codex's edit_face_zone work — commit it to a branch before pulling!" -f $_.FullName) "Yellow"
+            }
+        }
+}
+
 # ── 3. git repos: branch, dirty files, unpushed commits ───────────────────────
 Say "" ; Say "[3] Git repos — where work is sitting uncommitted/unpushed" "Cyan"
 $git = Get-Command git -ErrorAction SilentlyContinue

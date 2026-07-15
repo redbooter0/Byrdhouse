@@ -44,6 +44,15 @@ if ($cfg.startup -and $cfg.startup.comfyui_dir) {
 }
 [void]$searchDirs.Add((Join-Path $root "Generators\ComfyUI\output"))
 [void]$searchDirs.Add((Join-Path $root "artifacts"))
+# generated identity batches (e.g. generated_real_skit_scenes) live in SUBFOLDERS
+# of the profile references — include those, but never the references root
+# itself: front.jpg etc. must stay put or FaceID auto-wiring breaks.
+$refRoot = Join-Path $root "profiles\me\references"
+if (Test-Path $refRoot) {
+    Get-ChildItem $refRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -like "generated*" } |
+        ForEach-Object { [void]$searchDirs.Add($_.FullName) }
+}
 foreach ($f in $From) { [void]$searchDirs.Add($f) }
 $searchDirs = $searchDirs | Where-Object { $_ -and (Test-Path $_) } | Select-Object -Unique
 

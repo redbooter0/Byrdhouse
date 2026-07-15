@@ -40,7 +40,9 @@
     "faceswap_workflow": "workflows/reactor_faceswap_api.json",
     "faceswap_blend_workflow": "workflows/reactor_faceswap_blend_api.json",
     "faceswap_restore": "GFPGANv1.4.pth",
-    "faceswap_blend_checkpoint": "animagine-xl-4.0"
+    "faceswap_blend_checkpoint": "animagine-xl-4.0",
+    "faceswap_inpaint_workflow": "workflows/faceswap_inpaint_api.json",
+    "faceswap_inpaint_denoise": 0.7
   },
   "training": {
     "_comment": "LoRA lab (scripts/collect-training-images.ps1 + scripts/train-lora.ps1). sd_scripts_dir/trainer_python empty = auto-detect. vram_budget_mb: training refuses to start unless at least this much VRAM is free AND its settings are sized to stay under it (founder rule: never exceed 7200MB on the 8GB 3070). cpu_threads: how many CPU threads the trainer may use (founder rule: 16-18 of the 20).",

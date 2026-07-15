@@ -510,6 +510,32 @@ def main():
         except SystemExit as e:
             check("faceswap rejects a missing target loudly", "not found" in str(e))
 
+        # zone route (the founder lane): a mask means the GPU edits ONLY inside
+        # the approved zone — VAEEncodeForInpaint graph, identity from LoRA+prompt
+        mbuf = io.BytesIO()
+        Image.new("RGB", (800, 450), (255, 255, 255)).save(mbuf, "PNG")
+        rqm = urllib.request.Request(
+            f"http://127.0.0.1:{RP}/sources/facezone_mask.png?project=careyrpg",
+            data=mbuf.getvalue(), method="POST",
+            headers={"Content-Type": "image/png", "Authorization": f"Bearer {TOKEN}"})
+        mask_id = json.loads(urllib.request.urlopen(rqm, timeout=15).read().decode())["id"]
+        api("/jobs", {"type": "image.faceswap", "project": "careyrpg",
+                      "required_mode": "IMAGE", "required_caps": ["comfyui"],
+                      "payload": {"target_artifact": src_id, "mask_artifact": mask_id,
+                                  "prompt": "the same man as Gojo, cel shading",
+                                  "project": "careyrpg", "purpose": "zone edit test"}})
+        run_worker()
+        zones = [a for a in api("/artifacts?limit=250") if a["kind"] == "image"
+                 and json.loads(a["meta"] or "{}").get("recipe") == "facezone@1"]
+        check("zone edit archived through the inpaint workflow", len(zones) == 1,
+              str(len(zones)))
+        if zones:
+            zm = json.loads(zones[0]["meta"])
+            check("zone card records mask + corridor denoise + checkpoint",
+                  zm.get("mask_source") and zm.get("denoise") == 0.7
+                  and "inpaint" in zm.get("workflow", "")
+                  and zm.get("checkpoint"), str(zm))
+
         # facelab_preflight: the on-PC proof tool must diagnose a ComfyUI
         # without ReActor (what the mock is) precisely and exit 2
         pf = subprocess.run([sys.executable, str(ROOT / "scripts" / "facelab_preflight.py")],

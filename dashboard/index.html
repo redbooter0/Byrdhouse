@@ -462,6 +462,9 @@ V.create = async () => {
       <input id="swapPrompt" placeholder="e.g. Gojo Satoru, white hair, black blindfold">
       <label>Identity LoRA (optional) ${qtip('A trained LoRA of your face (train-lora.ps1) keeps the blend pass looking like YOU. Loose name match, e.g. carey_face_v2.')}</label>
       <input id="swapLora" placeholder="e.g. carey_face_v2">
+      <label>Edit-zone mask (optional) ${qtip('The zone lane: WHITE = change here, black = keep target-authentic (hair, blindfold, collar). With a mask the GPU edits ONLY inside the zone and identity comes from your LoRA + notes — masks come from byrdfacezone.py or hand-drawn.')}</label>
+      <input id="swapMask" type="file" accept="image/*" onchange="uploadSwapMask(this)">
+      <div id="swapMaskPreview" class="muted" style="margin-top:6px"></div>
       <label>What is this for?</label>
       <input id="swapPurpose" placeholder="e.g. gojo face swap test">
       <div class="row" style="margin-top:12px"><button class="b" onclick="submitSwap()">Swap my face on</button></div>
@@ -550,6 +553,23 @@ async function uploadSwapTarget(input) {
     swapSay('target saved — pick a blend, then Swap');
   } catch (e) { swapSay('upload error: ' + e.message); }
 }
+async function uploadSwapMask(input) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  const name = ('mask_' + f.name).replace(/[^\w. -]+/g, '_');
+  const project = ($('project') ? $('project').value.trim() : '') || 'careyrpg';
+  swapSay('uploading mask...');
+  try {
+    const r = await fetch(`/sources/${encodeURIComponent(name)}?project=${encodeURIComponent(project)}`, {
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + _adminToken, 'X-Actor': 'dashboard' }, body: f });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    window._swapMask = { id: j.id, name };
+    $('swapMaskPreview').innerHTML =
+      `<span style="color:var(--green)">zone saved</span> ${esc(name)} — GPU will only edit inside it`;
+    swapSay('zone mask saved');
+  } catch (e) { swapSay('mask upload error: ' + e.message); }
+}
 async function submitSwap() {
   const t = window._swapTarget;
   if (!t) return swapSay('upload a picture to swap onto first');
@@ -563,13 +583,16 @@ async function submitSwap() {
   if (notes) payload.prompt = notes;
   const lora = $('swapLora').value.trim();
   if (lora) payload.lora = lora;
+  if (window._swapMask) payload.mask_artifact = window._swapMask.id;
   try {
     await jpost('/jobs', { type: 'image.faceswap', project,
       required_mode: 'IMAGE', required_caps: ['comfyui'], payload });
     swapSay('queued — watch Results below');
-    window._swapTarget = null;
+    window._swapTarget = null; window._swapMask = null;
     if ($('swapFile')) $('swapFile').value = '';
     if ($('swapPreview')) $('swapPreview').innerHTML = '';
+    if ($('swapMask')) $('swapMask').value = '';
+    if ($('swapMaskPreview')) $('swapMaskPreview').innerHTML = '';
   } catch (e) { swapSay('queue error: ' + e.message); }
 }
 /* The recipe currently selected in the form (id@version pinned). */

@@ -1,0 +1,49 @@
+{
+  "_comment": "Zone-inpaint face swap — the founder lane: GPU executes ONLY inside the approved edit zone. 'target' is the picture, 'maskimg' is the zone image (WHITE = change here, black = keep target-authentic: hair, blindfold, ear ink, collar). Identity comes from the trained LoRA (byrdimage splices it) + the character prompt, NOT from warping a photo — this is the route Codex's byrdfacezone.py masks feed. denoise is the control: too low suppresses the LoRA, ~0.9 takes over with artifacts; byrdimage clamps to the usable corridor (default 0.7).",
+  "target": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" }
+  },
+  "maskimg": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" }
+  },
+  "mask": {
+    "class_type": "ImageToMask",
+    "inputs": { "image": ["maskimg", 0], "channel": "red" }
+  },
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "animagine-xl-4.0.safetensors" }
+  },
+  "10": {
+    "class_type": "VAEEncodeForInpaint",
+    "inputs": { "pixels": ["target", 0], "vae": ["4", 2], "mask": ["mask", 0], "grow_mask_by": 12 }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] }
+  },
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0, "steps": 30, "cfg": 7.0,
+      "sampler_name": "dpmpp_2m", "scheduler": "karras",
+      "denoise": 0.7,
+      "model": ["4", 0], "positive": ["6", 0], "negative": ["7", 0],
+      "latent_image": ["10", 0]
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["3", 0], "vae": ["4", 2] }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "byrdhouse_facezone", "images": ["8", 0] }
+  }
+}

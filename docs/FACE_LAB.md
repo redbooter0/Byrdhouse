@@ -10,15 +10,24 @@ Open **Claude Code on BYRD-GAMING** and paste this — it proves the actual
 function on real hardware, end to end:
 
 ```
-Pull the branch claude/local-face-swap-lora-68v0sq in the ByrdHouse repo and sync
-E:\ByrdHouse from it. Then, per docs/FACE_LAB.md: (1) run facelab_preflight.py and
-install anything it says is missing, (2) run collect-training-images.ps1 to move my
-~300 generated images into the carey_face dataset and show me the manifest, (3) run
-train-lora.ps1 -DryRun and show me the exact training command before starting the
-real run, (4) after training, run a REAL face swap of my face onto my gojo, vegeta
-and luffy images with blend 0.35 using facelab_preflight.py --run, and show me the
-output files. My rules: never exceed 7200MB VRAM, use at most 16-18 CPU threads,
-never overwrite an existing LoRA file.
+FIRST, protect Codex's work: run scripts\find-codex-work.ps1, and if the ByrdHouse
+repo clone has uncommitted changes (Codex was editing byrdimage.py edit_face_zone,
+byrdfacezone.py and integration tests locally), commit them to a branch named
+codex/face-zone-wip and push it BEFORE anything else. Only then pull the branch
+claude/local-face-swap-lora-68v0sq and sync E:\ByrdHouse from it. Then, per
+docs/FACE_LAB.md: (1) run facelab_preflight.py and install anything it says is
+missing, (2) run collect-training-images.ps1 to move my ~300 generated images
+(profiles\me\references\generated_real_skit_scenes and the other generated_*
+folders — the script searches those) into the carey_face dataset and show me the
+manifest, (3) locate Codex's already-trained LoRA (37.9MB safetensors from
+2026-07-14, checkpoints at steps 400/800/1200/1600 — step 400 gated best) and keep
+every file, then run train-lora.ps1 -DryRun and show me the exact command before
+starting the real run — it must create a NEW versioned file, (4) run REAL swaps of
+my face onto my gojo, vegeta and luffy images: try the zone route first (byrdfacezone
+mask or a hand mask + the trained LoRA, denoise 0.7) and the ReActor blend route
+(blend 0.35) as comparison, and show me the output files side by side. My rules:
+never exceed 7200MB VRAM, use at most 16-18 CPU threads, never overwrite an
+existing LoRA file.
 ```
 
 Or by hand, in order (PowerShell on GAMING, ComfyUI running):
@@ -37,6 +46,11 @@ powershell -ExecutionPolicy Bypass -File scripts\train-lora.ps1 -Dataset carey_f
 python scripts\facelab_preflight.py --run E:\path\to\gojo.png --blend 0.35
 python scripts\facelab_preflight.py --run E:\path\to\vegeta.png --blend 0.35
 python scripts\facelab_preflight.py --run E:\path\to\luffy.png --blend 0.35
+
+# 3b. zone route (the founder lane): GPU edits ONLY inside the mask; identity
+#     from the trained LoRA + notes. Mask from byrdfacezone.py or hand-drawn
+#     (white = change zone).
+python scripts\byrdimage.py --swap-target E:\path\to\gojo.png --swap-mask E:\path\to\gojo_mask.png --lora carey_face --prompt "Gojo Satoru, cel shading, Jujutsu Kaisen style" --purpose "gojo zone edit"
 ```
 
 Outputs land in `artifacts\sandbox\<month>\` with sidecar cards, like every belt
@@ -89,10 +103,42 @@ experiments, fine. For monetized thumbnails, prefer the **LoRA + IP-Adapter
 FaceID route** (`me_as_character`) — your own likeness, trained locally on your
 own images, no license question.
 
-## Where Codex left off
+## Where Codex left off (recovered from its sessions, 2026-07-14)
 
-Codex's local files (sessions, AGENTS.md, uncommitted work, yesterday's training
-setup) live on the PC — run:
+Two Codex sessions did the work. **"These are my references"** built the dataset:
+300 audited scene images (IDs 1–300 in 100-batches, unique hashes, generated from
+real photos only) via `build-100-photoreal-skit-manifest.ps1` and a second
+100-brand animation catalog builder, landing in
+`profiles\me\references\generated_real_skit_scenes\` (+ siblings), plus 10 real
+photos `me_photo_23.jpg`–`me_photo_32.jpg` in the references root.
+
+**"Review targets folder"** built the swap engine and got real results:
+
+- **A LoRA was already trained**: 1600/1600 steps in 19:55, final loss 0.118,
+  37.9MB file, with saved checkpoints at 400/800/1200/1600. Its gate testing found
+  **step 400 the most personal**; 1200/1600 drifted generic ("too much jaw beard").
+  FIND AND KEEP THESE FILES — `train-lora.ps1` versions new runs so they can never
+  be overwritten.
+- **The breakthrough**: CPU **mesh-to-mesh transfer** (`byrdfacezone.py` + an
+  `edit_face_zone` addition inside its local copy of `byrdimage.py` — UNCOMMITTED
+  on the PC). It warps the 478-point face grid into the character's pose (Gojo,
+  Vegeta, Luffy each matched to their franchise style reference), keeping
+  blindfold/hair/collar target-authentic. The Gojo and Vegeta seeds looked RIGHT.
+- **Where it stopped**: the GPU cleanup pass. Too weak → source lighting kept +
+  jaw/ear seam; ~0.9 denoise → LoRA takes over with artifacts. It was raising
+  cleanup denoise into the middle corridor and planning semantic hair masking.
+  That corridor is exactly what the belt's **zone route** runs (default 0.7,
+  clamped 0.3–0.9, `image.faceswap` with a mask).
+- **The founder rule it was told to make permanent** (now the belt's contract):
+  *upload → CPU face outline → visible edit-zone overlay → approved soft mask →
+  GPU executes only inside that zone → keep original, outline, mask, result +
+  sidecar card.* v1 in the belt: supply the mask (`mask_artifact`/`mask_path` or
+  the dashboard's Edit-zone field); next rung: auto landmark mask + approval
+  overlay endpoint (ComfyUI already has the landmark tooling — it only needs the
+  small Comfy-Org face-landmarker model Codex was fetching).
+
+Locate all of it (sessions, byrdfacezone.py, the trained LoRA, uncommitted repo
+changes) with:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\find-codex-work.ps1
