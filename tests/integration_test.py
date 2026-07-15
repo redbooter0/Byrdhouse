@@ -69,7 +69,10 @@ def main():
             shutil.copytree(gsrc / "refs", gdst / "refs", dirs_exist_ok=True)
         if (gsrc / "packed-refs").exists():
             shutil.copy(gsrc / "packed-refs", gdst / "packed-refs")
-    cfg = json.loads((REPO / "byrdhouse.config.json").read_text())
+    # The checked-in config is UTF-8 with a BOM.  Specify the codec so the
+    # belt test is deterministic on Windows consoles whose default codec is
+    # cp1252, as well as on Linux CI.
+    cfg = json.loads((REPO / "byrdhouse.config.json").read_text(encoding="utf-8-sig"))
     cfg["services"].update(comfyui=f"http://127.0.0.1:{CP}",
                            lmstudio=f"http://127.0.0.1:{LP}/v1",
                            router=f"http://127.0.0.1:{RP}")
@@ -273,10 +276,233 @@ def main():
         check("enhanced prompt flowed into a freeform generation",
               enhanced and json.loads(enhanced[0]["meta"])["prompt"] != "")
 
+        # Permanent CPU semantic face-zone identity route: keep the recipe,
+        # neck-up-minus-hair mask, mesh-seeded cleanup graph, worker dispatch,
+        # reference map, and production LoRA contract locked together.  These
+        # are structural checks so the zero-GPU belt test catches a renamed or
+        # missing route before a gaming-PC job reaches ComfyUI.
+        face_recipe_path = ROOT / "recipes" / "anime_face_zone_edit.v1.json"
+        check("CPU face-zone recipe exists", face_recipe_path.is_file(),
+              str(face_recipe_path))
+        face_recipe = (json.loads(face_recipe_path.read_text(encoding="utf-8-sig"))
+                       if face_recipe_path.is_file() else {})
+        check("CPU face-zone recipe uses the permanent runner",
+              face_recipe.get("runner") == "face_zone_identity_edit",
+              str(face_recipe.get("runner")))
+
+        face_workflow_rel = face_recipe.get("workflow", "")
+        check("CPU face-zone recipe selects the mesh-seed cleanup graph",
+              face_workflow_rel == "workflows/sd15_face_mesh_seed_refine_api.json",
+              str(face_workflow_rel))
+        face_workflow_path = ROOT / face_workflow_rel if face_workflow_rel else None
+        check("CPU face-zone workflow exists",
+              bool(face_workflow_path and face_workflow_path.is_file()),
+              str(face_workflow_path))
+        face_graph = (json.loads(face_workflow_path.read_text(encoding="utf-8-sig"))
+                      if face_workflow_path and face_workflow_path.is_file() else {})
+        face_node_types = {node.get("class_type") for node in face_graph.values()
+                           if isinstance(node, dict)}
+        check("CPU face-zone workflow refines the retained mesh seed",
+              {"VAEEncode", "SetLatentNoiseMask"} <= face_node_types,
+              str(sorted(node for node in face_node_types if node)))
+
+        identity_references = face_recipe.get("identity_references") or {}
+        expected_identity_references = {
+            "gojo": "profiles/me/references/generated_anime_cartoon/002_naruto.png",
+            "vegeta": "profiles/me/references/generated_anime_cartoon/013_yu-yu-hakusho.png",
+            "luffy_close": "profiles/me/references/generated_anime_cartoon/003_one-piece.png",
+            "luffy_full": "profiles/me/references/generated_anime_cartoon/003_one-piece.png",
+        }
+        check("face-zone presets pin reviewed identity references",
+              identity_references == expected_identity_references,
+              str(identity_references))
+
+        facezone_source = (ROOT / "scripts" / "byrdfacezone.py").read_text(
+            encoding="utf-8-sig")
+        byrdimage_source = (ROOT / "scripts" / "byrdimage.py").read_text(
+            encoding="utf-8-sig")
+        worker_source = (ROOT / "scripts" / "worker.py").read_text(
+            encoding="utf-8-sig")
+        check("CPU face-zone script exposes prepare and composite functions",
+              "def prepare_face_zone(" in facezone_source
+              and "def composite_generated(" in facezone_source)
+        check("CPU face-zone script locks the closed-head-minus-hair rule",
+              '"zone_kind": "closed-head-envelope-minus-independent-hair-outline-plus-neck"' in facezone_source
+              and '"hair_headwear_exclusion"' in facezone_source
+              and '"neck_anchor"' in facezone_source
+              and '"semantic_labels"' in facezone_source)
+        check("CPU face-zone script locks the commercial semantic model",
+              'SELFIE_SEGMENTER_SHA256 = "c6748b1253a99067ef71f7e26ca71096cd449baefa8f101900ea23016507e0e0"'
+              in facezone_source
+              and '"license": "Apache-2.0"' in facezone_source)
+        check("anime semantic fallback stays private pending license review",
+              'PARSENET_SHA256 = "3d558d8d0e42c20224f13cf5a29c79eba2d59913419f945545d8cf7b72920de2"'
+              in facezone_source
+              and '"license": "deployment-license-review-required"' in facezone_source
+              and '"deployment_scope": "private-local-evaluation-only"' in facezone_source)
+        check("CPU identity seed uses the 478-point triangle warp plus tone transfer",
+              "def _build_identity_mesh_seed(" in facezone_source
+              and '"method": "cpu-mediapipe-478-triangle-warp-plus-semantic-tone-transfer"' in facezone_source
+              and '"identity_mesh_seed"' in facezone_source)
+        check("byrdimage exposes the face-zone adapter",
+              "def edit_face_zone(" in byrdimage_source
+              and 'recipe.get("runner") != "face_zone_identity_edit"' in byrdimage_source
+              and 'zone_script = root / "scripts" / "byrdfacezone.py"' in byrdimage_source)
+        check("face-zone composite restores protected target material after GPU cleanup",
+              "restore_protected_material(" in facezone_source)
+        check("face-zone composite pastes the GPU result into the final image",
+              "original.paste(generated, (left, top), soft)" in facezone_source)
+        check("identity-eye mode releases target feature locks",
+              'eye_source_mode == "target" and eye_protection_strength > 0.0' in facezone_source)
+        from PIL import Image
+        check("whole-head seed restores target hair and accessories after identity fill",
+              "identity_seed = restore_protected_material(identity_seed, crop, hair_exclusion)" in facezone_source
+              and '"target_theme_overlay"' in facezone_source
+              and '"mask_artifact": "hair_headwear_exclusion"' in facezone_source)
+
+
+        check("CPU upload analyzer walks neck-to-head before generation",
+              "def _ordered_body_part_traversal(" in facezone_source
+              and '"neck-left"' in facezone_source
+              and '"top-of-head"' in facezone_source
+              and '"neck-anchor-close"' in facezone_source
+              and "def _build_upload_analysis(" in facezone_source)
+        check("CPU foundation separates face-core from whole-zone coverage",
+              '"core_coverage_ratio"' in facezone_source
+              and '"facial_core_coverage"' in facezone_source
+              and "core_coverage_ratio < 0.55" in facezone_source)
+        check("adapter blocks GPU until every upload-analysis stage passes",
+              "CPU upload analysis did not pass every ordered body-part stage" in byrdimage_source
+              and "expected_upload_stages" in byrdimage_source
+              and '"upload_analysis": upload_analysis' in byrdimage_source)
+        sys.path.insert(0, str(ROOT / "scripts"))
+        from facezone_composite import restore_protected_material
+        target_material = Image.new("RGB", (10, 10), (12, 34, 56))
+        generated_material = Image.new("RGB", (10, 10), (220, 30, 30))
+        protected_material = Image.new("L", (10, 10), 0)
+        for x in range(4, 6):
+            for y in range(4, 6):
+                target_material.putpixel((x, y), (25, 205, 95))
+                protected_material.putpixel((x, y), 255)
+        restored_material = restore_protected_material(
+            generated_material, target_material, protected_material
+        )
+        check("protected target pixels survive final face-zone composite",
+              restored_material.getpixel((4, 4)) == (25, 205, 95)
+              and restored_material.getpixel((5, 5)) == (25, 205, 95)
+              and restored_material.getpixel((0, 0)) == (220, 30, 30))
+        check("worker dispatches face-zone jobs to byrdimage",
+              'recipe_data.get("runner") == "face_zone_identity_edit"' in worker_source
+              and "byrdimage.edit_face_zone(" in worker_source)
+
+        production_identity = face_recipe.get("identity") or {}
+        check("face-zone production LoRA is explicit",
+              production_identity.get("lora") == "carey_meina_sd15_v1.safetensors"
+              and isinstance(production_identity.get("strength"), (int, float))
+              and isinstance(production_identity.get("clip_strength"), (int, float)),
+              str(production_identity))
+        check("face-zone adapter refuses an unconditioned production run",
+              "face-zone edit requires an installed identity LoRA" in byrdimage_source
+              and "selected_identity_lora = resolve_lora(" in byrdimage_source
+              and 'lora_id="byrd_identity_lora"' in byrdimage_source)
+
         # aspect presets snap to SDXL-native dims; LoRA splices into the graph
+        v2_recipe_path = ROOT / "recipes" / "anime_face_zone_edit.v2.json"
+        check("plug-and-play face-swap v2 recipe exists", v2_recipe_path.is_file(), str(v2_recipe_path))
+        v2_recipe = (json.loads(v2_recipe_path.read_text(encoding="utf-8-sig"))
+                     if v2_recipe_path.is_file() else {})
+        v2_passes = (v2_recipe.get("defaults") or {}).get("gpu_passes") or {}
+        check("v2 recipe pins the local two-pass mesh route",
+              v2_recipe.get("runner") == "face_zone_identity_edit"
+              and v2_recipe.get("workflow") == "workflows/sd15_face_mesh_seed_multipass_api.json"
+              and v2_recipe.get("identity_references", {}).get("auto")
+              and v2_recipe.get("defaults", {}).get("min_mesh_coverage") == 0.55
+              and list(v2_passes) == ["identity_fill", "line_harmonize"], str(v2_passes))
+
+        v2_presets = v2_recipe.get("target_presets") or {}
+        check("hard-test presets encode accessory truth before masking",
+              v2_presets.get("vegeta", {}).get("absent_accessories")
+              == ["eyeglasses", "headwear", "earrings", "necklaces"]
+              and "headwear" not in v2_presets.get("luffy_close", {}).get("absent_accessories", [])
+              and "headwear" in v2_presets.get("luffy_close", {}).get(
+                  "expected_preserved_materials", []),
+              str(v2_presets))
+        check("preset contradictions are corrected only inside detected face geometry",
+              'contradictory = (category == label) & seed' in facezone_source
+              and 'hair_headwear &= ~contradictory' in facezone_source
+              and '"residual_absent_accessory_pixels_in_geometric_face"' in facezone_source
+              and 'zone_cmd += ["--absent-accessory", str(accessory)]' in byrdimage_source)
+        check("adapter records crop preflight and refuses expandable heads before GPU",
+              'crop_preflight = dict(zone.get("crop_preflight") or {})' in byrdimage_source
+              and 'crop_preflight.get("passed") is False' in byrdimage_source
+              and 'CPU crop preflight did not contain the full head/neck before GPU work' in byrdimage_source
+              and '"crop_preflight": crop_preflight' in byrdimage_source)
+        check("face-zone v2 defaults can stop at the better CPU seed",
+              '"skip_gpu_cleanup": true' in v2_recipe_path.read_text(encoding="utf-8-sig")
+              and 'skip_gpu_cleanup = bool(' in byrdimage_source
+              and 'CPU identity mesh seed used without GPU cleanup' in byrdimage_source
+              and 'cpu_face_zone_sd15_seed_only' in byrdimage_source)
+        v2_graph_path = ROOT / v2_recipe.get("workflow", "")
+        v2_graph = (json.loads(v2_graph_path.read_text(encoding="utf-8-sig"))
+                    if v2_graph_path.is_file() else {})
+        v2_samplers = [node for node in v2_graph.values() if isinstance(node, dict) and node.get("class_type") == "KSampler"]
+        v2_pass_ids = {node.get("_meta", {}).get("byrd_pass") for node in v2_samplers}
+        v2_node_types = [node.get("class_type") for node in v2_graph.values() if isinstance(node, dict)]
+        check("v2 graph keeps the GPU route in one masked latent chain",
+              len(v2_samplers) == 2 and v2_pass_ids == {"identity_fill", "line_harmonize"}
+              and v2_graph.get("12", {}).get("inputs", {}).get("samples") == ["9", 0]
+              and v2_graph.get("13", {}).get("inputs", {}).get("latent_image") == ["12", 0]
+              and v2_node_types.count("VAEEncode") == 1
+              and v2_node_types.count("VAEDecode") == 1
+              and v2_node_types.count("SaveImage") == 1
+              and any(isinstance(node, dict) and node.get("_meta", {}).get("title") == "EDGE HARMONIZE MASK" for node in v2_graph.values()),
+              str(v2_pass_ids))
+        check("adapter fails closed for invalid face-swap inputs",
+              'identity_references.get(preset_key) or identity_references.get("auto")' in byrdimage_source
+              and "unknown face-zone target preset" in byrdimage_source
+              and "refusing generic inpaint fallback" in byrdimage_source
+              and "min_mesh_coverage must be a number between 0 and 1" in byrdimage_source
+              and "immutable_upload_root" in byrdimage_source)
+
         sys.path.insert(0, str(ROOT / "scripts"))
         import byrdimage
         check("aspect preset resolves SDXL dims", byrdimage.pick_dims("9:16") == (768, 1344))
+        v2_plan = byrdimage._resolve_face_zone_gpu_passes({}, v2_recipe["defaults"], 7132)
+        check("v2 adapter resolves the two local GPU passes deterministically",
+              list(v2_plan) == ["identity_fill", "line_harmonize"]
+              and [entry["seed"] for entry in v2_plan.values()] == [7132, 7133]
+              and [entry["steps"] for entry in v2_plan.values()] == [16, 8]
+              and [entry["denoise"] for entry in v2_plan.values()] == [0.38, 0.12], str(v2_plan))
+        try:
+            byrdimage._resolve_face_zone_gpu_passes(
+                {"gpu_passes": {"identity_fill": {"denoise": 0}}}, v2_recipe["defaults"], 7132
+            )
+        except SystemExit as exc:
+            invalid_pass_rejected = "denoise" in str(exc)
+        else:
+            invalid_pass_rejected = False
+        check("v2 adapter rejects an unsafe GPU-pass override", invalid_pass_rejected)
+
+        uploaded_target = ROOT / "artifacts" / "_sources" / "dashboard-upload.png"
+        uploaded_target.parent.mkdir(parents=True, exist_ok=True)
+        uploaded_target.write_bytes(b"immutable upload")
+        try:
+            byrdimage._require_original_target(ROOT, uploaded_target)
+        except SystemExit:
+            upload_cache_allowed = False
+        else:
+            upload_cache_allowed = True
+        generated_target = ROOT / "artifacts" / "image_lab" / "generated.png"
+        generated_target.parent.mkdir(parents=True, exist_ok=True)
+        generated_target.write_bytes(b"generated output")
+        try:
+            byrdimage._require_original_target(ROOT, generated_target)
+        except SystemExit:
+            generated_target_rejected = True
+        else:
+            generated_target_rejected = False
+        check("adapter accepts immutable dashboard uploads but rejects generated retries",
+              upload_cache_allowed and generated_target_rejected)
         g = json.loads((ROOT / "workflows" / "sdxl_base_api.json").read_text())
         g.pop("_comment", None)
         byrdimage.insert_lora(g, "test_lora.safetensors", 0.8)
@@ -715,3 +941,6 @@ def main():
 if __name__ == "__main__":
     import urllib.error  # noqa: F401  (used in auth check)
     main()
+
+
+

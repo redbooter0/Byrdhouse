@@ -1,0 +1,21 @@
+{
+  "id": "carey_anime_bootstrap",
+  "version": 1,
+  "kind": "image.generate",
+  "subject_profile": "me",
+  "category": "IdentityBootstrap",
+  "_note": "Private local teacher set. Uses the real-photo Carey LoRA at split model/CLIP strengths to create plain-background, captionable identity views for a compact anime distillation LoRA.",
+  "workflow": "workflows/sd15_identity_portrait_gate_api.json",
+  "template": "masterpiece, best quality, 1boy, careybh person, young adult Black man with deep brown skin, recognizable Carey facial structure, slim oval face, high forehead, almond-shaped brown eyes, rounded nose with broad nostrils, full lips, sparse jawline beard and short goatee, {hairstyle}, {pose}, {expression}, solo head-and-shoulders portrait, {style}, simple plain background",
+  "negative": "photograph, photorealistic, semi-realistic, 3d, render, digital painting, glossy skin, live action skin texture, different person, generic face, older man, square jaw, thick full beard, dense beard, child, woman, pale skin, hat, glasses, distorted eyes, asymmetrical eyes, deformed face, duplicate, text, watermark, blurry, detailed scenery, car interior, store interior, bathroom",
+  "defaults": {
+    "checkpoint": "Meina V5.1 - Baked VAE.safetensors",
+    "steps": 28,
+    "batch": 1
+  },
+  "rubric": {
+    "identity": "1-5 — does the view still read as Carey?",
+    "pose": "1-5 — did the requested camera angle/expression render clearly?",
+    "style": "1-5 — is it clean, flat 2D anime rather than a photograph?"
+  }
+}

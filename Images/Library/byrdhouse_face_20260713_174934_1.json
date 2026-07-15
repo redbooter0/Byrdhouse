@@ -1,0 +1,8 @@
+{
+  "prompt_id": "4e0248c8-d8c4-4774-9506-22ef0efde2cd",
+  "workflow": "E:\\ByrdHouse\\Images\\Workflows\\byrdhouse_face_swap_social\\byrdhouse_social_main_head_face_model_v3_api_v1.json",
+  "target": "E:\\ByrdHouse\\Images\\Targets\\gta_iv\\gta_iv_cover.jpg",
+  "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_08.jpg",
+  "face_index": "0",
+  "comfy_output": "E:\\ByrdHouse\\Generators\\ComfyUI\\output\\ByrdHouse\\FaceSwap\\carey_v3_model_full_00001_.png"
+}

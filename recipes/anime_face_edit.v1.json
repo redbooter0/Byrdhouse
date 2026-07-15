@@ -1,0 +1,62 @@
+{
+  "id": "anime_face_edit",
+  "version": 1,
+  "kind": "image.generate",
+  "runner": "target_identity_edit",
+  "subject_profile": "me",
+  "category": "Anime target edit",
+  "_note": "Compact 8 GB gaming-PC face edit: preserves the supplied target, regenerates only its feathered face area, and requires the user-owned Carey SD1.5 identity LoRA. It intentionally refuses a generic/unverified identity result until that LoRA is installed.",
+  "workflow": "workflows/sd15_anime_target_identity_api.json",
+  "template": "careybh person, young adult Black man with deep brown skin, recognizable Carey facial structure, slim oval face, high forehead, almond-shaped brown eyes, rounded nose with broad nostrils, full lips, sparse jawline beard and short goatee, anime illustration rendered as clean hand-drawn shonen anime linework, coherent cel shading, natural proportions, preserve the supplied target image's pose, hairstyle, clothes, expression, composition, and lighting; redraw only the face so it belongs in the artwork",
+  "negative": "pale skin, light skin, older man, square jaw, thick full beard, dense beard, photoreal pasted face, live action skin texture, face cutout, warped eyes, asymmetrical pupils, broken teeth, distorted mouth, extra facial features, blurry, low quality, text, watermark",
+  "identity": {
+    "trigger": "careybh person",
+    "lora": "carey_meina_sd15_v1.safetensors",
+    "strength": 0.82
+  },
+  "defaults": {
+    "checkpoint": "Meina V5.1 - Baked VAE.safetensors",
+    "steps": 18,
+    "cfg": 6.0,
+    "sampler": "dpmpp_2m",
+    "scheduler": "karras",
+    "denoise": 0.48,
+    "max_target_side": 768,
+    "batch": 1
+  },
+  "draft": {
+    "lora": "pytorch_lora_weights.safetensors",
+    "strength": 1.0,
+    "steps": 6,
+    "cfg": 1.5,
+    "sampler": "lcm",
+    "scheduler": "sgm_uniform"
+  },
+  "target_presets": {
+    "gojo": {
+      "label": "Gojo close portrait",
+      "prompt_context": "white hair, white blindfold, dark high collar, calm close portrait",
+      "mask": { "x": 158, "y": 94, "width": 248, "height": 262, "feather": 28 }
+    },
+    "vegeta": {
+      "label": "Vegeta close portrait",
+      "prompt_context": "sharp black spiky hair, blue armor, stern close portrait",
+      "mask": { "x": 202, "y": 30, "width": 204, "height": 184, "feather": 24 }
+    },
+    "luffy_close": {
+      "label": "Luffy grin close portrait",
+      "prompt_context": "straw hat, red jacket, broad grin, close portrait",
+      "mask": { "x": 136, "y": 84, "width": 320, "height": 194, "feather": 24 }
+    },
+    "luffy_full": {
+      "label": "Luffy full body",
+      "prompt_context": "straw hat, red open jacket, yellow sash, full-body stance",
+      "mask": { "x": 134, "y": 84, "width": 150, "height": 140, "feather": 18 }
+    }
+  },
+  "rubric": {
+    "identity": "1-5 — does the anime face still read as Carey?",
+    "integration": "1-5 — do linework, color, lighting, and edge blending belong to the target art?",
+    "target_fidelity": "1-5 — are pose, outfit, composition, and background preserved?"
+  }
+}

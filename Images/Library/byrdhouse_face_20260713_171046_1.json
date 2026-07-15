@@ -1,0 +1,8 @@
+{
+  "prompt_id": "cd26be46-8bdb-4595-a386-87cb5e5d42b9",
+  "workflow": "E:\\ByrdHouse\\Images\\Workflows\\byrdhouse_face_swap_social\\byrdhouse_social_main_head_fast_api_v1.json",
+  "target": "E:\\ByrdHouse\\Images\\Targets\\examples\\example_1-Photo-1.jpg",
+  "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_08.jpg",
+  "face_index": "2",
+  "comfy_output": "E:\\ByrdHouse\\Generators\\ComfyUI\\output\\ByrdHouse\\FaceSwap\\social_main_head_fast_00004_.png"
+}

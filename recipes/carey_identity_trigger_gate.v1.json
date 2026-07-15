@@ -1,0 +1,21 @@
+{
+  "id": "carey_identity_trigger_gate",
+  "version": 1,
+  "kind": "image.generate",
+  "subject_profile": "me",
+  "category": "IdentityValidation",
+  "_note": "Private trigger-only gate. It intentionally omits Carey-specific face geometry so the LoRA trigger must supply identity rather than the prompt.",
+  "workflow": "workflows/sd15_identity_portrait_gate_api.json",
+  "template": "masterpiece, best quality, solo head-and-shoulders portrait of careybh person, 1boy, adult Black man, neutral expression, direct eye contact, clean hand-drawn 2D anime, bold linework, flat cel shading, simple background",
+  "negative": "photograph, photorealistic, semi-realistic, 3d, render, different person, generic replacement face, woman, child, pale skin, hat, glasses, exaggerated grin, distorted eyes, asymmetrical eyes, deformed face, duplicate, text, watermark, blurry",
+  "defaults": {
+    "checkpoint": "Meina V5.1 - Baked VAE.safetensors",
+    "steps": 24,
+    "batch": 1
+  },
+  "rubric": {
+    "identity": "1-5 - does the trigger alone produce a face recognizably like Carey?",
+    "consistency": "1-5 - does identity survive checkpoint progression without becoming generic?",
+    "anime_quality": "1-5 - is the portrait clean, native 2D anime rather than a pasted photo?"
+  }
+}

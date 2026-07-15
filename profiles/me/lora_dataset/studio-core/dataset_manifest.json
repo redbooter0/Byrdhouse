@@ -1,0 +1,138 @@
+{
+  "version": 2,
+  "mode": "studio-core",
+  "trigger": "careybh person",
+  "source_root": "E:\\ByrdHouse\\profiles\\me\\references",
+  "buckets": {
+    "real": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\studio-core\\5_careybh_real",
+    "studio": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\studio-core\\6_careybh_studio"
+  },
+  "items": [
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_01.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\studio-core\\5_careybh_real\\real_001_me_photo_01.jpg",
+      "category": "real",
+      "width": 650,
+      "height": 1280,
+      "sha256": "71c1d120ca71236e72d0abe4876ca55f1f140a1a4c53b90bc34eb68f7d918129",
+      "caption": "careybh person, adult Black man, portrait photograph"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_02.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\studio-core\\5_careybh_real\\real_002_me_photo_02.jpg",
+      "category": "real",
+      "width": 650,
+      "height": 1280,
+      "sha256": "4280fc2b73cdb42b8a25f97b11e827a1cbe8359b011b232a4c2fa59d1ed774ec",
+      "caption": "careybh person, adult Black man, portrait photograph"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_03.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\studio-core\\5_careybh_real\\real_003_me_photo_03.jpg",
+      "category": "real",
+      "width": 720,
+      "height": 1280,
+      "sha256": "59c1f38f630d8b25bfcc556e7afc4d514f60fda5204d3d1eb07fde4a434e83f9",
+      "caption": "careybh person, adult Black man, portrait photograph"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_04.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\studio-core\\5_careybh_real\\real_004_me_photo_04.jpg",
+      "category": "real",
+      "width": 2880,
+      "height": 3840,
+      "sha256": "5a33ef25588fddfa8aabf206987c3432365ce2dfb4a1f15940bf6e5b8652dc0d",
+      "caption": "careybh person, adult Black man, portrait photograph"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_05.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\studio-core\\5_careybh_real\\real_005_me_photo_05.jpg",
+      "category": "real",
+      "width": 720,
+      "height": 1280,
+      "sha256": "7c3684c62d928e1fb69794e90d578c2ba63ade701ea12e550546633e48b90132",
+      "caption": "careybh person, adult Black man, portrait photograph"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_07.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\studio-core\\5_careybh_real\\real_006_me_photo_07.jpg",
+      "category": "real",
+      "width": 2880,
+      "height": 3840,
+      "sha256": "897688880a2b1bc2908ed9d9e9be3a7d935088dc928c779e0341639415775bc3",
+      "caption": "careybh person, adult Black man, portrait photograph"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_08.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\studio-core\\5_careybh_real\\real_007_me_photo_08.jpg",
+      "category": "real",
+      "width": 720,
+      "height": 1280,
+      "sha256": "ca784dc51993d401831b7d1ad5ce7c6f1ce06611f087b4c9319686924d4b5690",
+      "caption": "careybh person, adult Black man, portrait photograph"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_09.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\studio-core\\5_careybh_real\\real_008_me_photo_09.jpg",
+      "category": "real",
+      "width": 720,
+      "height": 1280,
+      "sha256": "3d4acfe26ffc5bb42d322ab35fe3dd089f7680eb99bf27781bf65885612d9c90",
+      "caption": "careybh person, adult Black man, portrait photograph"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\ai_identity_front_v1.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\studio-core\\6_careybh_studio\\studio_001_ai_identity_front_v1.png",
+      "category": "studio",
+      "width": 1402,
+      "height": 1122,
+      "sha256": "bc92055863de940a54cb14d099ced103e8d866bb70a05acf9ce289c22b5312ce",
+      "caption": "careybh person, adult Black man, studio identity portrait"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\ai_identity_profile_left_v1.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\studio-core\\6_careybh_studio\\studio_002_ai_identity_profile_left_v1.png",
+      "category": "studio",
+      "width": 1402,
+      "height": 1122,
+      "sha256": "83b9e57aac080b21fe9641d4cf47d25137fcd58674c635a55c53207723436501",
+      "caption": "careybh person, adult Black man, studio identity portrait"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\ai_identity_smile_front_teeth_v1.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\studio-core\\6_careybh_studio\\studio_003_ai_identity_smile_front_teeth_v1.png",
+      "category": "studio",
+      "width": 1402,
+      "height": 1122,
+      "sha256": "682852e6c68a891d2a8239b2fbe70d8a10964b277fc1211704fcf1a23b3f6e2c",
+      "caption": "careybh person, adult Black man, studio identity portrait"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\ai_identity_smile_threequarter_left_teeth_v1.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\studio-core\\6_careybh_studio\\studio_004_ai_identity_smile_threequarter_left_teeth_v1.png",
+      "category": "studio",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "1216731f5cece5e16282d3c9a1d6e37546c91a36ca7911d20907b0352ce3f99a",
+      "caption": "careybh person, adult Black man, studio identity portrait"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\ai_identity_threequarter_left_v1.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\studio-core\\6_careybh_studio\\studio_005_ai_identity_threequarter_left_v1.png",
+      "category": "studio",
+      "width": 1402,
+      "height": 1122,
+      "sha256": "85800b3862b1efdba33377cf9b44588367a97448bd562e4d62d079d3194e6988",
+      "caption": "careybh person, adult Black man, studio identity portrait"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\ai_identity_threequarter_right_v1.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\studio-core\\6_careybh_studio\\studio_006_ai_identity_threequarter_right_v1.png",
+      "category": "studio",
+      "width": 1023,
+      "height": 1537,
+      "sha256": "9fd440037d6fe7166fc43d47d79552da292dbb5deddfec7f8513b7722fbf278d",
+      "caption": "careybh person, adult Black man, studio identity portrait"
+    }
+  ]
+}

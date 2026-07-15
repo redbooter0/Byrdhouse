@@ -1,0 +1,20 @@
+{
+  "id": "carey_identity_gate",
+  "version": 1,
+  "kind": "image.generate",
+  "subject_profile": "me",
+  "category": "IdentityValidation",
+  "_note": "Private fixed-seed diagnostic. A candidate must look recognizably like Carey here before target-image integration tests are allowed.",
+  "workflow": "workflows/sd15_identity_portrait_gate_api.json",
+  "template": "masterpiece, best quality, 1boy, careybh person, young adult Black man with deep brown skin, recognizable Carey facial structure, slim oval face, high forehead, almond-shaped brown eyes, rounded nose with broad nostrils, full lips, sparse jawline beard and short goatee, natural afro, solo head-and-shoulders close portrait, neutral expression, direct eye contact, 1990s shonen anime screencap, hand-drawn 2D animation, bold black outlines, flat cel shading, simple background",
+  "negative": "photograph, photorealistic, semi-realistic, 3d, render, digital painting, glossy skin, live action skin texture, different person, generic face, older man, square jaw, thick full beard, dense beard, child, woman, pale skin, hat, glasses, exaggerated grin, distorted eyes, asymmetrical eyes, deformed face, duplicate, text, watermark, blurry",
+  "defaults": {
+    "checkpoint": "Meina V5.1 - Baked VAE.safetensors",
+    "steps": 24,
+    "batch": 1
+  },
+  "rubric": {
+    "identity": "1-5 — does the face read as Carey without a target image?",
+    "anime_quality": "1-5 — is the portrait clean enough for target integration?"
+  }
+}

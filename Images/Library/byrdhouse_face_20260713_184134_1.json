@@ -1,0 +1,8 @@
+{
+  "prompt_id": "93c1910a-5fde-4385-9510-b45f4083545e",
+  "workflow": "Images\\Workflows\\byrdhouse_face_swap_social\\byrdhouse_social_clean_identity_v4_aiupscale_api_v1.json",
+  "target": "E:\\ByrdHouse\\Images\\Targets\\examples\\example_1-Photo-1.jpg",
+  "source": "E:\\ByrdHouse\\profiles\\me\\references\\ai_identity_front_v1.png",
+  "face_index": "2",
+  "comfy_output": "E:\\ByrdHouse\\Generators\\ComfyUI\\output\\ByrdHouse\\FaceSwap\\carey_clean_v4_aiupscale_00001_.png"
+}

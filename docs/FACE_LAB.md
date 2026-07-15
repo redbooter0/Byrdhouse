@@ -1,8 +1,20 @@
 # FACE LAB — local face swap + identity LoRA (the belt's face engine)
 
 *ByrdHouse can now IMAGINE an image (recipes → ComfyUI) and SWAP a face onto any
-image (ReActor → ComfyUI) — 100% local on BYRD-GAMING. MINI/router/dashboard are
-optional for all of this; the function itself runs straight against ComfyUI.*
+image — 100% local on BYRD-GAMING. MINI/router/dashboard are optional for all of
+this; the functions run straight against ComfyUI.*
+
+## The reconciled lane map (2026-07-15 — both agents' work, one belt)
+
+| Tier | Lane | Job / recipe | Docs |
+|---|---|---|---|
+| **Quality (funded/public)** | CPU-first mesh seed: 478-pt mesh + semantic zone + reference warp + optional low-denoise cleanup, SD1.5 Meina + owner LoRA (`careybh person`) | recipe `anime_face_zone_edit@1` (runner `face_zone_identity_edit`) | `docs/FACE_ZONE_EDIT_WORKFLOW.md`, state in `docs/IMAGE_GENERATION_STATE.md` |
+| **Fast daily** | Preview (CPU mask, approvable) → Zone (mask-bounded edit) → Auto (FaceDetailer detect+redraw) | `image.faceswap` routes `preview`/mask/`auto` | this file |
+| **Private experiments only** | ReActor direct swap/blend, IP-Adapter FaceID (`me_as_character`) — InsightFace research license, excluded from the funded lane | `image.faceswap` swap route | policy in `AGENTS.md` + `docs/MODELS.md` |
+
+Read `docs/IMAGE_GENERATION_STATE.md` before touching the quality lane — it is
+the live handoff (current verdict: architecture proven, no LoRA candidate
+approved yet; CPU-only seed finish preferred on hard targets).
 
 ## The one test that matters (run on the GAMING PC)
 
