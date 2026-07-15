@@ -2686,6 +2686,9 @@ def parse_args() -> argparse.Namespace:
     prepare.add_argument("--eye-source", choices=("identity", "target"), default="identity")
     prepare.add_argument("--absent-accessory", action="append", default=[])
     prepare.add_argument("--manual-box", type=_parse_box)
+    prepare.add_argument("--canvas-size", type=int, default=512, choices=(512, 640, 768),
+                         help="working crop resolution — picked by the adapter from the "
+                              "examiner's face measurement so large faces keep native detail")
     prepare.add_argument("--exclude-box", type=_parse_box, action="append", default=[])
     composite = sub.add_parser("composite", help="Composite a generated 512px crop through the saved soft zone.")
     composite.add_argument("--zone", type=Path, required=True)
@@ -2706,6 +2709,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     if args.command == "prepare":
+        global CANVAS_SIZE
+        CANVAS_SIZE = int(args.canvas_size)
         record = prepare_face_zone(
             args.root,
             args.input,

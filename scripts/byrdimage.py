@@ -883,6 +883,16 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
                                           defaults.get("min_face_confidence", 0.35)),
                                thorough=not engine.get("quick_report", False))
 
+    # Flow fix (founder, 2026-07-15): work at the face's native detail. The
+    # examiner already measured every face — pick the crop canvas from the
+    # operated face's size instead of forcing 512 (large faces were being
+    # downscaled into softness on the way in and stretched back on composite).
+    canvas = int(engine.get("crop_size", 0) or 0)
+    if canvas not in (512, 640, 768):
+        face_entries = {f.get("index"): f for f in face_report.get("faces", [])}
+        side_px = float(face_entries.get(int(engine.get("face_index", 0)), {}).get("side_px", 0))
+        canvas = 512 if side_px < 420 else 640 if side_px < 560 else 768
+
     zone_cmd = [
         str(comfy_python), str(zone_script), "--root", str(root), "prepare",
         "--input", str(target), "--job-id", resolved_job_id,
@@ -890,6 +900,7 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         "--crop-factor", str(engine.get("crop_factor", defaults.get("crop_factor", 1.65))),
         "--face-index", str(int(engine.get("face_index", 0))),
         "--zone-expand", str(engine.get("zone_expand", defaults.get("zone_expand", 1.10))),
+        "--canvas-size", str(canvas),
     ]
     if identity_reference_path is not None:
         zone_cmd += ["--identity-reference", str(identity_reference_path)]
@@ -1117,6 +1128,9 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
             sampler_nodes.append(node)
         elif class_type == "CLIPTextEncode":
             inputs["text"] = prompt if "POSITIVE" in node.get("_meta", {}).get("title", "") else negative
+        elif class_type == "RepeatLatentBatch":
+            # candidates per submit: encode once, sample N — clamp for the 8GB card
+            inputs["amount"] = max(1, min(4, int(engine.get("batch", defaults.get("batch", 1)))))
         elif class_type == "SaveImage":
             inputs["filename_prefix"] = f"{datetime.now():%Y%m%d}_{recipe['id']}_{resolved_job_id}_crop"
     if len(sampler_nodes) != len(gpu_passes):
@@ -1155,43 +1169,45 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
 
     outputs = submit_and_wait(comfy, graph, resolved_job_id)
     zone_dir = Path(zone["zone_file"]).parent
-    generated_crop = zone_dir / "generated_face_crop.png"
-    downloaded = False
-    for node_output in outputs.values():
-        for image in node_output.get("images", []):
-            query = urllib.parse.urlencode({
-                "filename": image["filename"],
-                "subfolder": image.get("subfolder", ""),
-                "type": image.get("type", "output"),
-            })
-            with urllib.request.urlopen(f"{comfy}/view?{query}", timeout=60) as response:
-                generated_crop.write_bytes(response.read())
-            downloaded = True
-            break
-        if downloaded:
-            break
-    if not downloaded:
+    crop_images = [image for node_output in outputs.values()
+                   for image in node_output.get("images", [])]
+    if not crop_images:
         die("face-zone workflow returned no generated crop")
 
     month_dir = root / "artifacts" / project / f"{datetime.now():%Y-%m}"
     month_dir.mkdir(parents=True, exist_ok=True)
-    final = month_dir / f"{datetime.now():%Y%m%d}_{recipe['id']}_{resolved_job_id}_00001_.png"
-    composited = subprocess.run(
-        [str(comfy_python), str(zone_script), "--root", str(root), "composite",
-         "--zone", zone["zone_file"], "--generated-crop", str(generated_crop),
-         "--output", str(final)],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-    )
-    if composited.returncode != 0 or not final.is_file():
-        die(f"CPU face-zone composite failed: {(composited.stderr or composited.stdout).strip()[-800:]}")
-
     zone_record = load_json(Path(zone["zone_file"]))
     zone_record["status"] = "GPU edit executed and skin-match composite completed"
-    zone_record["generated_crop"] = str(generated_crop)
-    zone_record["final"] = str(final)
+    zone_record["candidates"] = len(crop_images)
+    saved_candidates = []
+    for crop_index, image in enumerate(crop_images):
+        query = urllib.parse.urlencode({
+            "filename": image["filename"],
+            "subfolder": image.get("subfolder", ""),
+            "type": image.get("type", "output"),
+        })
+        generated_crop = zone_dir / f"generated_face_crop_{crop_index:02d}.png"
+        with urllib.request.urlopen(f"{comfy}/view?{query}", timeout=60) as response:
+            generated_crop.write_bytes(response.read())
+        final = month_dir / (f"{datetime.now():%Y%m%d}_{recipe['id']}_"
+                             f"{resolved_job_id}_{crop_index + 1:05d}_.png")
+        composited = subprocess.run(
+            [str(comfy_python), str(zone_script), "--root", str(root), "composite",
+             "--zone", zone["zone_file"], "--generated-crop", str(generated_crop),
+             "--output", str(final)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+        if composited.returncode != 0 or not final.is_file():
+            die(f"CPU face-zone composite failed: {(composited.stderr or composited.stdout).strip()[-800:]}")
+        saved_candidates.append((generated_crop, final))
+    zone_record["generated_crops"] = [str(c) for c, _ in saved_candidates]
+    zone_record["finals"] = [str(f) for _, f in saved_candidates]
     Path(zone["zone_file"]).write_text(json.dumps(zone_record, indent=2) + "\n", encoding="utf-8")
-    card = {
-        "artifact_id": f"art.{resolved_job_id}.0",
+
+    saved = []
+    for crop_index, (generated_crop, final) in enumerate(saved_candidates):
+        card = {
+        "artifact_id": f"art.{resolved_job_id}.{crop_index}",
         "job_id": resolved_job_id,
         "project": project,
         "kind": "image",
@@ -1239,13 +1255,18 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         "status": "draft",
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    final.with_suffix(final.suffix + ".json").write_text(
-        json.dumps(card, indent=2) + "\n", encoding="utf-8"
-    )
+        card["candidate"] = crop_index + 1
+        card["candidates"] = len(saved_candidates)
+        card["canvas"] = canvas
+        final.with_suffix(final.suffix + ".json").write_text(
+            json.dumps(card, indent=2) + "\n", encoding="utf-8"
+        )
+        print(f"[byrdimage] archived {final} (+card)")
+        saved.append((final, card))
     print(f"[byrdimage] CPU face outline: {zone['artifacts']['outline_preview']}")
     print(f"[byrdimage] skin-match zone: {zone['artifacts']['skin_match_ring']}")
-    print(f"[byrdimage] archived {final} (+card)")
-    return resolved_job_id, [(final, card)]
+    print(f"[byrdimage] face-zone candidates: {len(saved)} at canvas {canvas}px")
+    return resolved_job_id, saved
 
 
 def submit_and_wait(comfy: str, graph: dict, job_id: str) -> dict:

@@ -66,6 +66,14 @@ artifact card.
 Group photos (the goal image): `examine` first — it reports every face with an
 index — then run the chosen lane per face: `facelab.ps1 quality -Image X -FaceIndex 1`.
 
+## 2b. Flow knobs (quality lane)
+
+- **Canvas follows the face automatically** (512/640/768 from the examiner's
+  measurement — large faces keep native detail). Force one: `engine.crop_size`.
+- **Candidates per submit** (v3 guided lane): `engine.batch` 1–4 — encode once,
+  sample N, every candidate composited + carded (`candidate x/N`); pick the
+  keeper in the gallery. VRAM-clamped for the 3070.
+
 ## 3. Identity (the LoRA that makes it YOU)
 
 ```powershell

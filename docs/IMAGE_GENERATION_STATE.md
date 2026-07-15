@@ -78,6 +78,38 @@ v1, semantic enrichment next.
   verdicts/flags match reality (Luffy close must flag extreme_expression);
   then one `route:"examine"` job through the belt.
 
+## Flow audit 2026-07-15 (founder ask: make the route the image takes flow)
+
+Fixed in this pass (UNTESTED on hardware):
+
+1. **Fixed 512 canvas was softening large faces** — every crop was forced to
+   512px in and stretched back out at composite. Now the adapter picks the
+   canvas from the examiner's own face measurement (512 / 640 / 768; override
+   `engine.crop_size`), so a big Gojo close-up keeps native detail while small
+   faces still upscale. `byrdfacezone prepare --canvas-size` carries it.
+2. **One candidate per GPU submit** — the founder picks best-of anyway, so the
+   v3 graph now batches N candidates through ONE submit (RepeatLatentBatch:
+   encode once, sample N; `engine.batch`, clamped 1–4 for the 8GB card) and the
+   adapter downloads + composites + cards EVERY candidate (`candidate x/N` on
+   the card) instead of discarding all but the first output.
+3. **Adapter discarded extra outputs** — fixed with (2); zone_record now lists
+   `generated_crops`/`finals` per candidate.
+
+Known flow items, staged (small steps, in order):
+
+- **Ladder auto-fallback conductor**: examiner's `recommended_lane` exists; a
+  parent_id job chain (columns already migrated) could run main lane → judge →
+  next rung automatically on rejection. Greenlight-gated: changes creative output flow.
+- **v3 canny sparsity off the warp**: the tone-matched (un-warped) forehead
+  region has weak edges, so ControlNet holds less there — if hardware tests
+  show forehead drift, blend target structural edges into the canny input
+  outside the identity core.
+- **Group-photo macro**: examine reports every face; a per-face loop
+  (`facelab.ps1 quality -FaceIndex N` per operable face) can become one belt
+  job that fans out per face and composites sequentially into the same target.
+- v2 two-pass graph left untouched (proven + suite-locked); batching lands
+  there only after v3's batch path proves out on hardware.
+
 Parser replacement candidates for the ParseNet license gap (both LICENSE-UNVERIFIED
 — treat exactly like ParseNet, private local evaluation only, until the license is
 confirmed): `jonathandinu/face-parsing` (SegFormer/CelebAMask-HQ via HF

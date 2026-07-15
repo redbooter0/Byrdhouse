@@ -426,6 +426,18 @@ def main():
               and "def _recommend_lane(" in facezone_source
               and "analysis_seconds" in facezone_source
               and "thorough=not engine.get(\"quick_report\", False)" in byrdimage_source)
+        check("flow: canvas follows the measured face, candidates batch one submit",
+              "--canvas-size" in facezone_source
+              and "CANVAS_SIZE = int(args.canvas_size)" in facezone_source
+              and '"--canvas-size", str(canvas)' in byrdimage_source
+              and '"RepeatLatentBatch"' in byrdimage_source
+              and "saved.append((final, card))" in byrdimage_source)
+        v3_graph = json.loads((ROOT / "workflows" / "sd15_face_zone_controlnet_api.json")
+                              .read_text(encoding="utf-8-sig"))
+        check("v3 graph batches candidates inside the masked latent chain",
+              v3_graph.get("15", {}).get("class_type") == "RepeatLatentBatch"
+              and v3_graph["15"]["inputs"]["samples"] == ["8", 0]
+              and v3_graph["9"]["inputs"]["latent_image"] == ["15", 0])
         check("quality lane is drivable by hand (facelab.ps1 + --edit-face-zone CLI)",
               "--edit-face-zone" in byrdimage_source
               and (ROOT / "scripts" / "facelab.ps1").is_file()
