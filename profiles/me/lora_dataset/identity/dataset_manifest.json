@@ -1,0 +1,128 @@
+{
+  "version": 2,
+  "mode": "identity",
+  "trigger": "careybh person",
+  "source_root": "E:\\ByrdHouse\\profiles\\me\\references",
+  "buckets": {
+    "real": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\identity\\10_careybh"
+  },
+  "items": [
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_01.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\identity\\10_careybh\\real_001_me_photo_01.jpg",
+      "category": "real",
+      "width": 650,
+      "height": 1280,
+      "sha256": "71c1d120ca71236e72d0abe4876ca55f1f140a1a4c53b90bc34eb68f7d918129",
+      "caption": "careybh person, adult Black man, portrait photograph, three-quarter view, neutral expression, natural afro, warm indoor light"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_02.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\identity\\10_careybh\\real_002_me_photo_02.jpg",
+      "category": "real",
+      "width": 650,
+      "height": 1280,
+      "sha256": "4280fc2b73cdb42b8a25f97b11e827a1cbe8359b011b232a4c2fa59d1ed774ec",
+      "caption": "careybh person, adult Black man, portrait photograph, three-quarter view, smiling, short natural afro, warm indoor light"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_03.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\identity\\10_careybh\\real_003_me_photo_03.jpg",
+      "category": "real",
+      "width": 720,
+      "height": 1280,
+      "sha256": "59c1f38f630d8b25bfcc556e7afc4d514f60fda5204d3d1eb07fde4a434e83f9",
+      "caption": "careybh person, adult Black man, portrait photograph, front view, neutral expression, short braids, overhead retail light"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_04.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\identity\\10_careybh\\real_004_me_photo_04.jpg",
+      "category": "real",
+      "width": 2880,
+      "height": 3840,
+      "sha256": "5a33ef25588fddfa8aabf206987c3432365ce2dfb4a1f15940bf6e5b8652dc0d",
+      "caption": "careybh person, adult Black man, portrait photograph, front view, smiling with teeth, full natural afro, indoor overhead light"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_05.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\identity\\10_careybh\\real_005_me_photo_05.jpg",
+      "category": "real",
+      "width": 720,
+      "height": 1280,
+      "sha256": "7c3684c62d928e1fb69794e90d578c2ba63ade701ea12e550546633e48b90132",
+      "caption": "careybh person, adult Black man, portrait photograph, front view, smiling with teeth, black durag, daylight"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_07.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\identity\\10_careybh\\real_006_me_photo_07.jpg",
+      "category": "real",
+      "width": 2880,
+      "height": 3840,
+      "sha256": "897688880a2b1bc2908ed9d9e9be3a7d935088dc928c779e0341639415775bc3",
+      "caption": "careybh person, adult Black man, portrait photograph, front view, neutral expression, full natural afro, strong daylight, low camera angle"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_09.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\identity\\10_careybh\\real_007_me_photo_09.jpg",
+      "category": "real",
+      "width": 720,
+      "height": 1280,
+      "sha256": "3d4acfe26ffc5bb42d322ab35fe3dd089f7680eb99bf27781bf65885612d9c90",
+      "caption": "careybh person, adult Black man, portrait photograph, front view, neutral expression, braids, warm indoor light, mirror selfie"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_11.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\identity\\10_careybh\\real_008_me_photo_11.jpg",
+      "category": "real",
+      "width": 720,
+      "height": 1280,
+      "sha256": "685b06fcfce55a4f0728f6399394bd076cc8f90fa27e01ec9494d009faaebc19",
+      "caption": "careybh person, adult Black man, portrait photograph, front view, neutral expression, natural afro, soft daylight, car interior"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_12.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\identity\\10_careybh\\real_009_me_photo_12.jpg",
+      "category": "real",
+      "width": 2880,
+      "height": 3840,
+      "sha256": "48bc7a8ad945f7cda0c46a180bd7e86938bba4266142ac5e9c89f5ec50bda9e9",
+      "caption": "careybh person, adult Black man, portrait photograph, three-quarter view, neutral expression, braids, warm indoor light"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_13.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\identity\\10_careybh\\real_010_me_photo_13.jpg",
+      "category": "real",
+      "width": 721,
+      "height": 1280,
+      "sha256": "aa1bc44693121e91d865e57e1d49461783be67c974e4173d15e8f97474f81c54",
+      "caption": "careybh person, adult Black man, portrait photograph, front view, neutral expression, full natural afro, black headband, daylight"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_14.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\identity\\10_careybh\\real_011_me_photo_14.jpg",
+      "category": "real",
+      "width": 650,
+      "height": 1280,
+      "sha256": "ed8143c4a26d2752528914dd970606b508b152aa4bc748163455472894671ddc",
+      "caption": "careybh person, adult Black man, portrait photograph, front view, neutral expression, short natural hair, daylight"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_15.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\identity\\10_careybh\\real_012_me_photo_15.jpg",
+      "category": "real",
+      "width": 960,
+      "height": 1280,
+      "sha256": "4bd715874b2e920c6437bb9d7aac73ab6a69a06ae8461635665772f6d8e4085c",
+      "caption": "careybh person, adult Black man, portrait photograph, front view, smiling with teeth, natural afro, clean indoor light"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_19.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\identity\\10_careybh\\real_013_me_photo_19.jpg",
+      "category": "real",
+      "width": 2880,
+      "height": 3840,
+      "sha256": "e2df091e7e9aa4295415aaab55c7e65636e658c1f922b315aacc0030cb236add",
+      "caption": "careybh person, adult Black man, portrait photograph, three-quarter view, neutral expression, full natural afro, soft indoor light, earbuds"
+    }
+  ]
+}

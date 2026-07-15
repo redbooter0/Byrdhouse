@@ -6,6 +6,8 @@
 
 **U0 status:** functionally complete on real hardware.
 
+**Image lane handoff:** Before changing the live GAMING image workflow, read `docs/IMAGE_GENERATION_STATE.md`. It records the compact 8 GB anime target-edit lane, model allocations, licensing constraint, and hardware test gate.
+
 ## Direction
 
 ByrdHouse is a **creator platform**, not a mining platform. Core lanes: image generation, video generation, video editing, MCP tooling, and Godot automation. Mining stays manual and seasonal; it is not the center of this system.

@@ -1,0 +1,102 @@
+{
+  "_comment": "Compact SD1.5 target-identity edit. The worker adapter uploads TARGET IMAGE, normalizes it to an 8-pixel VAE size, creates a feathered face rectangle from the selected target preset, and samples only inside that mask. The graph intentionally has no IP-Adapter/ReActor/InsightFace dependency: a user-owned SD1.5 identity LoRA is injected by scripts/byrdimage.py at job time. Required stable titles: TARGET IMAGE, NORMALIZE TARGET, CANVAS MASK, FACE MASK, FEATHER FACE MASK, PLACE FACE MASK.",
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" },
+    "_meta": { "title": "TARGET IMAGE" }
+  },
+  "2": {
+    "class_type": "ImageScale",
+    "inputs": {
+      "image": ["1", 0],
+      "upscale_method": "lanczos",
+      "width": 512,
+      "height": 512,
+      "crop": "disabled"
+    },
+    "_meta": { "title": "NORMALIZE TARGET" }
+  },
+  "3": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "Meina V5.1 - Baked VAE.safetensors" },
+    "_meta": { "title": "COMPACT ANIME CHECKPOINT" }
+  },
+  "4": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["3", 1] },
+    "_meta": { "title": "POSITIVE PROMPT" }
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["3", 1] },
+    "_meta": { "title": "NEGATIVE PROMPT" }
+  },
+  "6": {
+    "class_type": "VAEEncode",
+    "inputs": { "pixels": ["2", 0], "vae": ["3", 2] },
+    "_meta": { "title": "TARGET LATENT" }
+  },
+  "7": {
+    "class_type": "SolidMask",
+    "inputs": { "value": 0.0, "width": 512, "height": 512 },
+    "_meta": { "title": "CANVAS MASK" }
+  },
+  "8": {
+    "class_type": "SolidMask",
+    "inputs": { "value": 1.0, "width": 180, "height": 180 },
+    "_meta": { "title": "FACE MASK" }
+  },
+  "9": {
+    "class_type": "FeatherMask",
+    "inputs": {
+      "mask": ["8", 0],
+      "left": 24,
+      "top": 24,
+      "right": 24,
+      "bottom": 24
+    },
+    "_meta": { "title": "FEATHER FACE MASK" }
+  },
+  "10": {
+    "class_type": "MaskComposite",
+    "inputs": {
+      "destination": ["7", 0],
+      "source": ["9", 0],
+      "x": 166,
+      "y": 166,
+      "operation": "add"
+    },
+    "_meta": { "title": "PLACE FACE MASK" }
+  },
+  "11": {
+    "class_type": "SetLatentNoiseMask",
+    "inputs": { "samples": ["6", 0], "mask": ["10", 0] },
+    "_meta": { "title": "FACE-ONLY LATENT" }
+  },
+  "12": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0,
+      "steps": 18,
+      "cfg": 6.0,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "denoise": 0.48,
+      "model": ["3", 0],
+      "positive": ["4", 0],
+      "negative": ["5", 0],
+      "latent_image": ["11", 0]
+    },
+    "_meta": { "title": "COMPACT FACE INPAINT" }
+  },
+  "13": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["12", 0], "vae": ["3", 2] },
+    "_meta": { "title": "DECODE" }
+  },
+  "14": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "byrdhouse_anime_face", "images": ["13", 0] },
+    "_meta": { "title": "SAVE COMPACT ANIME EDIT" }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "prompt_id": "21037d25-0f1a-43f7-989d-8c6356e6d4f8",
+  "workflow": "E:\\ByrdHouse\\Images\\Workflows\\byrdhouse_face_swap_social\\byrdhouse_social_main_head_face_model_v3_zoom_api_v1.json",
+  "target": "E:\\ByrdHouse\\Images\\Targets\\examples\\example_4-Photo-4.jpg",
+  "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_08.jpg",
+  "face_index": "0",
+  "comfy_output": "E:\\ByrdHouse\\Generators\\ComfyUI\\output\\ByrdHouse\\FaceSwap\\carey_v3_model_zoom_00001_.png"
+}

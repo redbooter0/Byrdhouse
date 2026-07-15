@@ -1,0 +1,347 @@
+{
+  "version": 3,
+  "mode": "expanded-hybrid",
+  "trigger": "careybh person",
+  "source_root": "E:\\ByrdHouse\\profiles\\me\\references",
+  "buckets": {
+    "real": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\5_careybh_real",
+    "synthetic": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\1_careybh_synthetic_support",
+    "anime": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support"
+  },
+  "strategy": "camera-ground-truth-with-low-weight-generated-support",
+  "items": [
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_01.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\5_careybh_real\\real_001_me_photo_01.jpg",
+      "category": "real",
+      "width": 650,
+      "height": 1280,
+      "sha256": "71c1d120ca71236e72d0abe4876ca55f1f140a1a4c53b90bc34eb68f7d918129",
+      "caption": "careybh person, adult Black man, portrait photograph, three-quarter view, neutral expression, natural afro, warm indoor light"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_02.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\5_careybh_real\\real_002_me_photo_02.jpg",
+      "category": "real",
+      "width": 650,
+      "height": 1280,
+      "sha256": "4280fc2b73cdb42b8a25f97b11e827a1cbe8359b011b232a4c2fa59d1ed774ec",
+      "caption": "careybh person, adult Black man, portrait photograph, three-quarter view, smiling, short natural afro, warm indoor light"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_03.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\5_careybh_real\\real_003_me_photo_03.jpg",
+      "category": "real",
+      "width": 720,
+      "height": 1280,
+      "sha256": "59c1f38f630d8b25bfcc556e7afc4d514f60fda5204d3d1eb07fde4a434e83f9",
+      "caption": "careybh person, adult Black man, portrait photograph, front view, neutral expression, short braids, overhead retail light"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_04.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\5_careybh_real\\real_004_me_photo_04.jpg",
+      "category": "real",
+      "width": 2880,
+      "height": 3840,
+      "sha256": "5a33ef25588fddfa8aabf206987c3432365ce2dfb4a1f15940bf6e5b8652dc0d",
+      "caption": "careybh person, adult Black man, portrait photograph, front view, smiling with teeth, full natural afro, indoor overhead light"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_05.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\5_careybh_real\\real_005_me_photo_05.jpg",
+      "category": "real",
+      "width": 720,
+      "height": 1280,
+      "sha256": "7c3684c62d928e1fb69794e90d578c2ba63ade701ea12e550546633e48b90132",
+      "caption": "careybh person, adult Black man, portrait photograph, front view, smiling with teeth, black durag, daylight"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_07.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\5_careybh_real\\real_006_me_photo_07.jpg",
+      "category": "real",
+      "width": 2880,
+      "height": 3840,
+      "sha256": "897688880a2b1bc2908ed9d9e9be3a7d935088dc928c779e0341639415775bc3",
+      "caption": "careybh person, adult Black man, portrait photograph, front view, neutral expression, full natural afro, strong daylight, low camera angle"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_09.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\5_careybh_real\\real_007_me_photo_09.jpg",
+      "category": "real",
+      "width": 720,
+      "height": 1280,
+      "sha256": "3d4acfe26ffc5bb42d322ab35fe3dd089f7680eb99bf27781bf65885612d9c90",
+      "caption": "careybh person, adult Black man, portrait photograph, front view, neutral expression, braids, warm indoor light, mirror selfie"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_11.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\5_careybh_real\\real_008_me_photo_11.jpg",
+      "category": "real",
+      "width": 720,
+      "height": 1280,
+      "sha256": "685b06fcfce55a4f0728f6399394bd076cc8f90fa27e01ec9494d009faaebc19",
+      "caption": "careybh person, adult Black man, portrait photograph, front view, neutral expression, natural afro, soft daylight, car interior"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_12.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\5_careybh_real\\real_009_me_photo_12.jpg",
+      "category": "real",
+      "width": 2880,
+      "height": 3840,
+      "sha256": "48bc7a8ad945f7cda0c46a180bd7e86938bba4266142ac5e9c89f5ec50bda9e9",
+      "caption": "careybh person, adult Black man, portrait photograph, three-quarter view, neutral expression, braids, warm indoor light"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_13.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\5_careybh_real\\real_010_me_photo_13.jpg",
+      "category": "real",
+      "width": 721,
+      "height": 1280,
+      "sha256": "aa1bc44693121e91d865e57e1d49461783be67c974e4173d15e8f97474f81c54",
+      "caption": "careybh person, adult Black man, portrait photograph, front view, neutral expression, full natural afro, black headband, daylight"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_14.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\5_careybh_real\\real_011_me_photo_14.jpg",
+      "category": "real",
+      "width": 650,
+      "height": 1280,
+      "sha256": "ed8143c4a26d2752528914dd970606b508b152aa4bc748163455472894671ddc",
+      "caption": "careybh person, adult Black man, portrait photograph, front view, neutral expression, short natural hair, daylight"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_15.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\5_careybh_real\\real_012_me_photo_15.jpg",
+      "category": "real",
+      "width": 960,
+      "height": 1280,
+      "sha256": "4bd715874b2e920c6437bb9d7aac73ab6a69a06ae8461635665772f6d8e4085c",
+      "caption": "careybh person, adult Black man, portrait photograph, front view, smiling with teeth, natural afro, clean indoor light"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_19.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\5_careybh_real\\real_013_me_photo_19.jpg",
+      "category": "real",
+      "width": 2880,
+      "height": 3840,
+      "sha256": "e2df091e7e9aa4295415aaab55c7e65636e658c1f922b315aacc0030cb236add",
+      "caption": "careybh person, adult Black man, portrait photograph, three-quarter view, neutral expression, full natural afro, soft indoor light, earbuds"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_real_photos\\101_studio-gray-front.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\1_careybh_synthetic_support\\synthetic_001_101_studio-gray-front.png",
+      "category": "synthetic",
+      "width": 1402,
+      "height": 1122,
+      "sha256": "03f6605494f73472450eca26551076cc1a811800533574a64b10a7ab70a09682",
+      "caption": "careybh person, adult Black man, synthetic photoreal support portrait, tight eye-level front-facing head-and-shoulders portrait, 85mm portrait lens, the large natural afro shown in the two primary studio references, with real individual coils and authentic volume"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_real_photos\\108_beauty-dish-closeup.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\1_careybh_synthetic_support\\synthetic_002_108_beauty-dish-closeup.png",
+      "category": "synthetic",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "06d7b85f3e4793d94529ebb227a6e11740735daad772cf5bde69104371c4b330",
+      "caption": "careybh person, adult Black man, synthetic photoreal support portrait, slightly high-angle seated photograph, 50mm lens, natural hands and posture, medium hanging braids or two-strand twists framing the face, matching the supplied braided references"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_real_photos\\111_morning-coffee-kitchen.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\1_careybh_synthetic_support\\synthetic_003_111_morning-coffee-kitchen.png",
+      "category": "synthetic",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "96348d39a8c2e2e180ddc3e52e397301fd0bd5fb0d7388e0299b4dfdb3cf1e05",
+      "caption": "careybh person, adult Black man, synthetic photoreal support portrait, tight eye-level front-facing head-and-shoulders portrait, 85mm portrait lens, the large natural afro shown in the two primary studio references, with real individual coils and authentic volume"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_real_photos\\121_rainy-crosswalk.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\1_careybh_synthetic_support\\synthetic_004_121_rainy-crosswalk.png",
+      "category": "synthetic",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "f48ac4f3a766f8c0b2e01fc96d41a78a09a53947361c6abc3071152a142d6194",
+      "caption": "careybh person, adult Black man, synthetic photoreal support portrait, tight eye-level front-facing head-and-shoulders portrait, 85mm portrait lens, the large natural afro shown in the two primary studio references, with real individual coils and authentic volume"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\002_naruto.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_001_002_naruto.png",
+      "category": "anime",
+      "width": 1086,
+      "height": 1448,
+      "sha256": "82cc12a26b1485efdc0e8ccf85b0506436808d9b3c89a163159c9fcebe51fead",
+      "caption": "careybh person, adult Black man, animation illustration, broad Naruto visual tone, left three-quarter waist-up view with a subtle confident smile, compact rounded natural afro with tapered sides"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\011_cowboy-bebop.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_002_011_cowboy-bebop.png",
+      "category": "anime",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "ebf1289aadafe1647194e01c1f4d2eee92a867f6a8aa58cb1054f6d391835177",
+      "caption": "careybh person, adult Black man, animation illustration, broad Cowboy Bebop visual tone, tight front-facing head-and-shoulders character portrait with a relaxed neutral expression, short natural curls with a clean tapered fade, as shown in the early short-hair reference"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\012_samurai-champloo.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_003_012_samurai-champloo.png",
+      "category": "anime",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "f4a4a508ca7b14584e3b1a5292c21c3347e94d243ba1e2854a8c004d142b30bc",
+      "caption": "careybh person, adult Black man, animation illustration, broad Samurai Champloo visual tone, left three-quarter waist-up view with a subtle confident smile, compact rounded natural afro with tapered sides"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\021_one-punch-man.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_004_021_one-punch-man.png",
+      "category": "anime",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "e8720639b040d1fd644b3be15359721d92b83e5c0512eae0d2960b302aeffa30",
+      "caption": "careybh person, adult Black man, animation illustration, broad One Punch Man visual tone, tight front-facing head-and-shoulders character portrait with a relaxed neutral expression, short natural curls with a clean tapered fade, as shown in the early short-hair reference"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\022_chainsaw-man.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_005_022_chainsaw-man.png",
+      "category": "anime",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "516af3a479fb6821869fc68f13dc9957c5cb90af0d5dddeefd0b6d432fb05d25",
+      "caption": "careybh person, adult Black man, animation illustration, broad Chainsaw Man visual tone, left three-quarter waist-up view with a subtle confident smile, compact rounded natural afro with tapered sides"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\027_trigun.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_006_027_trigun.png",
+      "category": "anime",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "f08cbac8e7a26e3fa7999d3d989324bd67e5a81b15497fde4a4006a8e08f187a",
+      "caption": "careybh person, adult Black man, animation illustration, broad Trigun visual tone, slightly high-angle seated view with natural hand placement and an amused expression, compact rounded natural afro with tapered sides"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\030_soul-eater.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_007_030_soul-eater.png",
+      "category": "anime",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "21b6665af507457da47b513246912ab0e478211eb454553ed223a36124afca12",
+      "caption": "careybh person, adult Black man, animation illustration, broad Soul Eater visual tone, over-the-shoulder turn toward camera, clearly showing the face and back of the hairstyle, clean scalp cornrows continuing into short braids at the back"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\041_adventure-time.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_008_041_adventure-time.png",
+      "category": "anime",
+      "width": 1003,
+      "height": 1568,
+      "sha256": "088f6cb06e0bdb41c311804813834a52481d2c06a1b5c0def4da6ea61d67c913",
+      "caption": "careybh person, adult Black man, animation illustration, broad Adventure Time visual tone, tight front-facing head-and-shoulders character portrait with a relaxed neutral expression, short natural curls with a clean tapered fade, as shown in the early short-hair reference"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\050_codename-kids-next-door.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_009_050_codename-kids-next-door.png",
+      "category": "anime",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "fc8e5e5cbc0105d5ffffb1f65200fc585ebc5019efe2a82de06c05e6d4d1d713",
+      "caption": "careybh person, adult Black man, animation illustration, broad Codename: Kids Next Door visual tone, over-the-shoulder turn toward camera, clearly showing the face and back of the hairstyle, clean scalp cornrows continuing into short braids at the back"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\051_ben-10.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_010_051_ben-10.png",
+      "category": "anime",
+      "width": 1402,
+      "height": 1122,
+      "sha256": "a7d668594ddfb00fdd57537e781d9988bb784cf09afd1f3313a2a7a26dc91757",
+      "caption": "careybh person, adult Black man, animation illustration, broad Ben 10 visual tone, tight front-facing head-and-shoulders character portrait with a relaxed neutral expression, short natural curls with a clean tapered fade, as shown in the early short-hair reference"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\061_ok-k-o-let-s-be-heroes.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_011_061_ok-k-o-let-s-be-heroes.png",
+      "category": "anime",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "ebb944f287e43854bec4701c0fb89a47954b2a00958ee149b6af2bbf5d99286f",
+      "caption": "careybh person, adult Black man, animation illustration, broad OK K.O.! Let's Be Heroes visual tone, tight front-facing head-and-shoulders character portrait with a relaxed neutral expression, short natural curls with a clean tapered fade, as shown in the early short-hair reference"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\062_infinity-train.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_012_062_infinity-train.png",
+      "category": "anime",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "869c8343bb17d65757d685f26b1d71b73a33974fbbde26a67a6edbf659131f3a",
+      "caption": "careybh person, adult Black man, animation illustration, broad Infinity Train visual tone, left three-quarter waist-up view with a subtle confident smile, compact rounded natural afro with tapered sides"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\067_megas-xlr.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_013_067_megas-xlr.png",
+      "category": "anime",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "2033d053184eb3cd83505c342c205744097e286e806ab37ab468354173d71580",
+      "caption": "careybh person, adult Black man, animation illustration, broad Megas XLR visual tone, slightly high-angle seated view with natural hand placement and an amused expression, compact rounded natural afro with tapered sides"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\070_robotboy.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_014_070_robotboy.png",
+      "category": "anime",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "ea1aeac80f148eb0a3bd252646122a48a77f45ce57f0a8a92c5348044cfc661f",
+      "caption": "careybh person, adult Black man, animation illustration, broad Robotboy visual tone, over-the-shoulder turn toward camera, clearly showing the face and back of the hairstyle, clean scalp cornrows continuing into short braids at the back"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\072_avatar-the-last-airbender.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_015_072_avatar-the-last-airbender.png",
+      "category": "anime",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "ccf92cbd421e1389d6a86f4df84afd24b279cf08482f4f046c933c6cdefa873e",
+      "caption": "careybh person, adult Black man, animation illustration, broad Avatar: The Last Airbender visual tone, left three-quarter waist-up view with a subtle confident smile, compact rounded natural afro with tapered sides"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\076_rocko-s-modern-life.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_016_076_rocko-s-modern-life.png",
+      "category": "anime",
+      "width": 941,
+      "height": 1672,
+      "sha256": "f697bb453641e2e883abd14c8a89dbfc75d5ed071df57a166f78d723ed6fbfe1",
+      "caption": "careybh person, adult Black man, animation illustration, broad Rocko's Modern Life visual tone, low-angle three-quarter heroic view from mid-thigh upward, short natural curls with a clean tapered fade, as shown in the early short-hair reference"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\081_teenage-mutant-ninja-turtles.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_017_081_teenage-mutant-ninja-turtles.png",
+      "category": "anime",
+      "width": 941,
+      "height": 1672,
+      "sha256": "761915099be60a74245c7434be2686b43b19be980b2aeb46870cba4fc6db493c",
+      "caption": "careybh person, adult Black man, animation illustration, broad Teenage Mutant Ninja Turtles visual tone, tight front-facing head-and-shoulders character portrait with a relaxed neutral expression, short natural curls with a clean tapered fade, as shown in the early short-hair reference"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\086_chalkzone.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_018_086_chalkzone.png",
+      "category": "anime",
+      "width": 941,
+      "height": 1672,
+      "sha256": "a37af4d965e00848aa53402e417f832fb4be738b84f1851e6fd034d09f3baf3e",
+      "caption": "careybh person, adult Black man, animation illustration, broad ChalkZone visual tone, low-angle three-quarter heroic view from mid-thigh upward, short natural curls with a clean tapered fade, as shown in the early short-hair reference"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\091_as-told-by-ginger.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_019_091_as-told-by-ginger.png",
+      "category": "anime",
+      "width": 941,
+      "height": 1672,
+      "sha256": "642f28a50b1d922e45a25f68534c4b61aa40be732867b730a3b476642f28fc32",
+      "caption": "careybh person, adult Black man, animation illustration, broad As Told by Ginger visual tone, tight front-facing head-and-shoulders character portrait with a relaxed neutral expression, short natural curls with a clean tapered fade, as shown in the early short-hair reference"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\097_glitch-techs.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\expanded-hybrid\\2_careybh_animation_support\\anime_020_097_glitch-techs.png",
+      "category": "anime",
+      "width": 864,
+      "height": 1821,
+      "sha256": "e5d54448b6843e3993e3ef69b861d7aec950febd7bc733b2f047c76a40d32182",
+      "caption": "careybh person, adult Black man, animation illustration, broad Glitch Techs visual tone, slightly high-angle seated view with natural hand placement and an amused expression, compact rounded natural afro with tapered sides"
+    }
+  ]
+}

@@ -69,3 +69,17 @@ The adapter looks for the node titles embedded in the API export, so keep the pr
 ## 3070 operating rule
 
 Run `use-image-mode.ps1` first so LM Studio unloads the operator model and releases VRAM. Start with the SAFE file. Do not enable SeedVR2 until the Flux2 generation and Remacri upscale have both passed independently.
+
+## Real-to-gaming adaptation
+
+The active personal reference library is:
+
+`E:\ByrdHouse\profiles\me\references\`
+
+Ten reference photos are stored there as `me_photo_01.jpg` through `me_photo_10.jpg`. The SAFE workflow's `REFERENCE 1 — SUBJECT / POSE / COMPOSITION` input is currently populated from `me_photo_08.jpg`, chosen for clear face and hair visibility. Replace `E:\ByrdHouse\Generators\ComfyUI\input\REFERENCE_1_SUBJECT.png` with another library photo when a different pose or hairstyle is needed.
+
+`REFERENCE 2 — COSTUME / STYLE / MATERIALS` remains the gaming-style reference. It controls costume language, materials, lighting, palette, and genre; it must not replace the identity from Reference 1.
+
+The prompt node remains `BYRDHOUSE TRANSFORMATION PROMPT` (node `92:74`) so the ByrdHouse adapter can find it by title. The default is `AAA` + `BALANCED_GAMING`. Available style modes are `AAA`, `HERO`, `FANTASY`, `SCIFI`, `CEL_SHADED`, `GRITTY`, and `SPLASH_ART`. Available intensity profiles are `IDENTITY_LOCK`, `BALANCED_GAMING`, and `FULL_CHARACTER_REDESIGN`. Use a gender-matched style reference: male identity references should use a male game/style reference, and female identity references should use a female game/style reference. The current SAFE default uses the supplied male Zelda/Link reference.
+
+For API runs, use `api_adapter.py` with `--style-mode`, `--intensity`, and `--seed`; the adapter title-matches the two LoadImage nodes, the transformation prompt, and the raw SaveImage node. Keep the raw branch active, batch size at 1, steps at 28, guidance at 0.9, upscale bypassed, and SeedVR2 bypassed until the base image passes identity, anatomy, costume, and game-style checks.

@@ -1,0 +1,114 @@
+{
+  "_comment": "PRIVATE NON-PRODUCTION PhotoMaker V1 8 GB smoke test. It uses the built-in Comfy PhotoMaker nodes, a user-owned reference image, and a masked target latent. Do not route through the ByrdHouse app unless fit, licensing, and visual quality are explicitly approved.",
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "anime_game_3.jpg" },
+    "_meta": { "title": "TARGET IMAGE" }
+  },
+  "2": {
+    "class_type": "ImageScale",
+    "inputs": {
+      "image": ["1", 0],
+      "upscale_method": "lanczos",
+      "width": 512,
+      "height": 512,
+      "crop": "disabled"
+    },
+    "_meta": { "title": "NORMALIZE TARGET" }
+  },
+  "3": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "ai_identity_front_v1.png" },
+    "_meta": { "title": "OWNER REFERENCE" }
+  },
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors" },
+    "_meta": { "title": "SDXL CHECKPOINT" }
+  },
+  "5": {
+    "class_type": "PhotoMakerLoader",
+    "inputs": { "photomaker_model_name": "photomaker-v1.bin" },
+    "_meta": { "title": "PHOTOMAKER V1" }
+  },
+  "6": {
+    "class_type": "PhotoMakerEncode",
+    "inputs": {
+      "photomaker": ["5", 0],
+      "image": ["3", 0],
+      "clip": ["4", 1],
+      "text": "close portrait of a man photomaker, clean hand-drawn shonen anime illustration, coherent cel shading, white blindfold, white spiky hair, dark high collar, preserve the target pose and composition"
+    },
+    "_meta": { "title": "OWNER ID CONDITIONING" }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "photorealistic face, live action skin, face cutout, pasted face, warped eyes, malformed mouth, extra facial features, text, watermark",
+      "clip": ["4", 1]
+    },
+    "_meta": { "title": "NEGATIVE PROMPT" }
+  },
+  "8": {
+    "class_type": "VAEEncode",
+    "inputs": { "pixels": ["2", 0], "vae": ["4", 2] },
+    "_meta": { "title": "TARGET LATENT" }
+  },
+  "9": {
+    "class_type": "SolidMask",
+    "inputs": { "value": 0.0, "width": 512, "height": 512 },
+    "_meta": { "title": "CANVAS MASK" }
+  },
+  "10": {
+    "class_type": "SolidMask",
+    "inputs": { "value": 1.0, "width": 248, "height": 262 },
+    "_meta": { "title": "GOJO FACE MASK" }
+  },
+  "11": {
+    "class_type": "FeatherMask",
+    "inputs": { "mask": ["10", 0], "left": 28, "top": 28, "right": 28, "bottom": 28 },
+    "_meta": { "title": "FEATHER FACE MASK" }
+  },
+  "12": {
+    "class_type": "MaskComposite",
+    "inputs": {
+      "destination": ["9", 0],
+      "source": ["11", 0],
+      "x": 158,
+      "y": 94,
+      "operation": "add"
+    },
+    "_meta": { "title": "PLACE GOJO FACE MASK" }
+  },
+  "13": {
+    "class_type": "SetLatentNoiseMask",
+    "inputs": { "samples": ["8", 0], "mask": ["12", 0] },
+    "_meta": { "title": "MASKED TARGET LATENT" }
+  },
+  "14": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 7124,
+      "steps": 12,
+      "cfg": 5.5,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "denoise": 0.50,
+      "model": ["4", 0],
+      "positive": ["6", 0],
+      "negative": ["7", 0],
+      "latent_image": ["13", 0]
+    },
+    "_meta": { "title": "PHOTOMAKER SMOKE SAMPLE" }
+  },
+  "15": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["14", 0], "vae": ["4", 2] },
+    "_meta": { "title": "DECODE" }
+  },
+  "16": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "ByrdHouse/PhotoMakerV1/private_gojo_smoke", "images": ["15", 0] },
+    "_meta": { "title": "SAVE PRIVATE SMOKE" }
+  }
+}

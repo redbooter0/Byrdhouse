@@ -326,6 +326,58 @@ def resolve_profile_reference(root, profile_id):
 
 def run_generate(job) -> None:
     p = json.loads(job["payload"])
+    recipe_path = byrdimage.find_recipe(ROOT, p["recipe"])
+    recipe_data = byrdimage.load_json(recipe_path)
+
+    # Uploaded face-zone edits are outlined on CPU before ComfyUI touches the
+    # image. The saved mesh/masks make the edit boundary auditable, while only
+    # the final skin-matched composite is registered as the job result.
+    if recipe_data.get("runner") == "face_zone_identity_edit":
+        target_artifact = p.get("target_artifact")
+        if not target_artifact:
+            raise RuntimeError("face-zone identity edit needs target_artifact from the Create upload")
+        target = fetch_artifact_file(target_artifact, ROOT / "artifacts" / "_sources")
+        profile_id = p.get("subject_profile") or recipe_data.get("subject_profile")
+        _, saved = byrdimage.edit_face_zone(
+            ROOT, p["recipe"], target, p.get("project", "sandbox"),
+            p.get("purpose", "CPU outlined face-zone identity edit"),
+            slots=p.get("slots", {}), checkpoint=p.get("checkpoint"),
+            identity_lora=p.get("identity_lora") or p.get("lora"),
+            identity_strength=p.get("identity_strength") or p.get("lora_strength"),
+            target_preset=p.get("target_preset"), subject_profile=profile_id,
+            seed=p.get("seed"), engine=p.get("engine"), job_id=job["id"])
+        cards = []
+        for png, card in saved:
+            card["path"] = str(png)
+            cards.append(card)
+        register_cards(job, cards)
+        return
+
+    # Compact target identity edits stay inside the ordinary image.generate
+    # contract: router -> GAMING pull worker -> Comfy -> card/preview/judge.
+    # They need two independently addressed images (the target plus the stored
+    # identity LoRA), so they cannot use the one-reference generic generator.
+    if recipe_data.get("runner") == "target_identity_edit":
+        target_artifact = p.get("target_artifact")
+        if not target_artifact:
+            raise RuntimeError("target identity edit needs target_artifact from the Create upload")
+        target = fetch_artifact_file(target_artifact, ROOT / "artifacts" / "_sources")
+        profile_id = p.get("subject_profile") or recipe_data.get("subject_profile")
+        _, saved = byrdimage.edit_target_identity(
+            ROOT, p["recipe"], target, p.get("project", "sandbox"),
+            p.get("purpose", "anime target identity edit"), slots=p.get("slots", {}),
+            checkpoint=p.get("checkpoint"), identity_lora=p.get("identity_lora"),
+            identity_strength=p.get("identity_strength"),
+            target_preset=p.get("target_preset"), target_mask=p.get("target_mask"),
+            subject_profile=profile_id, seed=p.get("seed"), engine=p.get("engine"),
+            job_id=job["id"])
+        cards = []
+        for png, card in saved:
+            card["path"] = str(png)
+            cards.append(card)
+        register_cards(job, cards)
+        return
+
     # A reference_artifact (an uploaded real screenshot / key art) steers the
     # generation toward that game's look via IP-Adapter — fetch it to local disk
     # first, exactly like the source-composite path.
@@ -339,8 +391,6 @@ def run_generate(job) -> None:
     # The profile can come from the payload (dashboard) or the recipe itself.
     profile_id = p.get("subject_profile")
     if not profile_id:
-        recipe_path = byrdimage.find_recipe(ROOT, p["recipe"])
-        recipe_data = byrdimage.load_json(recipe_path)
         profile_id = recipe_data.get("subject_profile")
     if not reference and profile_id:
         reference = resolve_profile_reference(ROOT, profile_id)

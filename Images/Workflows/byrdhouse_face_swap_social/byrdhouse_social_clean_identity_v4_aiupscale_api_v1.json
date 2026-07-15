@@ -1,0 +1,210 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "TARGET_1-Photo-1.jpg"
+    },
+    "_meta": {
+      "title": "TARGET IMAGE - PHOTOGRAPHIC CALIBRATION TARGET"
+    }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "AI_FACE_REF_01_FRONT.png"
+    },
+    "_meta": {
+      "title": "IDENTITY REF - CLEAN FRONT"
+    }
+  },
+  "3": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "AI_FACE_REF_02_3Q_LEFT.png"
+    },
+    "_meta": {
+      "title": "IDENTITY REF - THREE-QUARTER LEFT"
+    }
+  },
+  "4": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "AI_FACE_REF_03_3Q_RIGHT.png"
+    },
+    "_meta": {
+      "title": "IDENTITY REF - THREE-QUARTER RIGHT"
+    }
+  },
+  "5": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "AI_FACE_REF_05_SMILE_FRONT.png"
+    },
+    "_meta": {
+      "title": "IDENTITY REF - SMILING FRONT"
+    }
+  },
+  "6": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "AI_FACE_REF_06_SMILE_3Q_LEFT.png"
+    },
+    "_meta": {
+      "title": "IDENTITY REF - SMILING THREE-QUARTER LEFT"
+    }
+  },
+  "7": {
+    "class_type": "ImageBatch",
+    "inputs": {
+      "image1": [
+        "2",
+        0
+      ],
+      "image2": [
+        "3",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "BATCH - IDENTITY REFS 1-2"
+    }
+  },
+  "8": {
+    "class_type": "ImageBatch",
+    "inputs": {
+      "image1": [
+        "7",
+        0
+      ],
+      "image2": [
+        "4",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "BATCH - IDENTITY REFS 1-3"
+    }
+  },
+  "9": {
+    "class_type": "ImageBatch",
+    "inputs": {
+      "image1": [
+        "8",
+        0
+      ],
+      "image2": [
+        "5",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "BATCH - IDENTITY REFS 1-4"
+    }
+  },
+  "10": {
+    "class_type": "ImageBatch",
+    "inputs": {
+      "image1": [
+        "9",
+        0
+      ],
+      "image2": [
+        "6",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "BATCH - IDENTITY REFS 1-5"
+    }
+  },
+  "11": {
+    "class_type": "ReActorBuildFaceModel",
+    "inputs": {
+      "save_mode": false,
+      "send_only": false,
+      "face_model_name": "byrdhouse_carey_clean_v4_ephemeral",
+      "compute_method": "Mean",
+      "images": [
+        "10",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "BUILD CLEAN IDENTITY MODEL - CURATED AI REFS ONLY"
+    }
+  },
+  "12": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "FACE_REF_02.jpg"
+    },
+    "_meta": {
+      "title": "FACE SOURCE - RUNNER UPLOAD BINDER (NOT USED BY V4 MODEL)"
+    }
+  },
+  "14": {
+    "class_type": "UpscaleModelLoader",
+    "inputs": {
+      "model_name": "RealESRGAN_x4plus.pth"
+    },
+    "_meta": {
+      "title": "AI UPSCALER - REAL-ESRGAN X4"
+    }
+  },
+  "15": {
+    "class_type": "ImageUpscaleWithModel",
+    "inputs": {
+      "upscale_model": [
+        "14",
+        0
+      ],
+      "image": [
+        "1",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "AI UPSCALE - CREATE FACE PIXELS BEFORE SWAP"
+    }
+  },
+  "13": {
+    "class_type": "ReActorFaceSwap",
+    "inputs": {
+      "enabled": true,
+      "input_image": [
+        "15",
+        0
+      ],
+      "swap_model": "inswapper_128.onnx",
+      "facedetection": "YOLOv5l",
+      "face_restore_model": "none",
+      "face_restore_visibility": 1.0,
+      "codeformer_weight": 0.5,
+      "detect_gender_input": "no",
+      "detect_gender_source": "no",
+      "input_faces_index": "0",
+      "source_faces_index": "0",
+      "console_log_level": 0,
+      "face_model": [
+        "11",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "FACE SWAP - CLEAN V4 IDENTITY / PRIMARY PERSON"
+    }
+  },
+  "16": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "ByrdHouse/FaceSwap/carey_clean_v4_aiupscale",
+      "images": [
+        "13",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "SAVE - CLEAN V4 IDENTITY MODEL OUTPUT"
+    }
+  }
+}

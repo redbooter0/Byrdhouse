@@ -752,6 +752,13 @@ class Handler(BaseHTTPRequestHandler):
                         entry["subject_profile"] = r["subject_profile"]
                     if r.get("category"):
                         entry["category"] = r["category"]
+                    if r.get("runner"):
+                        entry["runner"] = r["runner"]
+                    if r.get("target_presets"):
+                        entry["target_presets"] = [
+                            {"id": key, "label": value.get("label", key)}
+                            for key, value in r["target_presets"].items()
+                        ]
                     out.append(entry)
                 except Exception:
                     continue

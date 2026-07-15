@@ -69,7 +69,10 @@ def main():
             shutil.copytree(gsrc / "refs", gdst / "refs", dirs_exist_ok=True)
         if (gsrc / "packed-refs").exists():
             shutil.copy(gsrc / "packed-refs", gdst / "packed-refs")
-    cfg = json.loads((REPO / "byrdhouse.config.json").read_text())
+    # The checked-in config is UTF-8 with a BOM.  Specify the codec so the
+    # belt test is deterministic on Windows consoles whose default codec is
+    # cp1252, as well as on Linux CI.
+    cfg = json.loads((REPO / "byrdhouse.config.json").read_text(encoding="utf-8-sig"))
     cfg["services"].update(comfyui=f"http://127.0.0.1:{CP}",
                            lmstudio=f"http://127.0.0.1:{LP}/v1",
                            router=f"http://127.0.0.1:{RP}")
@@ -272,6 +275,93 @@ def main():
                     and json.loads(a["meta"]).get("recipe", "").startswith("freeform")]
         check("enhanced prompt flowed into a freeform generation",
               enhanced and json.loads(enhanced[0]["meta"])["prompt"] != "")
+
+        # Permanent CPU semantic face-zone identity route: keep the recipe,
+        # neck-up-minus-hair mask, mesh-seeded cleanup graph, worker dispatch,
+        # reference map, and production LoRA contract locked together.  These
+        # are structural checks so the zero-GPU belt test catches a renamed or
+        # missing route before a gaming-PC job reaches ComfyUI.
+        face_recipe_path = ROOT / "recipes" / "anime_face_zone_edit.v1.json"
+        check("CPU face-zone recipe exists", face_recipe_path.is_file(),
+              str(face_recipe_path))
+        face_recipe = (json.loads(face_recipe_path.read_text(encoding="utf-8-sig"))
+                       if face_recipe_path.is_file() else {})
+        check("CPU face-zone recipe uses the permanent runner",
+              face_recipe.get("runner") == "face_zone_identity_edit",
+              str(face_recipe.get("runner")))
+
+        face_workflow_rel = face_recipe.get("workflow", "")
+        check("CPU face-zone recipe selects the mesh-seed cleanup graph",
+              face_workflow_rel == "workflows/sd15_face_mesh_seed_refine_api.json",
+              str(face_workflow_rel))
+        face_workflow_path = ROOT / face_workflow_rel if face_workflow_rel else None
+        check("CPU face-zone workflow exists",
+              bool(face_workflow_path and face_workflow_path.is_file()),
+              str(face_workflow_path))
+        face_graph = (json.loads(face_workflow_path.read_text(encoding="utf-8-sig"))
+                      if face_workflow_path and face_workflow_path.is_file() else {})
+        face_node_types = {node.get("class_type") for node in face_graph.values()
+                           if isinstance(node, dict)}
+        check("CPU face-zone workflow refines the retained mesh seed",
+              {"VAEEncode", "SetLatentNoiseMask"} <= face_node_types,
+              str(sorted(node for node in face_node_types if node)))
+
+        identity_references = face_recipe.get("identity_references") or {}
+        expected_identity_references = {
+            "gojo": "profiles/me/references/generated_anime_cartoon/002_naruto.png",
+            "vegeta": "profiles/me/references/generated_anime_cartoon/013_yu-yu-hakusho.png",
+            "luffy_close": "profiles/me/references/generated_anime_cartoon/003_one-piece.png",
+            "luffy_full": "profiles/me/references/generated_anime_cartoon/003_one-piece.png",
+        }
+        check("face-zone presets pin reviewed identity references",
+              identity_references == expected_identity_references,
+              str(identity_references))
+
+        facezone_source = (ROOT / "scripts" / "byrdfacezone.py").read_text(
+            encoding="utf-8-sig")
+        byrdimage_source = (ROOT / "scripts" / "byrdimage.py").read_text(
+            encoding="utf-8-sig")
+        worker_source = (ROOT / "scripts" / "worker.py").read_text(
+            encoding="utf-8-sig")
+        check("CPU face-zone script exposes prepare and composite functions",
+              "def prepare_face_zone(" in facezone_source
+              and "def composite_generated(" in facezone_source)
+        check("CPU face-zone script locks the neck-up-minus-hair rule",
+              '"zone_kind": "neck-connected-head-minus-hair"' in facezone_source
+              and '"hair_headwear_exclusion"' in facezone_source
+              and '"neck_anchor"' in facezone_source
+              and '"semantic_labels"' in facezone_source)
+        check("CPU face-zone script locks the commercial semantic model",
+              'SELFIE_SEGMENTER_SHA256 = "c6748b1253a99067ef71f7e26ca71096cd449baefa8f101900ea23016507e0e0"'
+              in facezone_source
+              and '"license": "Apache-2.0"' in facezone_source)
+        check("anime semantic fallback stays private pending license review",
+              'PARSENET_SHA256 = "3d558d8d0e42c20224f13cf5a29c79eba2d59913419f945545d8cf7b72920de2"'
+              in facezone_source
+              and '"license": "deployment-license-review-required"' in facezone_source
+              and '"deployment_scope": "private-local-evaluation-only"' in facezone_source)
+        check("CPU identity seed uses the 478-point triangle warp",
+              "def _build_identity_mesh_seed(" in facezone_source
+              and '"method": "cpu-mediapipe-478-triangle-warp"' in facezone_source
+              and '"identity_mesh_seed"' in facezone_source)
+        check("byrdimage exposes the face-zone adapter",
+              "def edit_face_zone(" in byrdimage_source
+              and 'recipe.get("runner") != "face_zone_identity_edit"' in byrdimage_source
+              and 'zone_script = root / "scripts" / "byrdfacezone.py"' in byrdimage_source)
+        check("worker dispatches face-zone jobs to byrdimage",
+              'recipe_data.get("runner") == "face_zone_identity_edit"' in worker_source
+              and "byrdimage.edit_face_zone(" in worker_source)
+
+        production_identity = face_recipe.get("identity") or {}
+        check("face-zone production LoRA is explicit",
+              production_identity.get("lora") == "carey_meina_sd15_v1.safetensors"
+              and isinstance(production_identity.get("strength"), (int, float))
+              and isinstance(production_identity.get("clip_strength"), (int, float)),
+              str(production_identity))
+        check("face-zone adapter refuses an unconditioned production run",
+              "face-zone edit requires an installed identity LoRA" in byrdimage_source
+              and "selected_identity_lora = resolve_lora(" in byrdimage_source
+              and 'lora_id="byrd_identity_lora"' in byrdimage_source)
 
         # aspect presets snap to SDXL-native dims; LoRA splices into the graph
         sys.path.insert(0, str(ROOT / "scripts"))

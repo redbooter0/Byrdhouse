@@ -1,0 +1,76 @@
+{
+  "_comment": "ByrdHouse CPU-outlined face-zone edit. FACE CROP and EDIT ZONE MASK are prepared before GPU execution. The LoRA is injected at runtime. InpaintModelConditioning plus DifferentialDiffusion lets the graded mask control how strongly each contiguous face region is regenerated.",
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" },
+    "_meta": { "title": "FACE CROP" }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" },
+    "_meta": { "title": "EDIT ZONE MASK" }
+  },
+  "3": {
+    "class_type": "ImageToMask",
+    "inputs": { "image": ["2", 0], "channel": "red" },
+    "_meta": { "title": "GRADED FACE MASK" }
+  },
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "Meina V5.1 - Baked VAE.safetensors" },
+    "_meta": { "title": "COMPACT ANIME CHECKPOINT" }
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] },
+    "_meta": { "title": "POSITIVE PROMPT" }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] },
+    "_meta": { "title": "NEGATIVE PROMPT" }
+  },
+  "7": {
+    "class_type": "InpaintModelConditioning",
+    "inputs": {
+      "positive": ["5", 0],
+      "negative": ["6", 0],
+      "vae": ["4", 2],
+      "pixels": ["1", 0],
+      "mask": ["3", 0],
+      "noise_mask": true
+    },
+    "_meta": { "title": "FACE ZONE INPAINT CONDITIONING" }
+  },
+  "8": {
+    "class_type": "DifferentialDiffusion",
+    "inputs": { "model": ["4", 0], "strength": 1.0 },
+    "_meta": { "title": "GRADED DENOISE" }
+  },
+  "9": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0,
+      "steps": 24,
+      "cfg": 5.5,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "denoise": 0.68,
+      "model": ["8", 0],
+      "positive": ["7", 0],
+      "negative": ["7", 1],
+      "latent_image": ["7", 2]
+    },
+    "_meta": { "title": "FACE ZONE SAMPLER" }
+  },
+  "10": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["9", 0], "vae": ["4", 2] },
+    "_meta": { "title": "DECODE FACE CROP" }
+  },
+  "11": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "byrdhouse_face_zone", "images": ["10", 0] },
+    "_meta": { "title": "SAVE GENERATED FACE CROP" }
+  }
+}

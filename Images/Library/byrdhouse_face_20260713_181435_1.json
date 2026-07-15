@@ -1,0 +1,8 @@
+{
+  "prompt_id": "5f586bf8-2a23-497e-b728-70470bebd777",
+  "workflow": "Images\\Workflows\\byrdhouse_face_swap_social\\byrdhouse_social_main_head_direct_source_aiupscale_api_v1.json",
+  "target": "E:\\ByrdHouse\\Images\\Targets\\gta_iv\\gta_iv_cover.jpg",
+  "source": "E:\\ByrdHouse\\profiles\\me\\references\\ai_identity_front_v1.png",
+  "face_index": "0",
+  "comfy_output": "E:\\ByrdHouse\\Generators\\ComfyUI\\output\\ByrdHouse\\FaceSwap\\carey_direct_source_realesrgan_00009_.png"
+}

@@ -1,0 +1,301 @@
+{
+  "version": 2,
+  "mode": "anime-mix",
+  "trigger": "careybh person",
+  "source_root": "E:\\ByrdHouse\\profiles\\me\\references",
+  "buckets": {
+    "real": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\5_careybh_real",
+    "studio": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\3_careybh_studio",
+    "anime": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\2_careybh_anime"
+  },
+  "items": [
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_01.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\5_careybh_real\\real_001_me_photo_01.jpg",
+      "category": "real",
+      "width": 650,
+      "height": 1280,
+      "sha256": "71c1d120ca71236e72d0abe4876ca55f1f140a1a4c53b90bc34eb68f7d918129",
+      "caption": "careybh person, adult Black man, portrait photograph"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_02.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\5_careybh_real\\real_002_me_photo_02.jpg",
+      "category": "real",
+      "width": 650,
+      "height": 1280,
+      "sha256": "4280fc2b73cdb42b8a25f97b11e827a1cbe8359b011b232a4c2fa59d1ed774ec",
+      "caption": "careybh person, adult Black man, portrait photograph"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_03.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\5_careybh_real\\real_003_me_photo_03.jpg",
+      "category": "real",
+      "width": 720,
+      "height": 1280,
+      "sha256": "59c1f38f630d8b25bfcc556e7afc4d514f60fda5204d3d1eb07fde4a434e83f9",
+      "caption": "careybh person, adult Black man, portrait photograph"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_04.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\5_careybh_real\\real_004_me_photo_04.jpg",
+      "category": "real",
+      "width": 2880,
+      "height": 3840,
+      "sha256": "5a33ef25588fddfa8aabf206987c3432365ce2dfb4a1f15940bf6e5b8652dc0d",
+      "caption": "careybh person, adult Black man, portrait photograph"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_05.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\5_careybh_real\\real_005_me_photo_05.jpg",
+      "category": "real",
+      "width": 720,
+      "height": 1280,
+      "sha256": "7c3684c62d928e1fb69794e90d578c2ba63ade701ea12e550546633e48b90132",
+      "caption": "careybh person, adult Black man, portrait photograph"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_07.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\5_careybh_real\\real_006_me_photo_07.jpg",
+      "category": "real",
+      "width": 2880,
+      "height": 3840,
+      "sha256": "897688880a2b1bc2908ed9d9e9be3a7d935088dc928c779e0341639415775bc3",
+      "caption": "careybh person, adult Black man, portrait photograph"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_08.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\5_careybh_real\\real_007_me_photo_08.jpg",
+      "category": "real",
+      "width": 720,
+      "height": 1280,
+      "sha256": "ca784dc51993d401831b7d1ad5ce7c6f1ce06611f087b4c9319686924d4b5690",
+      "caption": "careybh person, adult Black man, portrait photograph"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_09.jpg",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\5_careybh_real\\real_008_me_photo_09.jpg",
+      "category": "real",
+      "width": 720,
+      "height": 1280,
+      "sha256": "3d4acfe26ffc5bb42d322ab35fe3dd089f7680eb99bf27781bf65885612d9c90",
+      "caption": "careybh person, adult Black man, portrait photograph"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\ai_identity_front_v1.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\3_careybh_studio\\studio_001_ai_identity_front_v1.png",
+      "category": "studio",
+      "width": 1402,
+      "height": 1122,
+      "sha256": "bc92055863de940a54cb14d099ced103e8d866bb70a05acf9ce289c22b5312ce",
+      "caption": "careybh person, adult Black man, studio identity portrait"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\ai_identity_profile_left_v1.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\3_careybh_studio\\studio_002_ai_identity_profile_left_v1.png",
+      "category": "studio",
+      "width": 1402,
+      "height": 1122,
+      "sha256": "83b9e57aac080b21fe9641d4cf47d25137fcd58674c635a55c53207723436501",
+      "caption": "careybh person, adult Black man, studio identity portrait"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\ai_identity_smile_front_teeth_v1.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\3_careybh_studio\\studio_003_ai_identity_smile_front_teeth_v1.png",
+      "category": "studio",
+      "width": 1402,
+      "height": 1122,
+      "sha256": "682852e6c68a891d2a8239b2fbe70d8a10964b277fc1211704fcf1a23b3f6e2c",
+      "caption": "careybh person, adult Black man, studio identity portrait"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\ai_identity_smile_threequarter_left_teeth_v1.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\3_careybh_studio\\studio_004_ai_identity_smile_threequarter_left_teeth_v1.png",
+      "category": "studio",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "1216731f5cece5e16282d3c9a1d6e37546c91a36ca7911d20907b0352ce3f99a",
+      "caption": "careybh person, adult Black man, studio identity portrait"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\ai_identity_threequarter_left_v1.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\3_careybh_studio\\studio_005_ai_identity_threequarter_left_v1.png",
+      "category": "studio",
+      "width": 1402,
+      "height": 1122,
+      "sha256": "85800b3862b1efdba33377cf9b44588367a97448bd562e4d62d079d3194e6988",
+      "caption": "careybh person, adult Black man, studio identity portrait"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\ai_identity_threequarter_right_v1.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\3_careybh_studio\\studio_006_ai_identity_threequarter_right_v1.png",
+      "category": "studio",
+      "width": 1023,
+      "height": 1537,
+      "sha256": "9fd440037d6fe7166fc43d47d79552da292dbb5deddfec7f8513b7722fbf278d",
+      "caption": "careybh person, adult Black man, studio identity portrait"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\001_dragon-ball-z.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\2_careybh_anime\\anime_001_001_dragon-ball-z.png",
+      "category": "anime",
+      "width": 1023,
+      "height": 1537,
+      "sha256": "868e10fa56b668a3c47b2a98696c17fbdd043593fae884602d9e982a810f8358",
+      "caption": "careybh person, adult Black man, anime illustration"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\002_naruto.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\2_careybh_anime\\anime_002_002_naruto.png",
+      "category": "anime",
+      "width": 1086,
+      "height": 1448,
+      "sha256": "82cc12a26b1485efdc0e8ccf85b0506436808d9b3c89a163159c9fcebe51fead",
+      "caption": "careybh person, adult Black man, anime illustration"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\003_one-piece.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\2_careybh_anime\\anime_003_003_one-piece.png",
+      "category": "anime",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "af4af14232ea91b0cfe962d643c64e34b858ce31a71b7e23a2545c15d9ce3470",
+      "caption": "careybh person, adult Black man, anime illustration"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\011_cowboy-bebop.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\2_careybh_anime\\anime_004_011_cowboy-bebop.png",
+      "category": "anime",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "ebf1289aadafe1647194e01c1f4d2eee92a867f6a8aa58cb1054f6d391835177",
+      "caption": "careybh person, adult Black man, anime illustration"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\012_samurai-champloo.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\2_careybh_anime\\anime_005_012_samurai-champloo.png",
+      "category": "anime",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "f4a4a508ca7b14584e3b1a5292c21c3347e94d243ba1e2854a8c004d142b30bc",
+      "caption": "careybh person, adult Black man, anime illustration"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\013_yu-yu-hakusho.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\2_careybh_anime\\anime_006_013_yu-yu-hakusho.png",
+      "category": "anime",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "84e3e48bff18031b1205f48c0f345fb276eda3b04e66b40790321ad0d3206b0f",
+      "caption": "careybh person, adult Black man, anime illustration"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\016_digimon-adventure.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\2_careybh_anime\\anime_007_016_digimon-adventure.png",
+      "category": "anime",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "99b75bfd4e587b650ed900f9eb268bfee54f4a0e759a2241c37d8cddab89770c",
+      "caption": "careybh person, adult Black man, anime illustration"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\017_sailor-moon.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\2_careybh_anime\\anime_008_017_sailor-moon.png",
+      "category": "anime",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "850cf09e7e5ecf462e378b91f46549287a59c6ccc4ebf4e6d8219b2f6f9b6424",
+      "caption": "careybh person, adult Black man, anime illustration"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\020_mob-psycho-100.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\2_careybh_anime\\anime_009_020_mob-psycho-100.png",
+      "category": "anime",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "a8d3fdca9424870bb70d32324b5a6022f33f1d39119b2a1020d2bf2aa003c539",
+      "caption": "careybh person, adult Black man, anime illustration"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\021_one-punch-man.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\2_careybh_anime\\anime_010_021_one-punch-man.png",
+      "category": "anime",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "e8720639b040d1fd644b3be15359721d92b83e5c0512eae0d2960b302aeffa30",
+      "caption": "careybh person, adult Black man, anime illustration"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\022_chainsaw-man.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\2_careybh_anime\\anime_011_022_chainsaw-man.png",
+      "category": "anime",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "516af3a479fb6821869fc68f13dc9957c5cb90af0d5dddeefd0b6d432fb05d25",
+      "caption": "careybh person, adult Black man, anime illustration"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\023_spy-x-family.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\2_careybh_anime\\anime_012_023_spy-x-family.png",
+      "category": "anime",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "0b282aeeaa3c75445ffcc3b467c7f2723d48d00947e7236f6ad7fef84e35bce3",
+      "caption": "careybh person, adult Black man, anime illustration"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\027_trigun.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\2_careybh_anime\\anime_013_027_trigun.png",
+      "category": "anime",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "f08cbac8e7a26e3fa7999d3d989324bd67e5a81b15497fde4a4006a8e08f187a",
+      "caption": "careybh person, adult Black man, anime illustration"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\031_fire-force.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\2_careybh_anime\\anime_014_031_fire-force.png",
+      "category": "anime",
+      "width": 1254,
+      "height": 1254,
+      "sha256": "e63290318b862da73a786738c2687a222146e425be567b679a2e17d8052e9aa0",
+      "caption": "careybh person, adult Black man, anime illustration"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\032_haikyuu.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\2_careybh_anime\\anime_015_032_haikyuu.png",
+      "category": "anime",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "7f70d5be1862fc433cb073f8e9bb70919e391ba40bb6060fd136c3f7cad70a05",
+      "caption": "careybh person, adult Black man, anime illustration"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\033_kuroko-s-basketball.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\2_careybh_anime\\anime_016_033_kuroko-s-basketball.png",
+      "category": "anime",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "d115c0dc88ef7df48e756fdf88325245516cd3b7091dc7f6916f77f9f1597152",
+      "caption": "careybh person, adult Black man, anime illustration"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\036_akira.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\2_careybh_anime\\anime_017_036_akira.png",
+      "category": "anime",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "915c62d68d1d6c90538285aae24d7b9772084d78ac1c35c7d3374b3392968c38",
+      "caption": "careybh person, adult Black man, anime illustration"
+    },
+    {
+      "source": "E:\\ByrdHouse\\profiles\\me\\references\\generated_anime_cartoon\\037_ghost-in-the-shell.png",
+      "destination": "E:\\ByrdHouse\\profiles\\me\\lora_dataset\\anime-mix\\2_careybh_anime\\anime_018_037_ghost-in-the-shell.png",
+      "category": "anime",
+      "width": 1024,
+      "height": 1536,
+      "sha256": "d39ac8f03fc3263c55a30e34beac3d6f24494f16cc5cea0eaea6d8a4f038a6eb",
+      "caption": "careybh person, adult Black man, anime illustration"
+    }
+  ]
+}

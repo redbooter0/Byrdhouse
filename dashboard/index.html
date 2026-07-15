@@ -435,7 +435,7 @@ V.create = async () => {
           <option value="3:2">3:2 landscape</option>
           <option value="21:9">21:9 banner</option>
         </select>
-        <label>Upload source image</label>
+        <label id="srcLabel">Upload source image</label>
         <input id="srcFile" type="file" accept="image/*" onchange="uploadSource(this)">
         <div id="srcPreview" class="muted" style="margin-top:6px"></div>
         <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
@@ -497,7 +497,9 @@ async function uploadSource(input) {
       `<span style="color:var(--green)">saved</span> ${esc(name)}`
       + `<br><img src="/artifacts/${esc(j.id)}/file" style="height:52px;border-radius:6px;margin-top:4px">`
       + `<br><button class="s" onclick="clearSource()" style="margin-top:4px">remove</button>`;
-    say('source saved — add a title above, then Create');
+    say(isTargetEditRecipe(currentRecipe())
+      ? 'target saved — choose its layout, then Create'
+      : 'source saved — add a title above, then Create');
     saveDraft();
   } catch (e) { say('upload error: ' + e.message); }
 }
@@ -524,6 +526,7 @@ function slotFields() {
   if (!r) return;
   const keep = {};
   document.querySelectorAll('#slots input').forEach(i => { keep[i.dataset.slot] = i.value; });
+  const oldPreset = $('targetPreset') ? $('targetPreset').value : '';
   const slotMeta = r.slot_meta || {};
   $('slots').innerHTML = requiredSlots(r).map(s => {
     const meta = slotMeta[s] || {};
@@ -533,6 +536,17 @@ function slotFields() {
       `<input data-slot="${esc(s)}" required placeholder="${esc(def || lbl)}">`;
   }).join('');
   document.querySelectorAll('#slots input').forEach(i => { if (keep[i.dataset.slot]) i.value = keep[i.dataset.slot]; });
+  const presets = r.target_presets || [];
+  if (presets.length) {
+    const selected = oldPreset || presets[0].id;
+    $('slots').innerHTML += '<label>Target layout <span style="color:var(--red)">*</span></label>'
+      + `<select id="targetPreset">${presets.map(p =>
+        `<option value="${esc(p.id)}"${p.id===selected?' selected':''}>${esc(p.label)}</option>`).join('')}</select>`
+      + '<div class="muted" style="font-size:11px;margin:4px 0 8px">Upload the matching target image below. This keeps its pose and redraws only the face.</div>';
+  }
+}
+function isTargetEditRecipe(r) {
+  return !!(r && (r.runner === 'target_identity_edit' || r.runner === 'face_zone_identity_edit'));
 }
 async function showRecipeInfo() {
   const r = currentRecipe();
@@ -541,6 +555,9 @@ async function showRecipeInfo() {
   const note = (r.note || '').split('.')[0];
   el.innerHTML = note ? esc(note) : '';
   const ps = $('profileStatus');
+  const srcLabel = $('srcLabel');
+  if (srcLabel) srcLabel.textContent = isTargetEditRecipe(r)
+    ? 'Upload target image' : 'Upload source image';
   if (!ps) return;
   if (r.subject_profile) {
     try {
@@ -649,6 +666,7 @@ function readForm() {
   return { recipe: $('recipe') ? $('recipe').value : '', slots,
            title: $('thumbTitle') ? $('thumbTitle').value : '',
            srcArtifact: window._srcArtifact || null,
+           targetPreset: $('targetPreset') ? $('targetPreset').value : '',
            project: $('project') ? $('project').value : 'careyrpg',
            purpose: $('purpose') ? $('purpose').value : '',
            engine: Object.keys(eng).length ? eng : null };
@@ -666,6 +684,7 @@ function applyDraft(d) {
   if ($('thumbTitle')) $('thumbTitle').value = d.title || '';
   if ($('project')) $('project').value = d.project || 'careyrpg';
   if ($('purpose')) $('purpose').value = d.purpose || '';
+  if ($('targetPreset') && d.targetPreset) $('targetPreset').value = d.targetPreset;
   window._srcArtifact = d.srcArtifact || null;
   if (window._srcArtifact && $('srcPreview'))
     $('srcPreview').innerHTML =
@@ -686,10 +705,16 @@ async function submitGen() {
     if (!d.purpose) throw new Error('tell me what this is for (purpose)');
     const title = d.title.trim();
     const srcArt = d.srcArtifact && d.srcArtifact.id ? d.srcArtifact : null;
-    if (srcArt && !title) throw new Error('a source image needs a title to composite');
+    const cr = currentRecipe();
+    const targetEdit = isTargetEditRecipe(cr);
+    if (targetEdit && !srcArt) throw new Error('upload the target image first');
+    if (srcArt && !title && !targetEdit) throw new Error('a source image needs a title to composite');
     const payload = { recipe:d.recipe, slots:d.slots, project:d.project, purpose:d.purpose };
     if (title) payload.title = title;
-    if (srcArt) payload.source_artifact = srcArt.id;
+    if (targetEdit) {
+      payload.target_artifact = srcArt.id;
+      payload.target_preset = d.targetPreset;
+    } else if (srcArt) payload.source_artifact = srcArt.id;
     const eng = collectEngine();
     if (eng) {
       if (eng.checkpoint) payload.checkpoint = eng.checkpoint;
@@ -705,17 +730,16 @@ async function submitGen() {
     }
     const aspect = $('aspect') ? $('aspect').value : '';
     if (aspect) payload.aspect = aspect;
-    const cr = currentRecipe();
     if (cr && cr.subject_profile) payload.subject_profile = cr.subject_profile;
-    const enhance = $('enhance') && $('enhance').checked && !title && !srcArt && payload.slots.prompt;
-    const type = (srcArt || title) ? 'content.thumbnail' : enhance ? 'content.enhance' : 'image.generate';
+    const enhance = !targetEdit && $('enhance') && $('enhance').checked && !title && !srcArt && payload.slots.prompt;
+    const type = targetEdit ? 'image.generate' : (srcArt || title) ? 'content.thumbnail' : enhance ? 'content.enhance' : 'image.generate';
     if (!srcArt && type !== 'content.enhance') {
       const missing = missingRequiredSlots(d.slots);
       if (missing.length) throw new Error('fill required: ' + missing.join(', '));
     }
     await jpost('/jobs', { type, project:d.project,
-      required_mode: srcArt ? 'ANY' : enhance ? 'OPERATOR' : 'IMAGE',
-      required_caps: srcArt ? [] : enhance ? ['lmstudio'] : ['comfyui'], payload });
+      required_mode: targetEdit ? 'IMAGE' : srcArt ? 'ANY' : enhance ? 'OPERATOR' : 'IMAGE',
+      required_caps: targetEdit ? ['comfyui'] : srcArt ? [] : enhance ? ['lmstudio'] : ['comfyui'], payload });
     say('creating...');
     window._srcArtifact = null;
     clearDraft();

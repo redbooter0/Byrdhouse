@@ -8,6 +8,10 @@ A local-first AI command platform run by one founder (Carey) across three device
 
 The governing documents are the Master Blueprint v2 (technical spec: job envelope, SQLite schema, Router API, GPU modes, unlock roadmap U0–U6), v3 (money-gated sequencing) and v3.1 (content engine). Condensed operating state lives in `docs/STATE.md` (current truth — update it on milestones), `docs/DECISIONS.md` (append-only) and `docs/ROOM_MAP.md`.
 
+Before changing any image model, ComfyUI graph, face/identity workflow, or worker image route, read `docs/IMAGE_GENERATION_STATE.md` first. It is the persistent handoff for the live GAMING image lane; update it with the model, VRAM result, and real local test outcome before calling that lane ready.
+
+For uploaded face-zone edits, use the documented belt in `docs/FACE_ZONE_EDIT_WORKFLOW.md`: upload -> CPU 478-point mesh + semantic parser -> detect the neck and keep the connected face/head/ears above it minus hair/headwear/accessories/clothing -> warp the reviewed Carey anime reference through the target mesh -> low-denoise GPU cleanup with `VAEEncode` + `SetLatentNoiseMask` -> CPU soft composite. Do not substitute a rectangle mask, silently guess after semantic failure, or bypass the audited job route. The current ParseNet anime fallback is private-local-evaluation-only pending deployment license review/replacement. Treat every identity LoRA and the local Meina checkpoint as private previews until visual and license gates pass.
+
 ## Current Stage: U1 IMAGE LAB
 
 Work orders are in `docs/CLAUDE_CODE_TASKS.md`. U0 is functionally complete on real hardware: BYRD-MINI serves the router/dashboard and owns memory/Qdrant, BYRD-GAMING runs the GPU worker, a router-submitted image was generated, judged, and approved, and `main` was pushed with the final worker/judge fixes. The active work is U1: use the belt to generate/review CareyRPG image and thumbnail assets.
