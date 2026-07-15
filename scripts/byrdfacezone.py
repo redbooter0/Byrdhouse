@@ -2446,6 +2446,16 @@ def composite_generated(zone_file: Path, generated_crop: Path, output: Path) -> 
             generated, target_region, protected_material
         )
     original.paste(generated, (left, top), soft)
+    # Founder rule: the target's hair is outlined and imported directly OVER the
+    # likeness. Re-assert the original hair/headwear pixels on top of the pasted
+    # face so a dilated zone boundary can never eat into the hairline — strands
+    # that overlap the face win against the generated skin.
+    hair_path = artifacts.get("hair_headwear_exclusion")
+    if hair_path and Path(hair_path).is_file():
+        with Image.open(hair_path) as opened:
+            hair = opened.convert("L").resize((side, side), Image.Resampling.BILINEAR)
+        hair = hair.filter(ImageFilter.GaussianBlur(1.5))
+        original.paste(target_region, (left, top), hair)
     output.parent.mkdir(parents=True, exist_ok=True)
     original.save(output, "PNG", optimize=True)
     return output

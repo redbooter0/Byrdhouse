@@ -10,6 +10,41 @@ The compact local target-edit belt now performs semantic masking and CPU identit
 
 Do not promote or configure any candidate as the recipe's deployed identity LoRA.
 
+## Staged 2026-07-15: guided cleanup v3 (UNTESTED on hardware — test before trusting)
+
+Note: the two-pass v2 recipe the integration suite locks (`recipes/anime_face_zone_edit.v2.json`) was missing from the rescued branch and has been reconstructed exactly to the suite's spec (identity_fill 16/0.38 + line_harmonize 8/0.12, `skip_gpu_cleanup: true`, accessory truth per preset).
+
+Diagnosis of "CPU beat GPU": the v1 cleanup pass was **unguided** img2img — at
+denoise 0.38 it could not redraw seams/lighting (kept them), at ~0.9 it destroyed
+the warped identity, and the whole-crop VAE round trip washed color either way.
+The 3070 was never the limit; the pass had nothing to push against.
+
+Staged fix (recipe `anime_face_zone_edit@3`, graph
+`workflows/sd15_face_zone_controlnet_api.json`):
+
+- **ControlNet CANNY guidance extracted from the identity mesh seed itself**
+  (core ComfyUI nodes; model `control_v11p_sd15_canny.safetensors`, openrail,
+  ~700MB → `models/controlnet`; Meina 2.13GB + LoRA + ControlNet ≈ well inside
+  the 7200MB budget at 512px).
+- Denoise raised to **0.55** with canny strength 0.55 / end 0.75: the sampler
+  now redraws the WHOLE zone's linework (full face, forehead included — the
+  jaw-to-jaw limitation goes away because the redraw covers the entire semantic
+  mask) in the target's material while the seed's edges hold Carey's geometry.
+- **Hair-over-likeness composite rule** (byrdfacezone `composite_generated`):
+  after the paste, the target's hair/headwear pixels are re-asserted ON TOP of
+  the likeness through a feathered `hair_headwear_exclusion` mask, so the zone
+  boundary can never eat the hairline and overlapping strands win.
+- v1 stays as rollback; `skip_gpu_cleanup` still selects the CPU-only finish.
+- First hardware test: rerun the Gojo (Naruto-seed) and hard-Vegeta targets on
+  `anime_face_zone_edit@3`; sweep denoise 0.45–0.6 × canny strength 0.45–0.65;
+  record VRAM + verdicts here per the rule above.
+
+Parser replacement candidates for the ParseNet license gap (both LICENSE-UNVERIFIED
+— treat exactly like ParseNet, private local evaluation only, until the license is
+confirmed): `jonathandinu/face-parsing` (SegFormer/CelebAMask-HQ via HF
+transformers, strong on real photos) and `skytnt/anime-seg` (anime character
+matting — a hair/character matte source for anime targets).
+
 ## Current CPU face-zone state
 
 The permanent target-edit architecture is **upload -> CPU 478-point mesh + semantic parser -> neck-connected face/head/ears above the neck minus hair/headwear/accessories/clothing -> CPU Carey-reference triangle warp -> CPU-only seed/composite when that looks better than GPU cleanup -> CPU soft composite -> card/review**. Its detailed handoff is [`FACE_ZONE_EDIT_WORKFLOW.md`](FACE_ZONE_EDIT_WORKFLOW.md). The belt works end to end, and the CPU crop preflight now expands and re-audits clipped head/neck envelopes before any GPU work. For the current v2 lane, CPU-only seed finishing is the preferred default because the GPU cleanup degraded the hard target. This is still not a quality or deployment approval.

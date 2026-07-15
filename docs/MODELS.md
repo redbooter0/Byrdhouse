@@ -45,6 +45,15 @@ screenshot steer the look:
   the Subpack into `ComfyUI\models\ultralytics\bbox`. Graph:
   `workflows/facezone_auto_api.json` (FaceDetailer: detect → mask → inpaint →
   composite in one node).
+- **Quality lane v2 guided cleanup**: [lllyasviel/control_v11p_sd15_canny](https://hf.co/lllyasviel/control_v11p_sd15_canny)
+  (`openrail` — commercial-OK, same family as the checkpoints) →
+  `ComfyUI\models\controlnet\control_v11p_sd15_canny.safetensors`. Used by
+  `workflows/sd15_face_zone_controlnet_api.json` / `anime_face_zone_edit@3`;
+  Canny/ControlNetLoader/ControlNetApplyAdvanced are core ComfyUI nodes.
+- Parser candidates for the ParseNet replacement (LICENSE-UNVERIFIED — private
+  local evaluation only until confirmed): [jonathandinu/face-parsing](https://hf.co/jonathandinu/face-parsing)
+  (SegFormer face parsing, HF transformers, local) and
+  [skytnt/anime-seg](https://hf.co/skytnt/anime-seg) (anime character matte).
 - Verify with `python scripts\facelab_preflight.py` — it asks the live ComfyUI
   what is installed and cross-checks the workflow schema.
 - **License**: inswapper_128 is insightface **research/non-commercial** — fine for

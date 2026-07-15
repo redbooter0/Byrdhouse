@@ -166,6 +166,25 @@ def main():
                 "ComfyUI Manager -> install 'ComfyUI Impact Pack' AND 'ComfyUI Impact Subpack', "
                 "restart ComfyUI (the face_yolov8m.pt detector installs with the Subpack)")
 
+    # ── 3c. quality lane v2: ControlNet-guided cleanup (the GPU that earns
+    #        its keep — canny edges hold identity while denoise 0.55 redraws
+    #        the full zone). Core nodes; only the model file is a download. ──
+    try:
+        cn_info = get_json(f"{comfy}/object_info/ControlNetLoader")
+    except Exception:
+        cn_info = {}
+    if cn_info.get("ControlNetLoader"):
+        cn_live = node_inputs(cn_info["ControlNetLoader"])
+        cn_models = cn_live.get("control_net_name") if isinstance(cn_live.get("control_net_name"), list) else []
+        if any("control_v11p_sd15_canny" in str(m) for m in cn_models):
+            ok("ControlNet canny model available (guided face-zone cleanup v2)")
+        else:
+            problem("control_v11p_sd15_canny.safetensors not in models\\controlnet — "
+                    "the v3 guided cleanup (anime_face_zone_edit@3) needs it",
+                    "download from huggingface.co/lllyasviel/ControlNet-v1-1 "
+                    "(control_v11p_sd15_canny.safetensors, openrail/commercial-OK) into "
+                    "ComfyUI\\models\\controlnet — see docs/MODELS.md")
+
     # ── 4. face photo ─────────────────────────────────────────────────────────
     refs = root / "profiles" / "me" / "references"
     photos = [f for f in refs.glob("*") if f.suffix.lower() in (".jpg", ".jpeg", ".png")] \

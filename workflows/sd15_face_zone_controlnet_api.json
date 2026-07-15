@@ -1,0 +1,92 @@
+{
+  "_comment": "ByrdHouse mesh-seeded face cleanup v2 — the GPU finally earns its keep. Same contract as sd15_face_mesh_seed_refine_api.json (titles: IDENTITY MESH SEED / EDIT ZONE MASK / POSITIVE-NEGATIVE PROMPT; single KSampler pass; adapter splices the identity LoRA), plus ControlNet CANNY guidance extracted from the warped identity seed itself. That lets the sampler run at ~0.55 denoise — enough freedom to redraw the WHOLE zone's linework (full face, forehead included) in the target's material and erase jaw/ear seams — while the canny edges hold Carey's warped geometry so identity cannot wash out. Fixes the v1 dilemma where low denoise kept the seams and high denoise destroyed the face. Model: control_v11p_sd15_canny.safetensors (lllyasviel ControlNet v1.1, openrail = commercial-OK) in ComfyUI/models/controlnet — Canny/ControlNetLoader/ControlNetApplyAdvanced are core ComfyUI nodes, no custom pack.",
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" },
+    "_meta": { "title": "IDENTITY MESH SEED" }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" },
+    "_meta": { "title": "EDIT ZONE MASK" }
+  },
+  "3": {
+    "class_type": "ImageToMask",
+    "inputs": { "image": ["2", 0], "channel": "red" },
+    "_meta": { "title": "SEMANTIC FACE MASK" }
+  },
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "Meina V5.1 - Baked VAE.safetensors" },
+    "_meta": { "title": "COMPACT ANIME CHECKPOINT" }
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] },
+    "_meta": { "title": "POSITIVE PROMPT" }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] },
+    "_meta": { "title": "NEGATIVE PROMPT" }
+  },
+  "7": {
+    "class_type": "VAEEncode",
+    "inputs": { "pixels": ["1", 0], "vae": ["4", 2] },
+    "_meta": { "title": "ENCODE IDENTITY SEED" }
+  },
+  "8": {
+    "class_type": "SetLatentNoiseMask",
+    "inputs": { "samples": ["7", 0], "mask": ["3", 0] },
+    "_meta": { "title": "LIMIT CLEANUP TO FACE ZONE" }
+  },
+  "12": {
+    "class_type": "Canny",
+    "inputs": { "image": ["1", 0], "low_threshold": 0.3, "high_threshold": 0.65 },
+    "_meta": { "title": "SEED GEOMETRY EDGES" }
+  },
+  "13": {
+    "class_type": "ControlNetLoader",
+    "inputs": { "control_net_name": "control_v11p_sd15_canny.safetensors" },
+    "_meta": { "title": "CANNY CONTROLNET" }
+  },
+  "14": {
+    "class_type": "ControlNetApplyAdvanced",
+    "inputs": {
+      "positive": ["5", 0],
+      "negative": ["6", 0],
+      "control_net": ["13", 0],
+      "image": ["12", 0],
+      "strength": 0.55,
+      "start_percent": 0.0,
+      "end_percent": 0.75
+    },
+    "_meta": { "title": "HOLD CAREY GEOMETRY WHILE REDRAWING MATERIAL" }
+  },
+  "9": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0,
+      "steps": 26,
+      "cfg": 5.5,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "denoise": 0.55,
+      "model": ["4", 0],
+      "positive": ["14", 0],
+      "negative": ["14", 1],
+      "latent_image": ["8", 0]
+    },
+    "_meta": { "title": "GUIDED FULL-ZONE CLEANUP SAMPLER" }
+  },
+  "10": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["9", 0], "vae": ["4", 2] },
+    "_meta": { "title": "DECODE CLEAN FACE CROP" }
+  },
+  "11": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "byrdhouse_face_zone_cnet", "images": ["10", 0] },
+    "_meta": { "title": "SAVE CLEAN FACE CROP" }
+  }
+}
