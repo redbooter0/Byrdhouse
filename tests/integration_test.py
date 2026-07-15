@@ -401,6 +401,25 @@ def main():
               and isinstance(production_identity.get("strength"), (int, float))
               and isinstance(production_identity.get("clip_strength"), (int, float)),
               str(production_identity))
+        # ── The examiner (founder contract): before ANY edit the system must
+        #    understand where it can and can't operate on THIS image ──
+        check("examiner gates the quality lane before any zone/GPU work",
+              "def _face_report(" in byrdimage_source
+              and "face_report = _face_report(" in byrdimage_source
+              and "face report: cannot operate" in byrdimage_source
+              and '"face_report": face_report' in byrdimage_source)
+        check("examiner reports every face with verdicts, risk flags and a feature plan",
+              "def analyze_image(" in facezone_source
+              and "FEATURE_PLAN_DEFAULT" in facezone_source
+              and "extreme_expression" in facezone_source
+              and "strong_profile" in facezone_source
+              and '"feature_plan"' in facezone_source
+              and "def render_report_overview(" in facezone_source)
+        check("examine route archives the report without editing (any GPU mode)",
+              "def facezone_examine(" in byrdimage_source
+              and '"examine"' in worker_source
+              and "byrdimage.facezone_examine(" in worker_source
+              and '"face-report"' in byrdimage_source)
         check("face-zone adapter refuses an unconditioned production run",
               "face-zone edit requires an installed identity LoRA" in byrdimage_source
               and "selected_identity_lora = resolve_lora(" in byrdimage_source

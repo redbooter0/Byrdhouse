@@ -455,6 +455,7 @@ V.create = async () => {
       <label>Route ${qtip('Auto: the detector finds the character’s face, masks it and redraws it as you in the picture’s own art style — one step, use with your identity LoRA. Direct swap: ReActor puts your photo’s face on (use blend for anime). A zone mask below overrides both.')}</label>
       <select id="swapRoute">
         <option value="auto" selected>Auto — find the face, redraw as me</option>
+        <option value="examine">Examine first — where can it operate? (CPU report)</option>
         <option value="preview">Preview zone first (CPU only — see the mask)</option>
         <option value="swap">Direct swap (photo face + blend)</option>
       </select>
@@ -595,16 +596,20 @@ async function submitSwap() {
   const lora = $('swapLora').value.trim();
   if (lora) payload.lora = lora;
   const maskId = $('swapMaskId') ? $('swapMaskId').value.trim() : '';
-  if (route === 'preview') payload.route = 'preview';   // CPU only: overlay + mask
+  if (route === 'examine') payload.route = 'examine';   // CPU report: verdict + plan
+  else if (route === 'preview') payload.route = 'preview';   // CPU only: overlay + mask
   else if (window._swapMask) payload.mask_artifact = window._swapMask.id;
   else if (maskId) payload.mask_artifact = maskId;
   else if (route === 'auto') payload.route = 'auto';
   try {
-    // a preview is pure CPU detection — any mode may run it, no GPU ritual
+    // examine/preview are pure CPU — any mode may run them, no GPU ritual
+    const cpuOnly = route === 'preview' || route === 'examine';
     await jpost('/jobs', { type: 'image.faceswap', project,
-      required_mode: route === 'preview' ? 'ANY' : 'IMAGE',
+      required_mode: cpuOnly ? 'ANY' : 'IMAGE',
       required_caps: ['comfyui'], payload });
-    swapSay(route === 'preview'
+    swapSay(route === 'examine'
+      ? 'examining — the report card lands in Results (green = operable)'
+      : route === 'preview'
       ? 'zone preview queued — approve the mask in Results, then swap with it'
       : 'queued — watch Results below');
     window._swapTarget = null; window._swapMask = null;

@@ -728,6 +728,82 @@ def _resolve_face_zone_gpu_passes(engine: dict, defaults: dict, run_seed: int) -
             "denoise": denoise,
         }
     return resolved
+def _face_report(root, comfy_python, zone_script, target, min_confidence=0.35):
+    """Run the CPU examiner (byrdfacezone analyze) and gate on its verdict.
+    Returns the parsed report dict; dies with the examiner's own reasons when
+    the image has no operable face — the belt never guesses where to edit."""
+    result = subprocess.run(
+        [str(comfy_python), str(zone_script), "--root", str(root), "analyze",
+         "--input", str(target), "--min-confidence", str(min_confidence)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    if result.returncode == 3:
+        try:
+            report = json.loads(result.stdout)
+            reason = report.get("reason") or "no operable face"
+            flags = [f for face in report.get("faces", []) for f in face.get("flags", [])]
+        except Exception:
+            reason, flags = "no operable face", []
+        die("face report: cannot operate on this image — " + reason
+            + (f" (flags: {'; '.join(flags)})" if flags else ""))
+    if result.returncode != 0:
+        die(f"face examiner failed: {(result.stderr or result.stdout).strip()[-500:]}")
+    try:
+        return json.loads(result.stdout)
+    except Exception:
+        die("face examiner returned unreadable output")
+
+
+def facezone_examine(root, target_path, project, purpose, min_confidence=0.35,
+                     job_id=None):
+    """Standalone examiner job (route 'examine'): run the CPU face report on an
+    upload and archive the clean overview + the JSON verdict as an artifact —
+    no editing, any GPU mode. This is how the founder sees where the belt can
+    and can't operate BEFORE spending anything."""
+    root = Path(root)
+    target = Path(target_path)
+    if not target.exists():
+        die(f"examine target not found: {target}")
+    comfy_python = root / "Generators" / "ComfyUI" / ".venv" / "Scripts" / "python.exe"
+    zone_script = root / "scripts" / "byrdfacezone.py"
+    job_id = job_id or new_id("job")
+    month_dir = root / "artifacts" / project / f"{datetime.now():%Y-%m}"
+    month_dir.mkdir(parents=True, exist_ok=True)
+    overview = month_dir / f"{datetime.now():%Y%m%d}_face_report_{job_id}.png"
+    report_path = overview.with_suffix(".json.txt")  # .png.json is the card's name
+    result = subprocess.run(
+        [str(comfy_python), str(zone_script), "--root", str(root), "analyze",
+         "--input", str(target), "--min-confidence", str(min_confidence),
+         "--report", str(report_path), "--overview", str(overview)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    if result.returncode not in (0, 3):
+        die(f"face examiner failed: {(result.stderr or result.stdout).strip()[-500:]}")
+    try:
+        report = json.loads(result.stdout)
+    except Exception:
+        die("face examiner returned unreadable output")
+    card = {
+        "artifact_id": f"art.{job_id}.0", "job_id": job_id, "project": project,
+        "kind": "image", "recipe": "face_report@1", "purpose": purpose,
+        "prompt": "", "negative": "", "seed": None,
+        "workflow": "byrdfacezone analyze (CPU examiner)",
+        "slots": {}, "vary_picks": {},
+        "swap_target": str(target),
+        "face_report": report,
+        "report_file": str(report_path),
+        "score": None, "tags": ["face-report", report.get("verdict", "unknown")],
+        "caption": f"{report.get('operable_faces', 0)} operable face(s); "
+                   f"verdict {report.get('verdict')}",
+        "status": "draft", "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    overview.with_suffix(overview.suffix + ".json").write_text(
+        json.dumps(card, indent=2), encoding="utf-8")
+    print(f"[byrdimage] face report: {report.get('verdict')} "
+          f"({report.get('operable_faces', 0)} operable) -> {overview}")
+    return job_id, [(overview, card)]
+
+
 def edit_face_zone(root, recipe_name, target_path, project, purpose,
                    slots=None, checkpoint=None, identity_lora=None,
                    identity_strength=None, target_preset=None,
@@ -788,6 +864,16 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
     # CPU PyTorch even while the image server remains on the RTX 3070.
     comfy_python = root / "Generators" / "ComfyUI" / ".venv" / "Scripts" / "python.exe"
     zone_script = root / "scripts" / "byrdfacezone.py"
+
+    # Founder contract: FIRST understand where the belt can and can't operate
+    # on THIS image. The examiner reports every face, its verdict, risk flags
+    # (extreme expression, strong profile, too small) and the per-feature
+    # likeness plan; a refuse verdict stops the job before any zone/GPU work,
+    # and the report rides the card so every edit is explainable.
+    face_report = _face_report(root, comfy_python, zone_script, target,
+                               engine.get("min_face_confidence",
+                                          defaults.get("min_face_confidence", 0.35)))
+
     zone_cmd = [
         str(comfy_python), str(zone_script), "--root", str(root), "prepare",
         "--input", str(target), "--job-id", resolved_job_id,
@@ -987,6 +1073,8 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
             "lora": selected_identity_lora,
             "face_zone": zone_record,
             "upload_analysis": upload_analysis,
+        "face_report": face_report,
+            "face_report": face_report,
             "crop_preflight": crop_preflight,
             **({"identity_reference": str(identity_reference_path)} if identity_reference_path else {}),
             **({"face_swap_preflight": {

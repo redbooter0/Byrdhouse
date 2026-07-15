@@ -9,6 +9,7 @@ this; the functions run straight against ComfyUI.*
 | Tier | Lane | Job / recipe | Docs |
 |---|---|---|---|
 | **Quality (funded/public)** | CPU-first mesh seed: 478-pt mesh + semantic zone + reference warp + optional low-denoise cleanup, SD1.5 Meina + owner LoRA (`careybh person`) | recipe `anime_face_zone_edit@1` (runner `face_zone_identity_edit`) | `docs/FACE_ZONE_EDIT_WORKFLOW.md`, state in `docs/IMAGE_GENERATION_STATE.md` |
+| **Step 0 — Examine** | CPU face report: every face, operable-or-not + why, risk flags, per-feature likeness plan; also the automatic gate inside the quality lane | `image.faceswap` route `examine` (dashboard "Examine first") | `docs/IMAGE_GENERATION_STATE.md` |
 | **Fast daily** | Preview (CPU mask, approvable) → Zone (mask-bounded edit) → Auto (FaceDetailer detect+redraw) | `image.faceswap` routes `preview`/mask/`auto` | this file |
 | **Private experiments only** | ReActor direct swap/blend, IP-Adapter FaceID (`me_as_character`) — InsightFace research license, excluded from the funded lane | `image.faceswap` swap route | policy in `AGENTS.md` + `docs/MODELS.md` |
 

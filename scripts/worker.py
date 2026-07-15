@@ -423,6 +423,24 @@ def run_faceswap(job) -> None:
     if not target:
         raise RuntimeError("image.faceswap needs target_path or target_artifact")
 
+    # EXAMINE route (the founder contract): the CPU examiner reports every
+    # face, where the belt can and can't operate, risk flags, and the
+    # per-feature likeness plan — archives a clean overview + verdict, edits
+    # nothing. Works in any GPU mode; also runs automatically as the gate
+    # inside the quality lane (edit_face_zone).
+    if p.get("route") == "examine":
+        _, saved = byrdimage.facezone_examine(
+            ROOT, target, p.get("project", "sandbox"),
+            p.get("purpose", "face report"),
+            min_confidence=float(p.get("min_face_confidence", 0.35)),
+            job_id=job["id"])
+        cards = []
+        for png, card in saved:
+            card["path"] = str(png)
+            cards.append(card)
+        register_cards(job, cards)
+        return
+
     # PREVIEW route (the CPU pre-step): detection only — archives the zone
     # overlay + soft mask for approval, no checkpoint, no diffusion. The GPU
     # never decides the mask (the founder rule); the approved mask artifact

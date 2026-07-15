@@ -2461,6 +2461,140 @@ def composite_generated(zone_file: Path, generated_crop: Path, output: Path) -> 
     return output
 
 
+# ── The examiner (founder contract 2026-07-15): before ANY edit, the system
+# must fully understand where it can and can't operate on THIS image. For every
+# face it reports an operability verdict, risk flags, and a per-feature plan —
+# which features get generated with the founder's likeness and which keep the
+# target's logic/shape/theme. Geometry-only v1 (landmarker, no parser) so it is
+# fast, deterministic, and runs in any GPU mode; semantic enrichment is the
+# staged next rung (docs/IMAGE_GENERATION_STATE.md).
+
+# MediaPipe canonical landmark indices used for the cheap geometry reads.
+_LM_NOSE_TIP = 1
+_LM_FACE_LEFT = 234
+_LM_FACE_RIGHT = 454
+_LM_MOUTH_LEFT = 61
+_LM_MOUTH_RIGHT = 291
+_LM_LIP_UPPER_INNER = 13
+_LM_LIP_LOWER_INNER = 14
+
+# The feature contract: likeness where identity lives, target logic everywhere
+# else. Presets/eye_protection can override per target; this is the default law.
+FEATURE_PLAN_DEFAULT = {
+    "skin_complexion": "generate-likeness",
+    "brow": "generate-likeness-in-target-form",
+    "nose": "generate-likeness-in-target-form",
+    "mouth": "generate-likeness-in-target-form",
+    "jawline": "generate-likeness-in-target-form",
+    "forehead": "generate-likeness-if-exposed-else-keep-headwear",
+    "eyes": "keep-target (eye_protection default)",
+    "ears": "generate-if-visible",
+    "hair_headwear": "keep-target, composited OVER the likeness",
+    "expression_pose_theme": "keep-target (drives prompt_context)",
+}
+
+
+def _face_geometry_reads(points: np.ndarray) -> dict:
+    """Cheap, deterministic reads off the 478-point mesh: profile yaw proxy and
+    mouth-openness (the Luffy-grin stressor for the triangle warp)."""
+    nose = points[_LM_NOSE_TIP]
+    left = points[_LM_FACE_LEFT]
+    right = points[_LM_FACE_RIGHT]
+    d_left = float(np.linalg.norm(nose - left))
+    d_right = float(np.linalg.norm(nose - right))
+    yaw_asymmetry = abs(d_left - d_right) / max(1.0, d_left + d_right)  # 0 frontal → ~0.5 profile
+    mouth_w = float(np.linalg.norm(points[_LM_MOUTH_LEFT] - points[_LM_MOUTH_RIGHT]))
+    mouth_open = float(np.linalg.norm(points[_LM_LIP_UPPER_INNER] - points[_LM_LIP_LOWER_INNER]))
+    return {
+        "yaw_asymmetry": round(yaw_asymmetry, 4),
+        "mouth_open_ratio": round(mouth_open / max(1.0, mouth_w), 4),
+    }
+
+
+def analyze_image(root: Path, image_path: Path, min_confidence: float = 0.35,
+                  min_face_px: int = 64) -> dict:
+    """Examine an upload: every face, where the belt can and can't operate, and
+    the per-face feature plan. Never edits anything."""
+    with Image.open(image_path) as opened:
+        image = opened.convert("RGB")
+    faces = []
+    try:
+        _, _, _, total = _detect_face(root, image, min_confidence, 0)
+    except RuntimeError as exc:
+        return {
+            "image": str(image_path), "size": list(image.size), "faces": [],
+            "operable_faces": 0,
+            "verdict": "refuse",
+            "reason": f"no face found at confidence {min_confidence}: {exc}",
+            "feature_plan_law": FEATURE_PLAN_DEFAULT,
+        }
+    for index in range(total):
+        face, _, _, _ = _detect_face(root, image, min_confidence, index)
+        points = np.asarray(face["landmarks_xy"], dtype=np.float32)
+        x1, y1, x2, y2 = [float(v) for v in face["bbox_xyxy"]]
+        side = max(x2 - x1, y2 - y1)
+        reads = _face_geometry_reads(points)
+        flags = []
+        if side < min_face_px:
+            verdict = "refuse"
+            flags.append(f"too_small ({side:.0f}px < {min_face_px}px) — upscale first or zone route")
+        else:
+            verdict = "operable"
+            if side < min_face_px * 1.5:
+                verdict = "operable_with_care"
+                flags.append("small_face — expect soft detail; consider upscaling the target first")
+            if reads["yaw_asymmetry"] > 0.28:
+                verdict = "operable_with_care"
+                flags.append("strong_profile — mesh warp strains; keep eye_source=target")
+            if reads["mouth_open_ratio"] > 0.55:
+                verdict = "operable_with_care"
+                flags.append("extreme_expression — the Luffy-grin case: lower "
+                             "mesh_identity_strength, use the multipass lane, review closely")
+        plan = dict(FEATURE_PLAN_DEFAULT)
+        if verdict == "refuse":
+            plan = {"all": "do-not-operate (see flags)"}
+        faces.append({
+            "index": index,
+            "box": [round(x1), round(y1), round(x2), round(y2)],
+            "side_px": round(side),
+            "confidence_floor": min_confidence,
+            **reads,
+            "verdict": verdict,
+            "flags": flags,
+            "feature_plan": plan,
+        })
+    operable = [f for f in faces if f["verdict"] in ("operable", "operable_with_care")]
+    return {
+        "image": str(image_path), "size": list(image.size),
+        "faces": faces, "operable_faces": len(operable),
+        "verdict": ("operable" if any(f["verdict"] == "operable" for f in faces)
+                    else "operable_with_care" if operable else "refuse"),
+        **({} if operable else {"reason": "every detected face is below the operable bar"}),
+        "feature_plan_law": FEATURE_PLAN_DEFAULT,
+    }
+
+
+def render_report_overview(image_path: Path, report: dict, output: Path) -> Path:
+    """One clean overview: numbered boxes, green/yellow/red — no mesh spaghetti,
+    no infrared parse map. The audit files stay in the zone folder; this is the
+    picture a founder can approve at a glance."""
+    with Image.open(image_path) as opened:
+        image = opened.convert("RGB")
+    draw = ImageDraw.Draw(image)
+    colors = {"operable": (52, 211, 153), "operable_with_care": (251, 191, 36),
+              "refuse": (248, 113, 113)}
+    for face in report.get("faces", []):
+        color = colors.get(face["verdict"], (200, 200, 200))
+        x1, y1, x2, y2 = face["box"]
+        width = max(2, round(max(x2 - x1, y2 - y1) * 0.012))
+        draw.rectangle([x1, y1, x2, y2], outline=color, width=width)
+        draw.text((x1 + width + 2, y1 + width + 2),
+                  f"{face['index']}: {face['verdict']}", fill=color)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    image.save(output, "PNG", optimize=True)
+    return output
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1])
@@ -2483,6 +2617,12 @@ def parse_args() -> argparse.Namespace:
     composite.add_argument("--zone", type=Path, required=True)
     composite.add_argument("--generated-crop", type=Path, required=True)
     composite.add_argument("--output", type=Path, required=True)
+    analyze = sub.add_parser("analyze", help="Examine an image: every face, operability, feature plan. Edits nothing.")
+    analyze.add_argument("--input", type=Path, required=True)
+    analyze.add_argument("--min-confidence", type=float, default=0.35)
+    analyze.add_argument("--min-face-px", type=int, default=64)
+    analyze.add_argument("--report", type=Path, help="write the JSON report here")
+    analyze.add_argument("--overview", type=Path, help="write the clean overview PNG here")
     return parser.parse_args()
 
 
@@ -2506,6 +2646,17 @@ def main() -> int:
             exclude_boxes=args.exclude_box,
         )
         print(json.dumps(record, indent=2))
+    elif args.command == "analyze":
+        report = analyze_image(args.root, args.input,
+                               min_confidence=args.min_confidence,
+                               min_face_px=args.min_face_px)
+        if args.report:
+            args.report.parent.mkdir(parents=True, exist_ok=True)
+            args.report.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        if args.overview:
+            render_report_overview(args.input, report, args.overview)
+        print(json.dumps(report, indent=2))
+        return 0 if report["operable_faces"] > 0 else 3
     else:
         output = composite_generated(args.zone, args.generated_crop, args.output)
         print(output)

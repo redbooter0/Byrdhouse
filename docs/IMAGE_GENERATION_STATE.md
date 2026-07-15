@@ -39,6 +39,37 @@ Staged fix (recipe `anime_face_zone_edit@3`, graph
   `anime_face_zone_edit@3`; sweep denoise 0.45–0.6 × canny strength 0.45–0.65;
   record VRAM + verdicts here per the rule above.
 
+## Staged 2026-07-15 (later): the examiner — understand before touching (UNTESTED on hardware)
+
+Founder contract: for ANY uploaded image the system must FIRST fully understand
+where it can and can't operate, then plan which features get the founder's
+likeness while keeping the target's logic/shape/theme. Start small: geometry
+v1, semantic enrichment next.
+
+- `byrdfacezone.py analyze` (new subcommand, edits nothing, landmarker-only,
+  runs in any GPU mode): every face → box, size, yaw proxy, mouth-open ratio,
+  verdict (`operable` / `operable_with_care` / `refuse` with reasons), risk
+  flags — `extreme_expression` is the Luffy-grin case that melted the
+  d36/m60 run; `strong_profile`; `too_small` — and the per-feature plan
+  (skin/brow/nose/mouth/jaw = generate-likeness-in-target-form; eyes =
+  keep-target; forehead = likeness-if-exposed; hair/headwear = keep-target
+  composited OVER the likeness; expression/pose/theme = keep-target).
+  Writes `face_report.json` + ONE clean overview PNG (numbered green/yellow/red
+  boxes — replaces mesh/parse spaghetti as the founder-facing diagnostic).
+- **Gate wired into the quality lane**: `edit_face_zone` now runs the examiner
+  first and refuses with the examiner's own reasons before any zone/GPU work;
+  the report rides every card (`face_report`).
+- **Examine route** on `image.faceswap` (`route:"examine"`, dashboard "Examine
+  first", required_mode ANY): archives the overview + verdict as an artifact so
+  the founder sees operability before spending anything.
+- Next rungs (in order, small steps): semantic enrichment of the report
+  (headwear/eye occlusion truth from the parser — Gojo blindfold), per-face
+  preset auto-suggestion from flags, multi-face batch operation.
+- First hardware test: `python scripts\byrdfacezone.py analyze --input <image>`
+  on the five calibrated targets + one group shot + one no-face image; verify
+  verdicts/flags match reality (Luffy close must flag extreme_expression);
+  then one `route:"examine"` job through the belt.
+
 Parser replacement candidates for the ParseNet license gap (both LICENSE-UNVERIFIED
 — treat exactly like ParseNet, private local evaluation only, until the license is
 confirmed): `jonathandinu/face-parsing` (SegFormer/CelebAMask-HQ via HF
