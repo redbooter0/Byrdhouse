@@ -37,6 +37,10 @@ Odysseus/smart-home/Stripe is removed from this repo. Cherry Studio remains the 
   2-PC coordination (version drift, heartbeat, requeue fencing)
 - **Guardrails**: 52-check integration suite in CI, BOM enforcement, judge
   fidelity/off-game caps
+- **Face Lab (2026-07-15)**: `image.faceswap` job (ReActor direct swap + anime
+  style-blend two-pass), dashboard Face Swap panel, `me_as_character` recipe,
+  dataset collector + versioned LoRA trainer (7200MB VRAM / 16-thread founder
+  limits), `facelab_preflight.py` on-PC proof tool — see docs/FACE_LAB.md
 
 ## What worked before (U0 foundation)
 
@@ -160,6 +164,8 @@ The always-on operator that runs the belt while Carey is away. Foundation landed
 4. U4 learn → U5 video → U6 Godot. Weekend Realms lane runs in parallel.
 
 ## Done log
+
+- 2026-07-15 · Face Lab shipped (docs/FACE_LAB.md): the belt can now imagine AND face-swap fully locally. `image.faceswap` job type (router+worker+dashboard panel) over two new ReActor graphs — direct swap for photo targets, swap + low-denoise style-blend pass for anime targets (Gojo/Vegeta/Luffy) so the face melts into the art style; `me_as_character.v1` recipe is the generation route (FaceID + anime checkpoint + identity LoRA). LoRA lab: `collect-training-images.ps1` moves the newest ~300 generated images into `training/datasets/<name>/img`, `train-lora.ps1` wraps kohya sd-scripts with 8GB-3070-safe settings and founder limits from config (`training.vram_budget_mb` 7200 verified via nvidia-smi before start, `training.cpu_threads` 16 max 18) and ALWAYS writes a new versioned file (`carey_face_v2`, `_v3`, ... — never overwrites). `facelab_preflight.py` proves the function on the PC against the live ComfyUI (node pack, models, schema cross-check, `--run` = real swap, MINI not needed). `find-codex-work.ps1` locates Codex's local files/sessions/unpushed work; its pushed trail is mapped in FACE_LAB.md (fix/* + agent/* branches, incl. Luna Pulse supervision). Integration suite +8 checks (faceswap direct/blend/honesty/judge, preflight diagnosis), dashboard suite untouched-green. inswapper license flagged: non-commercial — monetized output should use the LoRA/FaceID route.
 
 - 2026-07-12 · Phase B Product Recovery Sprint: dashboard rewritten from 16-room admin console to 3-tab founder cockpit (Home/Create/Library). All diagnostics behind System gear icon. Single system dot replaces chip row. Creator V1 foundation: identity profiles (profiles/me/), 6 "me" recipes (cinematic/founder/fantasy/outfit_transfer/thumbnail/animated), worker face-reference auto-wiring, Flux2 Klein package (SAFE + PRODUCTION + MASTER workflows, API adapter, install script). 2-PC coordination hardening committed separately. Integration suite green. No router/worker behavior changes.
 - 2026-07-12 · Recipe-slot contract bug fixed on real hardware (jobs died on `unfilled slots ['emotion']`): dashboard now renders every non-vary slot as a required `*` input and `submitGen` blocks + names missing slots before POST; `byrdimage` guarantees vary slots fill and fails loudly on empty vary arrays; dashboard test suite repaired (PR#18 had crashed it) and expanded with required-slot coverage. Then landed the R0 lever: IP-Adapter reference engine (`game_ref` recipe + `sdxl_ipadapter_api.json` — a real uploaded screenshot steers the checkpoint toward THE game's look), Goose bot-operator foundation (`scripts/byrd_belt_mcp.py` belt-as-MCP + `goose/` runtime/identity + `web_search`), and the custom license-clear model kit (`docs/MODELS.md`: animagine-xl-4.0 / RealVisXL_V5.0 / dreamshaper-xl, all openrail++). Integration 70-check + dashboard 20-check green. PR #19 merged. OPEN (founder): rotate the admin token (public git history).

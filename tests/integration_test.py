@@ -55,7 +55,7 @@ def main():
     # ── build an isolated root ────────────────────────────────────────────────
     shutil.rmtree(ROOT, ignore_errors=True)
     ROOT.mkdir(parents=True)
-    for d in ("recipes", "workflows", "scripts", "router", "dashboard"):
+    for d in ("recipes", "workflows", "scripts", "router", "dashboard", "profiles"):
         shutil.copytree(REPO / d, ROOT / d)
     # Give the root a minimal .git so router/worker build_sha resolves exactly as
     # it does on the machines (both run from a git checkout). Only HEAD + refs are
@@ -458,6 +458,65 @@ def main():
         if refgen:
             check("reference generation ran through the IP-Adapter workflow",
                   "ipadapter" in json.loads(refgen[0]["meta"]).get("workflow", ""))
+
+        # ── image.faceswap: ReActor face swap through the belt (Face Lab).
+        #    The face auto-resolves from profiles/me/references exactly like the
+        #    me-recipes; the target is an uploaded artifact fetched back. ──
+        print("== image.faceswap (direct swap + anime style blend)")
+        face_dir = ROOT / "profiles" / "me" / "references"
+        face_dir.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (256, 256), (200, 170, 150)).save(face_dir / "front.jpg")
+        api("/jobs", {"type": "image.faceswap", "project": "careyrpg",
+                      "required_mode": "IMAGE", "required_caps": ["comfyui"],
+                      "payload": {"target_artifact": src_id, "subject_profile": "me",
+                                  "style_blend": 0, "project": "careyrpg",
+                                  "purpose": "direct swap test"}})
+        run_worker()
+        swaps = [a for a in api("/artifacts?limit=200") if a["kind"] == "image"
+                 and json.loads(a["meta"] or "{}").get("recipe") == "faceswap@1"]
+        check("faceswap artifact archived with a card", len(swaps) == 1, str(len(swaps)))
+        if swaps:
+            meta = json.loads(swaps[0]["meta"])
+            check("swap card records face source + target + reactor workflow",
+                  meta.get("face_source", "").endswith("front.jpg")
+                  and meta.get("swap_target")
+                  and "reactor_faceswap_api" in meta.get("workflow", ""), str(meta))
+            check("direct swap card is honest: no seed, no checkpoint",
+                  meta.get("seed") is None and "checkpoint" not in meta)
+            check("faceswap auto-judged like any artifact", swaps[0]["score"] == 4.2)
+        # blend pass: anime targets (Gojo/Vegeta/Luffy) melt the swap into the
+        # art style with a low-denoise img2img pass driven by a character prompt
+        api("/jobs", {"type": "image.faceswap", "project": "careyrpg",
+                      "required_mode": "IMAGE", "required_caps": ["comfyui"],
+                      "payload": {"target_artifact": src_id, "style_blend": 0.35,
+                                  "prompt": "Gojo Satoru, white hair, black blindfold",
+                                  "project": "careyrpg", "purpose": "blend swap test"}})
+        run_worker()
+        blends = [a for a in api("/artifacts?limit=200") if a["kind"] == "image"
+                  and json.loads(a["meta"] or "{}").get("style_blend") == 0.35]
+        check("blend swap ran the two-pass workflow", len(blends) == 1, str(len(blends)))
+        if blends:
+            bm = json.loads(blends[0]["meta"])
+            check("blend card carries prompt/seed/checkpoint for the img2img pass",
+                  "Gojo" in bm.get("prompt", "") and bm.get("seed") is not None
+                  and bm.get("checkpoint")
+                  and "blend" in bm.get("workflow", ""), str(bm))
+        # graph surgery is validated up front: a swapped/missing node pair must
+        # die loudly, never quietly swap the wrong direction
+        try:
+            byrdimage.faceswap(ROOT, str(ROOT / "workflows" / "nope.png"),
+                               str(face_dir / "front.jpg"), "careyrpg", "x")
+            check("faceswap rejects a missing target loudly", False)
+        except SystemExit as e:
+            check("faceswap rejects a missing target loudly", "not found" in str(e))
+
+        # facelab_preflight: the on-PC proof tool must diagnose a ComfyUI
+        # without ReActor (what the mock is) precisely and exit 2
+        pf = subprocess.run([sys.executable, str(ROOT / "scripts" / "facelab_preflight.py")],
+                            env={**os.environ, "BYRDHOUSE_ROOT": str(ROOT)},
+                            capture_output=True, text=True, timeout=60)
+        check("facelab preflight detects missing ReActor and exits 2",
+              pf.returncode == 2 and "ReActor" in pf.stdout, pf.stdout[:200])
 
         # A retried job re-registers its artifacts — must upsert, not duplicate
         dupe_card = {"artifact_id": "art.dupetest.0", "job_id": "job_dupetest",

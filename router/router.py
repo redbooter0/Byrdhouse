@@ -62,12 +62,14 @@ REFERENCES = ROOT / "references"  # founder-loved thumbnails the judge scores ag
 SOURCES = ROOT / "artifacts" / "_sources"  # dashboard-uploaded real source images
 
 JOB_TYPES = {
-    "image.generate", "image.judge", "image.refine", "image.upscale", "video.i2v",
+    "image.generate", "image.judge", "image.refine", "image.upscale", "image.faceswap",
+    "video.i2v",
     "memory.save", "memory.import", "report.daily",
     "export.csv", "export.zip", "backup.nightly",
     "game.godot_task", "code.task",
 }
-REVIEW_TYPES = {"image.generate", "image.refine", "image.upscale", "video.i2v"}  # done -> needs_review
+REVIEW_TYPES = {"image.generate", "image.refine", "image.upscale", "image.faceswap",
+                "video.i2v"}  # done -> needs_review
 
 # The worker heartbeats from a dedicated thread (worker.py) every ~30s even
 # while a long generation runs, so silence now genuinely means a dead process
