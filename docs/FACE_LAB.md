@@ -23,11 +23,12 @@ manifest, (3) locate Codex's already-trained LoRA (37.9MB safetensors from
 2026-07-14, checkpoints at steps 400/800/1200/1600 — step 400 gated best) and keep
 every file, then run train-lora.ps1 -DryRun and show me the exact command before
 starting the real run — it must create a NEW versioned file, (4) run REAL swaps of
-my face onto my gojo, vegeta and luffy images: try the zone route first (byrdfacezone
-mask or a hand mask + the trained LoRA, denoise 0.7) and the ReActor blend route
-(blend 0.35) as comparison, and show me the output files side by side. My rules:
-never exceed 7200MB VRAM, use at most 16-18 CPU threads, never overwrite an
-existing LoRA file.
+my face onto my gojo, vegeta, luffy and link images: the AUTO route first
+(facelab_preflight.py --run <image> --route auto --lora <the LoRA>) — that is the
+daily driver — then the ReActor blend route (blend 0.35) and, where auto detection
+misses a stylized face, the zone route with a byrdfacezone or hand mask at denoise
+0.7. Show me the output files side by side. My rules: never exceed 7200MB VRAM,
+use at most 16-18 CPU threads, never overwrite an existing LoRA file.
 ```
 
 Or by hand, in order (PowerShell on GAMING, ComfyUI running):
@@ -42,10 +43,16 @@ powershell -ExecutionPolicy Bypass -File scripts\collect-training-images.ps1 -Na
 # 2. train a NEW LoRA file (auto-versions: carey_face_v2, _v3... never overwrites)
 powershell -ExecutionPolicy Bypass -File scripts\train-lora.ps1 -Dataset carey_face
 
-# 3. THE PROOF — real swap onto a real picture (MINI can be off; no router needed)
+# 3. THE PROOF — the daily driver (AUTO route): upload any character, done.
+#    Detector finds the face, masks it, redraws it as YOU in the picture's own
+#    art style. Works on Gojo/Vegeta/Luffy/Link. MINI can be off.
+python scripts\facelab_preflight.py --run E:\path\to\gojo.png   --route auto --lora carey_face
+python scripts\facelab_preflight.py --run E:\path\to\vegeta.png --route auto --lora carey_face
+python scripts\facelab_preflight.py --run E:\path\to\luffy.png  --route auto --lora carey_face
+python scripts\facelab_preflight.py --run E:\path\to\link.png   --route auto --lora carey_face
+
+# 3a. comparison — ReActor direct swap + anime blend
 python scripts\facelab_preflight.py --run E:\path\to\gojo.png --blend 0.35
-python scripts\facelab_preflight.py --run E:\path\to\vegeta.png --blend 0.35
-python scripts\facelab_preflight.py --run E:\path\to\luffy.png --blend 0.35
 
 # 3b. zone route (the founder lane): GPU edits ONLY inside the mask; identity
 #     from the trained LoRA + notes. Mask from byrdfacezone.py or hand-drawn
@@ -84,11 +91,24 @@ the dashboard's **Face Swap** panel (Create tab) with auto-judge + approval queu
   that is `workflows/reactor_faceswap_blend_api.json`, driven by
   `payload.style_blend`. Attach your identity LoRA to the blend pass so the
   face stays YOU through the diffusion.
-- **Two routes, both in the belt now:**
-  - `image.faceswap` — put your face on an EXISTING picture (their Gojo art).
+- **Four routes, all in the belt now** (all `image.faceswap` except the last):
+  - **AUTO (the daily driver, dashboard default)**: detector finds the
+    character's face → masks it → redraws it as YOU (identity LoRA + notes) in
+    the picture's own art style → composites back. One upload, one step.
+    `payload.route="auto"`, CLI `--auto`, preflight `--route auto`.
+  - **Zone**: same redraw but the mask is YOURS (`mask_artifact`/`--swap-mask`,
+    white = change) — the fallback when a very stylized face isn't detected,
+    and the lane for byrdfacezone mesh-seed cleanups.
+  - **Direct swap (+ blend)**: ReActor puts your photo's face on; `style_blend`
+    0.35 melts it into anime linework.
   - `me_as_character` recipe — GENERATE you as the character from scratch
     (IP-Adapter FaceID + anime checkpoint + your LoRA). Often the better look,
     because everything is drawn in one style from the start.
+- **Auto-route tuning**: the detector (`image.faceswap_detector`, default
+  `bbox/face_yolov8m.pt`) handles most anime faces; if a face is missed, lower
+  `bbox_threshold` in `workflows/facezone_auto_api.json` (0.5 → 0.3) or use the
+  zone route. Put your LoRA trigger word (the dataset name, e.g. `carey_face`)
+  in the notes/prompt so the redraw pulls your identity hard.
 - **8GB 3070 budget** (founder rule, enforced in `train-lora.ps1` + config
   `training`): ≤7200MB VRAM, 16–18 of 20 CPU threads. Training uses batch 1 +
   gradient checkpointing + Adafactor + bf16 + UNet-only + latents cached to disk.

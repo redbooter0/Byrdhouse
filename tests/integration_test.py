@@ -536,6 +536,26 @@ def main():
                   and "inpaint" in zm.get("workflow", "")
                   and zm.get("checkpoint"), str(zm))
 
+        # AUTO route (the daily driver): detector finds the face, masks it,
+        # redraws it as the founder — no hand mask, no face photo in payload
+        api("/jobs", {"type": "image.faceswap", "project": "careyrpg",
+                      "required_mode": "IMAGE", "required_caps": ["comfyui"],
+                      "payload": {"target_artifact": src_id, "route": "auto",
+                                  "prompt": "the same man as Vegeta, cel shading",
+                                  "project": "careyrpg", "purpose": "auto route test"}})
+        run_worker()
+        autos = [a for a in api("/artifacts?limit=250") if a["kind"] == "image"
+                 and json.loads(a["meta"] or "{}").get("recipe") == "facezone_auto@1"]
+        check("auto route archived through the FaceDetailer workflow", len(autos) == 1,
+              str(len(autos)))
+        if autos:
+            am = json.loads(autos[0]["meta"])
+            check("auto card records detector + corridor denoise + prompt",
+                  am.get("detector", "").startswith("bbox/")
+                  and am.get("denoise") == 0.7
+                  and "facezone_auto" in am.get("workflow", "")
+                  and "Vegeta" in am.get("prompt", ""), str(am))
+
         # facelab_preflight: the on-PC proof tool must diagnose a ComfyUI
         # without ReActor (what the mock is) precisely and exit 2
         pf = subprocess.run([sys.executable, str(ROOT / "scripts" / "facelab_preflight.py")],

@@ -373,6 +373,23 @@ def run_faceswap(job) -> None:
     if not target:
         raise RuntimeError("image.faceswap needs target_path or target_artifact")
 
+    # AUTO route (the daily driver): detector finds the face, masks it, redraws
+    # it as the founder (LoRA + prompt) in the target's art style — one step.
+    if p.get("route") == "auto" or p.get("auto"):
+        _, saved = byrdimage.facezone_auto(
+            ROOT, target, p.get("project", "sandbox"),
+            p.get("purpose", "auto face zone"),
+            prompt=p.get("prompt"), negative=p.get("negative"),
+            denoise=p.get("denoise"), checkpoint=p.get("checkpoint"),
+            lora=p.get("lora"), lora_strength=float(p.get("lora_strength", 0.9)),
+            detector=p.get("detector"), seed=p.get("seed"), job_id=job["id"])
+        cards = []
+        for png, card in saved:
+            card["path"] = str(png)
+            cards.append(card)
+        register_cards(job, cards)
+        return
+
     # Zone route (the founder lane): a mask means the GPU edits ONLY inside the
     # approved zone — identity comes from the LoRA + prompt, no face photo needed.
     mask = p.get("mask_path")

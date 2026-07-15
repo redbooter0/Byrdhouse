@@ -39,6 +39,12 @@ screenshot steer the look:
   `buffalo_l` (detection) auto-downloads on first run.
 - Graphs: `workflows/reactor_faceswap_api.json` (direct swap) and
   `workflows/reactor_faceswap_blend_api.json` (swap + anime style blend).
+- **AUTO route (the daily driver — one-step "redraw as me")**: install
+  **ComfyUI Impact Pack** AND **ComfyUI Impact Subpack** via ComfyUI Manager,
+  restart. The `face_yolov8m.pt` detector (handles anime faces) installs with
+  the Subpack into `ComfyUI\models\ultralytics\bbox`. Graph:
+  `workflows/facezone_auto_api.json` (FaceDetailer: detect → mask → inpaint →
+  composite in one node).
 - Verify with `python scripts\facelab_preflight.py` — it asks the live ComfyUI
   what is installed and cross-checks the workflow schema.
 - **License**: inswapper_128 is insightface **research/non-commercial** — fine for

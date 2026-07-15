@@ -452,7 +452,12 @@ V.create = async () => {
       <label>Picture to swap onto</label>
       <input id="swapFile" type="file" accept="image/*" onchange="uploadSwapTarget(this)">
       <div id="swapPreview" class="muted" style="margin-top:6px"></div>
-      <label>Art blend ${qtip('0 = photo target (plain swap). Anime/stylized characters (Gojo, Vegeta, Luffy) want 0.35 so the swapped face adopts the art style. 0.45 melts harder but drifts more.')}</label>
+      <label>Route ${qtip('Auto: the detector finds the character’s face, masks it and redraws it as you in the picture’s own art style — one step, use with your identity LoRA. Direct swap: ReActor puts your photo’s face on (use blend for anime). A zone mask below overrides both.')}</label>
+      <select id="swapRoute">
+        <option value="auto" selected>Auto — find the face, redraw as me</option>
+        <option value="swap">Direct swap (photo face + blend)</option>
+      </select>
+      <label>Art blend (direct swap only) ${qtip('0 = photo target (plain swap). Anime/stylized characters (Gojo, Vegeta, Luffy) want 0.35 so the swapped face adopts the art style. 0.45 melts harder but drifts more.')}</label>
       <select id="swapBlend">
         <option value="0">Photo — no blend</option>
         <option value="0.35" selected>Anime character — 0.35</option>
@@ -584,6 +589,7 @@ async function submitSwap() {
   const lora = $('swapLora').value.trim();
   if (lora) payload.lora = lora;
   if (window._swapMask) payload.mask_artifact = window._swapMask.id;
+  else if ($('swapRoute') && $('swapRoute').value === 'auto') payload.route = 'auto';
   try {
     await jpost('/jobs', { type: 'image.faceswap', project,
       required_mode: 'IMAGE', required_caps: ['comfyui'], payload });

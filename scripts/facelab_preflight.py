@@ -64,7 +64,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", metavar="TARGET_IMAGE",
                     help="perform a real swap onto this image (the proof)")
+    ap.add_argument("--route", choices=["swap", "auto"], default="swap",
+                    help="swap = ReActor (+ --blend); auto = detector finds the face "
+                         "and redraws it as you (use --lora)")
     ap.add_argument("--face", help="face photo (default: newest in profiles/me/references)")
+    ap.add_argument("--lora", help="identity LoRA for the auto route (e.g. carey_face_v2)")
     ap.add_argument("--blend", type=float, default=0.0)
     ap.add_argument("--purpose", default="facelab preflight proof")
     args = ap.parse_args()
@@ -130,6 +134,29 @@ def main():
         else:
             ok(f"{wf_rel} matches the installed ReActor schema")
 
+    # ── 3b. AUTO route: FaceDetailer + face detector (the daily driver) ──────
+    try:
+        fd_info = get_json(f"{comfy}/object_info/FaceDetailer")
+        det_info = get_json(f"{comfy}/object_info/UltralyticsDetectorProvider")
+    except Exception:
+        fd_info, det_info = {}, {}
+    if fd_info.get("FaceDetailer") and det_info.get("UltralyticsDetectorProvider"):
+        ok("Impact Pack installed (FaceDetailer + UltralyticsDetectorProvider)")
+        det_live = node_inputs(det_info["UltralyticsDetectorProvider"])
+        det_models = det_live.get("model_name") if isinstance(det_live.get("model_name"), list) else []
+        det_want = img_cfg.get("faceswap_detector", "bbox/face_yolov8m.pt")
+        if any(det_want in str(m) for m in det_models):
+            ok(f"face detector {det_want} available")
+        else:
+            problem(f"face detector {det_want} not visible ({det_models[:5] or 'none'})",
+                    "ComfyUI Manager -> Model Manager -> install face_yolov8m.pt "
+                    "(goes to models\\ultralytics\\bbox), or set image.faceswap_detector "
+                    "to one you have")
+    else:
+        problem("Impact Pack nodes missing — the AUTO route (one-step 'redraw as me') needs them",
+                "ComfyUI Manager -> install 'ComfyUI Impact Pack' AND 'ComfyUI Impact Subpack', "
+                "restart ComfyUI (the face_yolov8m.pt detector installs with the Subpack)")
+
     # ── 4. face photo ─────────────────────────────────────────────────────────
     refs = root / "profiles" / "me" / "references"
     photos = [f for f in refs.glob("*") if f.suffix.lower() in (".jpg", ".jpeg", ".png")] \
@@ -148,10 +175,15 @@ def main():
         say("not running the swap — fix the ✗ items above first")
         sys.exit(2)
     target = Path(args.run)
-    face = Path(args.face) if args.face else max(photos, key=lambda p: p.stat().st_mtime)
-    say(f"running REAL swap: face {face.name} -> target {target.name} (blend {args.blend})")
-    job_id, saved = byrdimage.faceswap(
-        root, target, face, "sandbox", args.purpose, style_blend=args.blend)
+    if args.route == "auto":
+        say(f"running REAL auto zone: target {target.name} (lora {args.lora or 'none'})")
+        job_id, saved = byrdimage.facezone_auto(
+            root, target, "sandbox", args.purpose, lora=args.lora)
+    else:
+        face = Path(args.face) if args.face else max(photos, key=lambda p: p.stat().st_mtime)
+        say(f"running REAL swap: face {face.name} -> target {target.name} (blend {args.blend})")
+        job_id, saved = byrdimage.faceswap(
+            root, target, face, "sandbox", args.purpose, style_blend=args.blend)
     for png, _card in saved:
         ok(f"PROOF: swapped image at {png}")
     finish()
