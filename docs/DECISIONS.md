@@ -19,3 +19,7 @@
 - 2026-07-12 · Phase B Product Recovery Sprint: dashboard redesigned from 16 rooms to 3 tabs (Home/Create/Library) + hidden System panel; all backend behavior preserved, zero router/worker changes; no room earns main nav until real output has passed through it · founder identified the app became an admin console instead of a command center; the machinery was showing instead of being hidden
 - 2026-07-12 · Identity profiles live under profiles/{id}/ with profile.json schema and references/ for face photos; reference photos gitignored (personal); worker auto-resolves face from profile dir when recipe has subject_profile · Creator V1 spec: recurring subject identity preservation via IP-Adapter FaceID
 - 2026-07-13 · The GAMING anime target-edit lane uses a compact SD1.5-scale Meina base + optional LCM draft LoRA, with face-only img2img/inpaint and an owner-authorized identity LoRA; Flux2/SDXL and InsightFace swaps are excluded from the funded application lane · fits the 8 GB RTX 3070, preserves the belt, and avoids a non-commercial face-recognition dependency
+
+2026-07-15 � Added CPU crop preflight rerouting and adapter-level crop gate so expandable head/neck envelopes are expanded and re-audited before any GPU edit; validated on the hard Vegeta target and kept the belt suite green.
+
+2026-07-15 � Switched the face-zone v2 lane to support a CPU-only seed/composite finish and set the recipe default to skip GPU cleanup, because the user confirmed the CPU output looked better than the GPU cleanup on hard anime targets.

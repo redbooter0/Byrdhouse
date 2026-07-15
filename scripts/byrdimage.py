@@ -29,6 +29,7 @@ Usage (from any terminal with BYRDHOUSE_ROOT set):
 import argparse
 import hashlib
 import json
+import math
 import os
 import random
 import re
@@ -66,6 +67,7 @@ def _require_original_target(root: Path, target: Path) -> Path:
     """
     root = root.resolve()
     target = target.resolve()
+    immutable_upload_root = (root / "artifacts" / "_sources").resolve()
     forbidden_roots = (
         root / "artifacts",
         root / "Generators" / "ComfyUI" / "output",
@@ -74,6 +76,12 @@ def _require_original_target(root: Path, target: Path) -> Path:
         try:
             target.relative_to(forbidden.resolve())
         except ValueError:
+            continue
+        try:
+            target.relative_to(immutable_upload_root)
+        except ValueError:
+            pass
+        else:
             continue
         die(
             "fresh-retry policy rejected a generated target: "
@@ -661,6 +669,65 @@ def edit_target_identity(root, recipe_name, target_path, project, purpose,
     return resolved_job_id, run_graph(root, comfy, graph, resolved_job_id, project, card_base)
 
 
+def _resolve_face_zone_gpu_passes(engine: dict, defaults: dict, run_seed: int) -> dict[str, dict]:
+    """Resolve one to four named, masked GPU cleanup passes for a face zone."""
+    default_steps = int(engine.get("steps") or defaults.get("steps", 24))
+    default_cfg = float(engine.get("cfg") or defaults.get("cfg", 5.0))
+    default_sampler = engine.get("sampler_name") or defaults.get("sampler", "dpmpp_2m")
+    default_scheduler = engine.get("scheduler") or defaults.get("scheduler", "karras")
+    default_denoise = float(engine.get("denoise") or defaults.get("denoise", 0.38))
+    default_passes = defaults.get("gpu_passes")
+    requested = engine.get("gpu_passes")
+    if requested is None:
+        requested = default_passes
+    elif isinstance(requested, dict) and isinstance(default_passes, dict):
+        merged = {}
+        for default_pass_id, default_pass in default_passes.items():
+            override = requested.get(default_pass_id)
+            if override is None:
+                merged[default_pass_id] = dict(default_pass)
+            elif isinstance(default_pass, dict) and isinstance(override, dict):
+                merged[default_pass_id] = {**default_pass, **override}
+            else:
+                die(f"face-zone GPU pass '{default_pass_id}' override must be an object")
+        for pass_id, override in requested.items():
+            if pass_id not in merged:
+                merged[pass_id] = override
+        requested = merged
+    if requested is None:
+        requested = {"default": {}}
+    if isinstance(requested, list):
+        requested = {f"pass_{index + 1}": value for index, value in enumerate(requested)}
+    if not isinstance(requested, dict) or not 1 <= len(requested) <= 4:
+        die("face-zone gpu_passes must be a map of one to four named pass objects")
+
+    resolved = {}
+    for index, (raw_id, requested_pass) in enumerate(requested.items()):
+        pass_id = str(raw_id).strip()
+        if not pass_id or not isinstance(requested_pass, dict):
+            die("each face-zone GPU pass needs a non-empty name and an object value")
+        steps = int(requested_pass.get("steps", default_steps))
+        cfg = float(requested_pass.get("cfg", default_cfg))
+        denoise = float(requested_pass.get("denoise", default_denoise))
+        sampler = requested_pass.get("sampler_name") or requested_pass.get("sampler") or default_sampler
+        scheduler = requested_pass.get("scheduler") or default_scheduler
+        if not 2 <= steps <= 60:
+            die(f"face-zone GPU pass '{pass_id}' steps must be between 2 and 60")
+        if not 1.0 <= cfg <= 20.0:
+            die(f"face-zone GPU pass '{pass_id}' cfg must be between 1 and 20")
+        if not 0.0 < denoise <= 1.0:
+            die(f"face-zone GPU pass '{pass_id}' denoise must be in (0, 1]")
+        seed_offset = int(requested_pass.get("seed_offset", index))
+        resolved[pass_id] = {
+            "id": pass_id,
+            "seed": int(requested_pass.get("seed", run_seed + seed_offset)),
+            "steps": steps,
+            "cfg": cfg,
+            "sampler_name": str(sampler),
+            "scheduler": str(scheduler),
+            "denoise": denoise,
+        }
+    return resolved
 def edit_face_zone(root, recipe_name, target_path, project, purpose,
                    slots=None, checkpoint=None, identity_lora=None,
                    identity_strength=None, target_preset=None,
@@ -688,7 +755,11 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
     selected_identity_lora = resolve_lora(root, selected_identity_lora)
 
     prompt, vary_picks = _render_recipe_prompt(recipe, dict(slots or {}))
-    preset = dict((recipe.get("target_presets") or {}).get(target_preset or "auto") or {})
+    preset_key = target_preset or "auto"
+    target_presets = dict(recipe.get("target_presets") or {})
+    if preset_key not in target_presets:
+        die(f"unknown face-zone target preset '{preset_key}'")
+    preset = dict(target_presets[preset_key] or {})
     context = str(preset.get("prompt_context") or "").strip()
     if context:
         prompt = f"{prompt}, {context}"
@@ -697,10 +768,10 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
     engine = dict(engine or {})
     resolved_job_id = job_id or new_id("job")
     run_seed = int(seed) if seed is not None else secrets.randbits(63)
-    preset_key = target_preset or "auto"
     identity_reference = engine.get("identity_reference")
     if not identity_reference:
-        identity_reference = (recipe.get("identity_references") or {}).get(preset_key)
+        identity_references = dict(recipe.get("identity_references") or {})
+        identity_reference = identity_references.get(preset_key) or identity_references.get("auto")
     identity_reference_path = None
     if identity_reference:
         identity_reference_path = Path(identity_reference)
@@ -708,6 +779,10 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
             identity_reference_path = root / identity_reference_path
         if not identity_reference_path.is_file():
             die(f"identity mesh reference not found: {identity_reference_path}")
+
+    workflow_rel = recipe.get("workflow", "workflows/sd15_face_zone_inpaint_api.json")
+    if "mesh_seed" in workflow_rel and identity_reference_path is None:
+        die("face-zone mesh workflow requires a reviewed identity reference; refusing generic inpaint fallback")
 
     # This command is deliberately separate from ComfyUI: face outlining uses
     # CPU PyTorch even while the image server remains on the RTX 3070.
@@ -745,6 +820,8 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         if isinstance(box, dict):
             box = ",".join(str(box[key]) for key in ("x", "y", "width", "height"))
         zone_cmd += ["--exclude-box", str(box)]
+    for accessory in preset.get("absent_accessories", []):
+        zone_cmd += ["--absent-accessory", str(accessory)]
     prepared = subprocess.run(zone_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if prepared.returncode != 0:
         die(f"CPU face outline failed: {(prepared.stderr or prepared.stdout).strip()[-800:]}")
@@ -753,13 +830,75 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
     except json.JSONDecodeError as exc:
         die(f"CPU face outline returned invalid JSON: {exc}")
 
+    upload_analysis = dict(zone.get("upload_analysis") or {})
+    crop_preflight = dict(zone.get("crop_preflight") or {})
+    if identity_reference_path is not None and int(recipe.get("version", 1)) >= 2:
+        expected_upload_stages = [
+            "face-detection-and-478-point-mesh",
+            "neck-anchor",
+            "neck-left-to-top-to-right-to-neck-closed-loop",
+            "whole-face-head-and-ears",
+            "hair-headwear-accessory-and-clothing-classification",
+            "visible-eyes-mouth-and-identity-pose-map",
+            "target-theme-overlay-ready",
+        ]
+        actual_upload_stages = list(upload_analysis.get("ordered_pipeline") or [])
+        failed_upload_stages = [
+            str(stage.get("id") or "unknown")
+            for stage in upload_analysis.get("stages") or []
+            if not stage.get("passed")
+        ]
+        if (
+            upload_analysis.get("version") != 1
+            or actual_upload_stages != expected_upload_stages
+            or not upload_analysis.get("all_passed")
+            or failed_upload_stages
+        ):
+            detail = ", ".join(failed_upload_stages) or "missing or out-of-order analysis"
+            die(
+                "CPU upload analysis did not pass every ordered body-part stage "
+                f"({detail}); refusing GPU work"
+            )
+        if (
+            crop_preflight.get("passed") is False
+            or crop_preflight.get("expandable_contacts")
+        ):
+            contacts = ", ".join(crop_preflight.get("expandable_contacts") or []) or "unknown"
+            die(
+                "CPU crop preflight did not contain the full head/neck before GPU work "
+                f"({contacts}); refusing GPU work"
+            )
+
+    requested_minimum_coverage = engine.get("min_mesh_coverage")
+    if requested_minimum_coverage is None:
+        requested_minimum_coverage = defaults.get("min_mesh_coverage", 0.0)
+    try:
+        minimum_mesh_coverage = float(requested_minimum_coverage)
+    except (TypeError, ValueError):
+        die("min_mesh_coverage must be a number between 0 and 1")
+    if not 0.0 <= minimum_mesh_coverage <= 1.0:
+        die("min_mesh_coverage must be a number between 0 and 1")
+    mesh_coverage = None
+    whole_zone_mesh_coverage = None
+    if identity_reference_path is not None:
+        identity_mesh = zone.get("identity_mesh") or {}
+        try:
+            whole_zone_mesh_coverage = float(identity_mesh["coverage_ratio"])
+            mesh_coverage = float(identity_mesh.get("core_coverage_ratio", whole_zone_mesh_coverage))
+        except (KeyError, TypeError, ValueError):
+            die("CPU face outline returned no valid identity-mesh coverage; refusing GPU cleanup")
+        if not math.isfinite(mesh_coverage):
+            die("CPU face outline returned non-finite identity-mesh coverage; refusing GPU cleanup")
+        if minimum_mesh_coverage > 0.0 and mesh_coverage < minimum_mesh_coverage:
+            die(
+                f"identity mesh coverage {mesh_coverage:.1%} is below the "
+                f"required {minimum_mesh_coverage:.1%}; refusing GPU cleanup"
+            )
+
     checkpoint_requested = checkpoint or engine.get("checkpoint") or defaults.get("checkpoint")
     checkpoint_name, checkpoint_matched = resolve_checkpoint_info(root, checkpoint_requested, comfy=comfy)
     if not checkpoint_matched:
         die(f"face-zone lane requires '{checkpoint_requested}', not fallback '{checkpoint_name}'")
-    workflow_rel = recipe.get("workflow", "workflows/sd15_face_zone_inpaint_api.json")
-    if identity_reference_path is None and "mesh_seed" in workflow_rel:
-        workflow_rel = "workflows/sd15_face_zone_inpaint_api.json"
     graph = load_json(root / workflow_rel)
     graph.pop("_comment", None)
     crop_title = "IDENTITY MESH SEED" if identity_reference_path is not None else "FACE CROP"
@@ -772,24 +911,141 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
     )
     crop_node["inputs"]["image"] = upload_image(comfy, Path(crop_artifact))
     mask_node["inputs"]["image"] = upload_image(comfy, Path(zone["artifacts"]["graded_mask"]))
+    edge_mask_node = next(
+        (
+            node for node in graph.values()
+            if node.get("class_type") == "LoadImage"
+            and node.get("_meta", {}).get("title") == "EDGE HARMONIZE MASK"
+        ),
+        None,
+    )
+    if edge_mask_node is not None:
+        edge_mask_artifact = zone["artifacts"].get("skin_match_ring")
+        if not edge_mask_artifact:
+            die("face-zone workflow requires a saved skin-match ring")
+        edge_mask_node["inputs"]["image"] = upload_image(comfy, Path(edge_mask_artifact))
 
-    steps = int(engine.get("steps") or defaults.get("steps", 24))
-    sample_cfg = float(engine.get("cfg") or defaults.get("cfg", 5.5))
-    sampler = engine.get("sampler_name") or defaults.get("sampler", "dpmpp_2m")
-    scheduler = engine.get("scheduler") or defaults.get("scheduler", "karras")
-    denoise = float(engine.get("denoise") or defaults.get("denoise", 0.68))
+    identity_model_weight = float(
+        identity_strength or engine.get("identity_strength") or identity.get("strength", 1.0)
+    )
+    identity_clip_weight = float(
+        engine.get("identity_clip_strength") or identity.get("clip_strength") or identity_model_weight
+    )
+    gpu_passes = _resolve_face_zone_gpu_passes(engine, defaults, run_seed)
+    skip_gpu_cleanup = bool(
+        engine.get("skip_gpu_cleanup")
+        if "skip_gpu_cleanup" in engine
+        else defaults.get("skip_gpu_cleanup", False)
+    )
+    if skip_gpu_cleanup:
+        zone_dir = Path(zone["zone_file"]).parent
+        generated_crop = Path(zone["artifacts"]["identity_mesh_seed"])
+        month_dir = root / "artifacts" / project / f"{datetime.now():%Y-%m}"
+        month_dir.mkdir(parents=True, exist_ok=True)
+        final = month_dir / f"{datetime.now():%Y%m%d}_{recipe['id']}_{resolved_job_id}_00001_.png"
+        composited = subprocess.run(
+            [str(comfy_python), str(zone_script), "--root", str(root), "composite",
+             "--zone", zone["zone_file"], "--generated-crop", str(generated_crop),
+             "--output", str(final)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+        if composited.returncode != 0 or not final.is_file():
+            die(f"CPU face-zone composite failed: {(composited.stderr or composited.stdout).strip()[-800:]}")
+        zone_record = load_json(Path(zone["zone_file"]))
+        zone_record["status"] = "CPU identity mesh seed used without GPU cleanup"
+        zone_record["generated_crop"] = str(generated_crop)
+        zone_record["final"] = str(final)
+        Path(zone["zone_file"]).write_text(json.dumps(zone_record, indent=2) + "\n", encoding="utf-8")
+        card = {
+            "artifact_id": f"art.{resolved_job_id}.0",
+            "job_id": resolved_job_id,
+            "project": project,
+            "kind": "image",
+            "recipe": f"{recipe['id']}@{recipe['version']}",
+            "purpose": purpose,
+            "prompt": prompt,
+            "negative": negative,
+            "checkpoint": checkpoint_name,
+            "workflow": workflow_rel,
+            "seed": run_seed,
+            "size": f"{_target_size(target)[0]}x{_target_size(target)[1]}",
+            "steps": 0,
+            "cfg": 0,
+            "sampler": "cpu-only",
+            "scheduler": "cpu-only",
+            "denoise": 0,
+            "target": str(target),
+            "target_sha256": _file_sha256(target),
+            "retry_policy": "fresh-from-immutable-original; no generated parent",
+            "generated_parent": None,
+            "target_preset": target_preset or "auto",
+            "engine": "cpu_face_zone_sd15_seed_only",
+            "gpu_passes": [],
+            "identity_mode": "lora",
+            "identity_model_strength": identity_model_weight,
+            "identity_clip_strength": identity_clip_weight,
+            "lora": selected_identity_lora,
+            "face_zone": zone_record,
+            "upload_analysis": upload_analysis,
+            "crop_preflight": crop_preflight,
+            **({"identity_reference": str(identity_reference_path)} if identity_reference_path else {}),
+            **({"face_swap_preflight": {
+                "identity_mesh_coverage": mesh_coverage,
+                "facial_core_mesh_coverage": mesh_coverage,
+                "whole_zone_mesh_coverage": whole_zone_mesh_coverage,
+                "minimum_mesh_coverage": minimum_mesh_coverage,
+                "passed": True,
+            }} if identity_reference_path is not None else {}),
+            "skin_match": "generated mean preserved; target contrast harmonized 35%; soft boundary ring composite",
+            **({"subject_profile": subject_profile} if subject_profile else {}),
+            "score": None,
+            "tags": ["cpu-face-outline", "graded-mask", "skin-match", "cpu-only-seed"],
+            "caption": "",
+            "status": "draft",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        final.with_suffix(final.suffix + ".json").write_text(
+            json.dumps(card, indent=2) + "\n", encoding="utf-8"
+        )
+        print(f"[byrdimage] CPU face outline: {zone['artifacts']['outline_preview']}")
+        print(f"[byrdimage] skin-match zone: {zone['artifacts']['skin_match_ring']}")
+        print(f"[byrdimage] archived {final} (+card)")
+        return resolved_job_id, [(final, card)]
+    sampler_nodes = []
     for node in graph.values():
         class_type, inputs = node.get("class_type"), node.get("inputs", {})
         if class_type == "CheckpointLoaderSimple":
             inputs["ckpt_name"] = checkpoint_name
         elif class_type == "KSampler":
-            inputs.update({"seed": run_seed, "steps": steps, "cfg": sample_cfg,
-                           "sampler_name": sampler, "scheduler": scheduler,
-                           "denoise": denoise})
+            sampler_nodes.append(node)
         elif class_type == "CLIPTextEncode":
             inputs["text"] = prompt if "POSITIVE" in node.get("_meta", {}).get("title", "") else negative
         elif class_type == "SaveImage":
             inputs["filename_prefix"] = f"{datetime.now():%Y%m%d}_{recipe['id']}_{resolved_job_id}_crop"
+    if len(sampler_nodes) != len(gpu_passes):
+        die(
+            f"face-zone workflow has {len(sampler_nodes)} KSampler nodes but "
+            f"the recipe resolved {len(gpu_passes)} GPU passes"
+        )
+    assigned_passes = set()
+    for sampler_node in sampler_nodes:
+        pass_id = str(sampler_node.get("_meta", {}).get("byrd_pass", "")).strip()
+        if not pass_id and len(sampler_nodes) == len(gpu_passes) == 1:
+            pass_id = next(iter(gpu_passes))
+        pass_config = gpu_passes.get(pass_id)
+        if pass_config is None or pass_id in assigned_passes:
+            die(f"face-zone workflow has an unconfigured or duplicate GPU pass '{pass_id}'")
+        sampler_node["inputs"].update(pass_config)
+        sampler_node["inputs"].pop("id", None)
+        assigned_passes.add(pass_id)
+    if assigned_passes != set(gpu_passes):
+        die("face-zone workflow did not assign every configured GPU pass")
+    pass_plan = list(gpu_passes.values())
+    steps = sum(pass_config["steps"] for pass_config in pass_plan)
+    sample_cfg = pass_plan[0]["cfg"]
+    sampler = pass_plan[0]["sampler_name"]
+    scheduler = pass_plan[0]["scheduler"]
+    denoise = pass_plan[0]["denoise"]
 
     identity_model_weight = float(
         identity_strength or engine.get("identity_strength") or identity.get("strength", 1.0)
@@ -860,17 +1116,28 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         "retry_policy": "fresh-from-immutable-original; no generated parent",
         "generated_parent": None,
         "target_preset": target_preset or "auto",
-        "engine": "cpu_face_zone_sd15",
+        "engine": "cpu_face_zone_sd15_multipass" if len(gpu_passes) > 1 else "cpu_face_zone_sd15",
+        "gpu_passes": list(gpu_passes.values()),
         "identity_mode": "lora",
         "identity_model_strength": identity_model_weight,
         "identity_clip_strength": identity_clip_weight,
         "lora": selected_identity_lora,
         "face_zone": zone_record,
+        "upload_analysis": upload_analysis,
+        "crop_preflight": crop_preflight,
         **({"identity_reference": str(identity_reference_path)} if identity_reference_path else {}),
+        **({"face_swap_preflight": {
+            "identity_mesh_coverage": mesh_coverage,
+            "facial_core_mesh_coverage": mesh_coverage,
+            "whole_zone_mesh_coverage": whole_zone_mesh_coverage,
+            "minimum_mesh_coverage": minimum_mesh_coverage,
+            "passed": True,
+        }} if identity_reference_path is not None else {}),
         "skin_match": "generated mean preserved; target contrast harmonized 35%; soft boundary ring composite",
         **({"subject_profile": subject_profile} if subject_profile else {}),
         "score": None,
-        "tags": ["cpu-face-outline", "graded-mask", "skin-match"],
+        "tags": ["cpu-face-outline", "graded-mask", "skin-match"]
+        + (["multi-pass-gpu-cleanup"] if len(gpu_passes) > 1 else []),
         "caption": "",
         "status": "draft",
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -1062,3 +1329,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+

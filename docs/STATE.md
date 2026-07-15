@@ -186,3 +186,4 @@ The always-on operator that runs the belt while Carey is away. Foundation landed
 - 2026-07-10 · Gaming-PC side completed: startup command, logon task, image submit layer, SDXL workflow.
 - 2026-07-10 · U0 kit committed to GitHub; repo is the kit distribution channel.
 - 2026-07-08 · U0 kit designed.
+

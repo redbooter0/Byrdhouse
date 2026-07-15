@@ -25,6 +25,7 @@ import torch
 import cv2
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 from safetensors.torch import load_file
+from facezone_composite import restore_protected_material
 
 
 MODEL_NAME = "mediapipe_face_fp32.safetensors"
@@ -540,6 +541,10 @@ def _closed_head_envelope(
         cv2.MORPH_CLOSE,
         cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7)),
     ) > 0
+    traversal = _ordered_body_part_traversal(envelope, neck_support)
+    if not traversal.get("passed"):
+        raise RuntimeError(
+            f"Closed head/body traversal failed: {traversal.get('reason', 'unsafe geometry')}")
     return envelope, {
         "method": "opencv-connected-exposed-skin-closed-convex-head-contour",
         "closed": True,
@@ -548,11 +553,15 @@ def _closed_head_envelope(
         "head_pixels": int(np.count_nonzero(closed_head)),
         "neck_pixels": int(np.count_nonzero(neck_support)),
         "envelope_pixels": int(np.count_nonzero(envelope)),
+        "body_part_traversal": traversal,
     }
 
 
 def _semantic_head_zone(
-    root: Path, crop: Image.Image, geometric_face: Image.Image
+    root: Path,
+    crop: Image.Image,
+    geometric_face: Image.Image,
+    absent_accessories: Iterable[str] = (),
 ) -> tuple[Image.Image, Image.Image, Image.Image, Image.Image, Image.Image, np.ndarray, dict]:
     """Build `neck + connected head - hair/headwear` on CPU.
 
@@ -562,6 +571,15 @@ def _semantic_head_zone(
     holes, while semantic hair/headwear always wins as a protection mask.
     """
     seed = np.asarray(geometric_face.convert("L")) > 127
+    requested_absent = tuple(
+        dict.fromkeys(str(name).strip().lower() for name in absent_accessories if str(name).strip())
+    )
+    supported_absent = {"eyeglasses": 3, "headwear": 14, "earrings": 15, "necklaces": 16}
+    unknown_absent = sorted(set(requested_absent) - set(supported_absent))
+    if unknown_absent:
+        raise RuntimeError(
+            "Unsupported preset absent-accessory class(es): " + ", ".join(unknown_absent)
+        )
     roi = _head_neck_roi(seed)
     parser: dict
     mode: str
@@ -600,8 +618,60 @@ def _semantic_head_zone(
         # may sit inside the geometric face oval but are not facial skin.
         hair_headwear = np.isin(category, (13, 14)) & roi
         other_exclusion = np.isin(category, (3, 15, 16, 18)) & roi
+        # A target preset may assert that an accessory is truly absent. Anime
+        # parsers otherwise confuse eye ink and large foreheads with glasses or
+        # hats, punching holes in the identity seed. Only unlock contradictory
+        # pixels inside the detected 478-point face; everything outside that
+        # audited geometry remains protected, and hair/clothing never unlock.
+        corrected_absent: dict[str, int] = {}
+        reclassified_absent: dict[str, int] = {}
+        for name in requested_absent:
+            label = supported_absent[name]
+            if name == "headwear":
+                raw_hair = ((category == 13) & roi).astype(np.uint8)
+                component_count, components, stats, _ = cv2.connectedComponentsWithStats(
+                    raw_hair, connectivity=8
+                )
+                confirmed_hair = np.zeros(seed.shape, dtype=bool)
+                for component_id in range(1, component_count):
+                    if int(stats[component_id, cv2.CC_STAT_AREA]) >= 400:
+                        confirmed_hair |= components == component_id
+                hair_connected = cv2.dilate(
+                    confirmed_hair.astype(np.uint8),
+                    cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (17, 17)),
+                    iterations=1,
+                ) > 0
+                protected_as_hair = (category == label) & roi & hair_connected
+                contradictory = (category == label) & roi & ~protected_as_hair
+                reclassified_absent[name] = int(np.count_nonzero(protected_as_hair))
+            else:
+                contradictory = (category == label) & seed
+                reclassified_absent[name] = 0
+            corrected_absent[name] = int(np.count_nonzero(contradictory))
+            semantic_keep |= contradictory
+            hair_headwear &= ~contradictory
+            other_exclusion &= ~contradictory
         exclusion = hair_headwear | other_exclusion
         labels_preview = category
+
+        residual_absent = {
+            name: max(
+                0,
+                int(np.count_nonzero((category == supported_absent[name]) & seed & exclusion))
+                - int(reclassified_absent.get(name, 0)),
+            )
+            for name in requested_absent
+        }
+        parser["preset_absent_accessories"] = list(requested_absent)
+        parser["preset_absent_accessory_reclassified_as_hair"] = reclassified_absent
+
+        parser["preset_absent_accessory_corrections"] = corrected_absent
+        parser["residual_absent_accessory_pixels_in_geometric_face"] = residual_absent
+    parser.setdefault("preset_absent_accessories", list(requested_absent))
+    parser.setdefault("preset_absent_accessory_corrections", {})
+    parser.setdefault("preset_absent_accessory_reclassified_as_hair", {})
+    parser.setdefault("residual_absent_accessory_pixels_in_geometric_face", {})
+
 
     # Recover skin-colored pixels that an anime parser mislabeled specifically
     # as hair. The recovery is color-connected to confirmed face skin and never
@@ -908,6 +978,260 @@ def _feature_mask(
     return mask
 
 
+def _feature_harmonize_mask(
+    identity_seed: Image.Image,
+    hard_mask: Image.Image,
+    hair_exclusion: Image.Image,
+    crop_mesh: np.ndarray,
+    topology: dict[str, np.ndarray],
+) -> Image.Image:
+    """Build a soft facial-ink mask for a local masked latent pass.
+
+    Eye and lip rings guarantee feature coverage. Canny edges add brows, nose,
+    beard and cheek ink. An eroded semantic core prevents the pass from
+    touching hair, headwear, clothing or the outer composite seam.
+    """
+    hard = np.asarray(hard_mask.convert("L")) > 127
+    protected = np.asarray(hair_exclusion.convert("L")) > 63
+    core = cv2.erode(
+        hard.astype(np.uint8),
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (13, 13)),
+        iterations=1,
+    ) > 0
+    explicit = np.zeros((CANVAS_SIZE, CANVAS_SIZE), dtype=np.uint8)
+    for key, padding in (("left_eye", 9), ("right_eye", 9), ("lips", 10)):
+        explicit = np.maximum(
+            explicit,
+            np.asarray(_feature_mask(crop_mesh, topology.get(key), padding=padding)),
+        )
+
+    rgb = np.asarray(identity_seed.convert("RGB"), dtype=np.uint8)
+    gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    ink = cv2.Canny(gray, 38, 112)
+    ink = cv2.dilate(
+        ink,
+        cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)),
+        iterations=1,
+    )
+    combined = (((explicit > 0) & hard) | ((ink > 0) & core)) & ~protected
+    if int(np.count_nonzero(combined)) < 64:
+        raise RuntimeError("Facial-feature harmonize mask is unexpectedly empty.")
+    soft = cv2.GaussianBlur(combined.astype(np.float32), (0, 0), 1.35)
+    soft = np.clip(soft * hard.astype(np.float32), 0.0, 1.0)
+    return Image.fromarray(np.uint8(np.round(soft * 255)), mode="L")
+
+
+def _point_dict(point: np.ndarray) -> dict[str, int]:
+    return {"x": int(point[0]), "y": int(point[1])}
+
+
+
+def _ordered_body_part_traversal(
+    envelope: np.ndarray,
+    neck_support: np.ndarray,
+) -> dict:
+    """Audit the closed neck-left -> top -> neck-right head traversal."""
+    contours, _ = cv2.findContours(
+        envelope.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
+    )
+    if not contours:
+        return {"passed": False, "reason": "no-closed-envelope-contour"}
+    contour = max(contours, key=cv2.contourArea).reshape(-1, 2)
+    neck_y, neck_x = np.where(neck_support)
+    if len(neck_x) < 8:
+        return {"passed": False, "reason": "no-connected-neck-anchor"}
+
+    neck_floor = float(np.percentile(neck_y, 78))
+    floor_points = np.column_stack((neck_x[neck_y >= neck_floor], neck_y[neck_y >= neck_floor]))
+    if len(floor_points) < 2:
+        return {"passed": False, "reason": "neck-anchor-has-no-width"}
+    neck_left = floor_points[np.argmin(floor_points[:, 0])]
+    neck_right = floor_points[np.argmax(floor_points[:, 0])]
+    left = contour[np.argmin(contour[:, 0])]
+    top = contour[np.argmin(contour[:, 1])]
+    right = contour[np.argmax(contour[:, 0])]
+
+    vertical_span = int(max(neck_left[1], neck_right[1]) - top[1])
+    horizontal_span = int(right[0] - left[0])
+    neck_width = int(neck_right[0] - neck_left[0])
+    passed = (
+        len(contour) >= 32
+        and vertical_span >= 32
+        and horizontal_span >= 32
+        and neck_width >= 4
+        and left[0] < top[0] < right[0]
+        and top[1] < min(neck_left[1], neck_right[1])
+    )
+    return {
+        "passed": bool(passed),
+        "closed": True,
+        "contour_points": int(len(contour)),
+        "order": [
+            "neck-left",
+            "left-outer-head-and-ear",
+            "top-of-head",
+            "right-outer-head-and-ear",
+            "neck-right",
+            "neck-anchor-close",
+        ],
+        "checkpoints": {
+            "neck_left": _point_dict(neck_left),
+            "left_outer": _point_dict(left),
+            "top": _point_dict(top),
+            "right_outer": _point_dict(right),
+            "neck_right": _point_dict(neck_right),
+        },
+        "vertical_span": vertical_span,
+        "horizontal_span": horizontal_span,
+        "neck_width": neck_width,
+    }
+
+
+
+def _build_upload_analysis(
+    *,
+    detection_score: float,
+    detected_faces: int,
+    mesh_points: np.ndarray | None,
+    semantic_labels: np.ndarray,
+    semantic_parser: dict,
+    hard_mask: Image.Image,
+    hair_exclusion: Image.Image,
+    neck_anchor: Image.Image,
+    identity_mesh: dict | None,
+) -> dict:
+    """Summarize what the belt knows about the immutable upload before GPU work."""
+    absent_accessories = list(semantic_parser.get("preset_absent_accessories") or [])
+    accessory_corrections = dict(
+        semantic_parser.get("preset_absent_accessory_corrections") or {}
+    )
+    accessory_reclassified = dict(
+        semantic_parser.get("preset_absent_accessory_reclassified_as_hair") or {}
+    )
+    residual_absent = dict(
+        semantic_parser.get("residual_absent_accessory_pixels_in_geometric_face") or {}
+    )
+    hard = np.asarray(hard_mask.convert("L")) > 127
+    hair = np.asarray(hair_exclusion.convert("L")) > 127
+    neck = np.asarray(neck_anchor.convert("L")) > 127
+    head_contour = dict(semantic_parser.get("head_contour") or {})
+    traversal = dict(head_contour.get("body_part_traversal") or {})
+    hard_pixels = int(np.count_nonzero(hard))
+    hair_pixels = int(np.count_nonzero(hair))
+    neck_pixels = int(np.count_nonzero(neck))
+    protected_overlap = int(np.count_nonzero(hard & hair))
+    overlap_ratio = float(protected_overlap / max(1, hard_pixels))
+
+    accessories: dict[str, int] = {}
+    if semantic_parser.get("mode") == "parsenet-anime-fallback":
+        accessory_ids = {
+            "eyeglasses": 3,
+            "hair": 13,
+            "headwear": 14,
+            "earrings": 15,
+            "necklaces": 16,
+            "clothing": 18,
+        }
+        accessories = {
+            name: int(np.count_nonzero(semantic_labels == label))
+            for name, label in accessory_ids.items()
+        }
+    else:
+        accessories = {
+            "hair": hair_pixels,
+            "headwear": 0,
+            "eyeglasses": 0,
+            "earrings": 0,
+            "necklaces": 0,
+            "clothing": 0,
+        }
+
+    mesh = dict(identity_mesh or {})
+    eye_warps = dict(mesh.get("eye_feature_warps") or {})
+    visible_eyes = sum(
+        1 for result in eye_warps.values()
+        if result.get("applied") or result.get("reason") == "target-material-preserved"
+    )
+    stages = [
+        {
+            "id": "face-detection-and-478-point-mesh",
+            "passed": bool(
+                detected_faces >= 1
+                and detection_score >= 0.30
+                and mesh_points is not None
+                and len(mesh_points) == 478
+            ),
+            "detected_faces": int(detected_faces),
+            "detection_score": round(float(detection_score), 6),
+            "mesh_points": int(len(mesh_points)) if mesh_points is not None else 0,
+        },
+        {
+            "id": "neck-anchor",
+            "passed": bool(semantic_parser.get("neck_visible") and neck_pixels >= 8),
+            "pixels": neck_pixels,
+        },
+        {
+            "id": "neck-left-to-top-to-right-to-neck-closed-loop",
+            "passed": bool(traversal.get("passed") and traversal.get("closed")),
+            "traversal": traversal,
+        },
+        {
+            "id": "whole-face-head-and-ears",
+            "passed": bool(
+                hard_pixels >= 256
+                and int(head_contour.get("head_pixels", 0)) >= 256
+                and int(head_contour.get("envelope_pixels", 0)) >= hard_pixels
+            ),
+            "editable_pixels": hard_pixels,
+            "head_pixels": int(head_contour.get("head_pixels", 0)),
+            "envelope_pixels": int(head_contour.get("envelope_pixels", 0)),
+        },
+        {
+            "id": "hair-headwear-accessory-and-clothing-classification",
+            "passed": bool(
+                semantic_labels.shape == hard.shape
+                and overlap_ratio <= 0.01
+                and all(int(pixels) == 0 for pixels in residual_absent.values())
+            ),
+            "protected_pixels": hair_pixels,
+            "protected_overlap_pixels": protected_overlap,
+            "protected_overlap_ratio": round(overlap_ratio, 6),
+            "classes": accessories,
+            "preset_absent_accessories": absent_accessories,
+            "preset_reclassified_as_hair_pixels": accessory_reclassified,
+            "preset_correction_pixels": accessory_corrections,
+            "residual_absent_accessory_pixels_in_geometric_face": residual_absent,
+        },
+        {
+            "id": "visible-eyes-mouth-and-identity-pose-map",
+            "passed": bool(
+                mesh
+                and int(mesh.get("triangles", 0)) >= 100
+                and float(mesh.get("coverage_ratio", 0.0)) >= 0.20
+                and float(mesh.get("core_coverage_ratio", 0.0)) >= 0.55
+                and visible_eyes >= 1
+                and int(mesh.get("feature_fill_triangles", 0)) > 0
+            ),
+            "visible_identity_eyes": visible_eyes,
+            "eye_results": eye_warps,
+            "mouth_fill_triangles": int(mesh.get("feature_fill_triangles", 0)),
+            "mesh_triangles": int(mesh.get("triangles", 0)),
+            "mesh_coverage": float(mesh.get("coverage_ratio", 0.0)),
+            "facial_core_coverage": float(mesh.get("core_coverage_ratio", 0.0)),
+        },
+        {
+            "id": "target-theme-overlay-ready",
+            "passed": bool(mesh.get("target_theme_overlay")),
+            "overlay": mesh.get("target_theme_overlay"),
+        },
+    ]
+    return {
+        "version": 1,
+        "purpose": "understand-and-audit-immutable-upload-before-generation",
+        "ordered_pipeline": [stage["id"] for stage in stages],
+        "all_passed": all(bool(stage["passed"]) for stage in stages),
+        "stages": stages,
+    }
 def _target_material_feature_lock(
     crop: Image.Image,
     mesh_points: np.ndarray,
@@ -1139,6 +1463,121 @@ def _tone_match_uncovered_region(
     }
 
 
+def _fit_target_mesh_jaw_to_semantic_outline(
+    target_points: np.ndarray,
+    topology: dict[str, np.ndarray],
+    hard_mask: Image.Image,
+    neck_mask: Image.Image,
+) -> tuple[np.ndarray, dict]:
+    """Expand extreme stylized meshes to the approved jaw-to-jaw face plane.
+
+    MediaPipe can place a valid 478-point grid *inside* an oversized anime
+    face. The semantic mask knows the actual exposed-skin silhouette, so sample
+    its cheek/jaw widths while excluding the neck. Normal heads remain
+    unchanged; only a large measured mismatch activates the bounded fit.
+    """
+    rings = _ordered_rings(map(tuple, topology.get("face_oval", ())))
+    if not rings:
+        return target_points.copy(), {
+            "applied": False,
+            "reason": "missing-face-oval-topology",
+        }
+    ring_indices = max(rings, key=len)
+    if max(ring_indices) >= len(target_points):
+        return target_points.copy(), {
+            "applied": False,
+            "reason": "face-oval-landmark-range",
+        }
+
+    face_oval = target_points[np.asarray(ring_indices, dtype=np.int32)]
+    mesh_width = float(np.ptp(face_oval[:, 0]))
+    mesh_height = float(np.ptp(face_oval[:, 1]))
+    if mesh_width < 24.0 or mesh_height < 24.0:
+        return target_points.copy(), {
+            "applied": False,
+            "reason": "unsafe-face-oval-size",
+        }
+
+    hard = np.asarray(hard_mask.convert("L")) > 127
+    neck = np.asarray(neck_mask.convert("L")) > 127
+    top = float(face_oval[:, 1].min())
+    widths: list[float] = []
+    centers: list[float] = []
+    sampled_rows: list[int] = []
+    for fraction in np.linspace(0.35, 0.82, 16):
+        row = int(round(top + mesh_height * float(fraction)))
+        if row < 0 or row >= hard.shape[0]:
+            continue
+        columns = np.where(hard[row] & ~neck[row])[0]
+        if len(columns) < 16:
+            continue
+        width = float(np.ptp(columns))
+        if width < mesh_width * 0.85 or width > mesh_width * 2.20:
+            continue
+        widths.append(width)
+        centers.append(float((columns.min() + columns.max()) / 2.0))
+        sampled_rows.append(row)
+
+    if len(widths) < 5:
+        return target_points.copy(), {
+            "applied": False,
+            "reason": "insufficient-semantic-jaw-rows",
+            "sampled_rows": len(widths),
+        }
+
+    semantic_width = float(np.median(widths))
+    raw_ratio = semantic_width / max(1.0, mesh_width)
+    base = {
+        "fit_basis": "semantic-hard-minus-neck-row-median",
+        "mesh_jaw_width": round(mesh_width, 6),
+        "semantic_jaw_width": round(semantic_width, 6),
+        "raw_jaw_ratio": round(raw_ratio, 6),
+        "sampled_rows": sampled_rows,
+    }
+    if raw_ratio <= 1.18:
+        return target_points.copy(), {
+            **base,
+            "applied": False,
+            "reason": "mesh-already-fills-semantic-face",
+            "scale_x": 1.0,
+            "scale_y": 1.0,
+            "center_shift_x": 0.0,
+        }
+
+    scale_x = float(np.clip(raw_ratio * 0.92, 1.0, 1.35))
+    scale_y = float(min(1.15, 1.0 + (scale_x - 1.0) * 0.45))
+    mesh_center_x = float(face_oval[:, 0].mean())
+    mesh_center_y = float(face_oval[:, 1].mean())
+    semantic_center_x = float(np.median(centers))
+    center_shift_x = float(np.clip(semantic_center_x - mesh_center_x, -32.0, 32.0))
+
+    fitted = target_points.astype(np.float32).copy()
+    fitted[:, 0] = (
+        mesh_center_x + center_shift_x
+        + (fitted[:, 0] - mesh_center_x) * scale_x
+    )
+    fitted[:, 1] = mesh_center_y + (fitted[:, 1] - mesh_center_y) * scale_y
+    for axis in (0, 1):
+        lower = float(fitted[:, axis].min())
+        upper = float(fitted[:, axis].max())
+        if lower < 1.0:
+            fitted[:, axis] += 1.0 - lower
+        upper = float(fitted[:, axis].max())
+        if upper > CANVAS_SIZE - 2:
+            fitted[:, axis] -= upper - (CANVAS_SIZE - 2)
+
+    fitted_oval = fitted[np.asarray(ring_indices, dtype=np.int32)]
+    return fitted, {
+        **base,
+        "applied": True,
+        "scale_x": round(scale_x, 6),
+        "scale_y": round(scale_y, 6),
+        "center_shift_x": round(center_shift_x, 6),
+        "fitted_jaw_width": round(float(np.ptp(fitted_oval[:, 0])), 6),
+        "rule": "fit Carey jaw-to-jaw, then warp eyes/nose/mouth on the fitted 478-point grid",
+    }
+
+
 def _build_identity_mesh_seed(
     root: Path,
     crop: Image.Image,
@@ -1146,6 +1585,7 @@ def _build_identity_mesh_seed(
     target_mesh: np.ndarray,
     topology: dict[str, np.ndarray],
     hard_mask: Image.Image,
+    neck_mask: Image.Image,
     preserve_feature_mask: Image.Image,
     uncovered_skin_mask: Image.Image,
     identity_reference: Path,
@@ -1165,6 +1605,9 @@ def _build_identity_mesh_seed(
             f"Identity mesh has {len(source_mesh)} points; target has {len(target_mesh)}."
         )
     target_crop_mesh = _transform_points(target_mesh, crop_box)
+    target_crop_mesh, semantic_geometry_fit = _fit_target_mesh_jaw_to_semantic_outline(
+        target_crop_mesh, topology, hard_mask, neck_mask
+    )
     source_array, source_accessory_cleanup = _remove_source_accessories(
         root, source_image, source_mesh
     )
@@ -1247,6 +1690,26 @@ def _build_identity_mesh_seed(
     covered = coverage > 0.25
     allowed_pixels = max(1, int(np.count_nonzero(allowed > 0.5)))
     coverage_ratio = float(np.count_nonzero(covered) / allowed_pixels)
+
+    mesh_hull = np.zeros((CANVAS_SIZE, CANVAS_SIZE), dtype=np.uint8)
+    cv2.fillConvexPoly(
+        mesh_hull,
+        cv2.convexHull(np.int32(np.round(target_crop_mesh))),
+        1,
+    )
+    core_eligible = (
+        (mesh_hull > 0)
+        & (allowed > 0.5)
+        & (hidden_eye_suppression < 0.25)
+        & (preserve < 0.25)
+    )
+    core_pixels = max(1, int(np.count_nonzero(core_eligible)))
+    core_coverage_ratio = float(np.count_nonzero(covered & core_eligible) / core_pixels)
+    if core_coverage_ratio < 0.55:
+        raise RuntimeError(
+            "Identity mesh facial-core coverage is unsafe "
+            f"({core_coverage_ratio:.1%}; minimum 55%)."
+        )
     if triangle_count < 100 or coverage_ratio < 0.20:
         raise RuntimeError(
             f"Identity mesh warp coverage is unsafe ({triangle_count} triangles, "
@@ -1305,6 +1768,9 @@ def _build_identity_mesh_seed(
             np.count_nonzero((hidden_eye_suppression > 0.25) & (allowed > 0.5))
         ),
         "coverage_ratio": round(coverage_ratio, 6),
+        "core_coverage_ratio": round(core_coverage_ratio, 6),
+        "core_eligible_pixels": core_pixels,
+        "semantic_geometry_fit": semantic_geometry_fit,
         "mesh_identity_strength": round(mesh_identity_strength, 6),
         "mesh_identity_strength_mode": (
             "automatic" if mesh_identity_strength_override is None else "preset-override"
@@ -1335,9 +1801,21 @@ def prepare_face_zone(
     mesh_identity_strength: float | None = None,
     eye_protection_strength: float = 0.55,
     eye_source_mode: str = "identity",
+    absent_accessories: Iterable[str] = (),
     manual_box: tuple[float, float, float, float] | None = None,
     exclude_boxes: Iterable[tuple[float, float, float, float]] = (),
+    _crop_attempt: int = 0,
 ) -> dict:
+    eye_source_mode = str(eye_source_mode).strip().lower()
+    absent_accessories = tuple(absent_accessories)
+    exclude_boxes = tuple(exclude_boxes)
+    _crop_attempt = max(0, int(_crop_attempt))
+    if eye_source_mode not in {"identity", "target"}:
+        raise RuntimeError(f"Unsupported eye source mode: {eye_source_mode}")
+    eye_protection_strength = max(0.0, min(1.0, float(eye_protection_strength)))
+    lock_target_features = (
+        eye_source_mode == "target" and eye_protection_strength > 0.0
+    )
     root, source = root.resolve(), source.resolve()
     if not source.is_file():
         raise RuntimeError(f"Uploaded target does not exist: {source}")
@@ -1456,7 +1934,58 @@ def prepare_face_zone(
         neck_anchor,
         semantic_labels,
         semantic_parser,
-    ) = _semantic_head_zone(root, crop, geometric_face)
+    ) = _semantic_head_zone(
+        root,
+        crop,
+        geometric_face,
+        absent_accessories=absent_accessories,
+    )
+    head_boundary = np.asarray(head_envelope.convert("L")) > 127
+    crop_left, crop_top, crop_right, crop_bottom = crop_box
+    source_width, source_height = original.size
+    boundary_contacts: list[str] = []
+    if np.any(head_boundary[0, :]):
+        boundary_contacts.append("top")
+    if np.any(head_boundary[-1, :]):
+        boundary_contacts.append("bottom")
+    if np.any(head_boundary[:, 0]):
+        boundary_contacts.append("left")
+    if np.any(head_boundary[:, -1]):
+        boundary_contacts.append("right")
+    expandable_contacts = [
+        edge
+        for edge in boundary_contacts
+        if (
+            (edge == "top" and crop_top > 0)
+            or (edge == "bottom" and crop_bottom < source_height)
+            or (edge == "left" and crop_left > 0)
+            or (edge == "right" and crop_right < source_width)
+        )
+    ]
+    if expandable_contacts:
+        if _crop_attempt >= 2:
+            raise RuntimeError(
+                "CPU head/neck analysis still touches expandable crop edge(s) "
+                f"{', '.join(expandable_contacts)} after {_crop_attempt} reroutes; "
+                "GPU work was stopped for manual review."
+            )
+        return prepare_face_zone(
+            root,
+            source,
+            job_id,
+            min_confidence=min_confidence,
+            crop_factor=min(4.0, float(crop_factor) * 1.35),
+            face_index=face_index,
+            zone_expand=zone_expand,
+            identity_reference=identity_reference,
+            mesh_identity_strength=mesh_identity_strength,
+            eye_protection_strength=eye_protection_strength,
+            eye_source_mode=eye_source_mode,
+            absent_accessories=absent_accessories,
+            manual_box=manual_box,
+            exclude_boxes=exclude_boxes,
+            _crop_attempt=_crop_attempt + 1,
+        )
     # Capture antialiased skin pixels just outside the semantic contour. Without
     # this color-aware fringe, a one-pixel strip of the pale target can survive
     # around a newly dark jaw. Hair/headwear/clothing exclusion still wins.
@@ -1509,6 +2038,20 @@ def prepare_face_zone(
             target_feature_lock,
         ) = _target_material_feature_lock(crop, crop_mesh, topology, hard)
         protected_color_features = preserve_feature_mask.copy()
+    if lock_target_features:
+        preserve_feature_mask = Image.fromarray(
+            np.uint8(
+                np.round(
+                    np.asarray(preserve_feature_mask, dtype=np.float32)
+                    * eye_protection_strength
+                )
+            ),
+            mode="L",
+        )
+        protected_color_features = preserve_feature_mask.copy()
+    else:
+        preserve_feature_mask = Image.new("L", (CANVAS_SIZE, CANVAS_SIZE), 0)
+        protected_color_features = Image.new("L", (CANVAS_SIZE, CANVAS_SIZE), 0)
     for box in exclude_boxes:
         x, y, width, height = box
         mapped = _transform_points(
@@ -1553,7 +2096,7 @@ def prepare_face_zone(
     # This remains configurable for experiments, but production target presets
     # use 1.0 so iconic oversized features are pixel-locked.
     eye_protection_strength = max(0.0, min(1.0, float(eye_protection_strength)))
-    graded = hard_array * (1.0 - target_feature_region * eye_protection_strength)
+    graded = hard_array * (1.0 - target_feature_region)
     graded_image = Image.fromarray(np.uint8(np.round(graded * 255)), mode="L")
 
     identity_seed: Image.Image | None = None
@@ -1570,12 +2113,22 @@ def prepare_face_zone(
             mesh_points,
             topology,
             hard,
+            neck_anchor,
             preserve_feature_mask,
             uncovered_skin_mask,
             identity_reference,
             mesh_identity_strength,
             eye_source_mode,
         )
+        # Carey fills the complete visible head/face/ears/neck skin first; the
+        # target's theme material is then explicitly laid back over that seed.
+        identity_seed = restore_protected_material(identity_seed, crop, hair_exclusion)
+        identity_mesh["target_theme_overlay"] = {
+            "order": "after-full-head-identity-mesh-seed",
+            "source": "target-crop",
+            "mask_artifact": "hair_headwear_exclusion",
+            "preserved_classes": ["hair", "headwear", "eyeglasses", "earrings", "necklaces", "clothing"],
+        }
 
     # A narrow seam feather is enough because the mesh seed already follows the
     # target contour. The old 10px blur exposed a pale halo around dark faces.
@@ -1591,6 +2144,18 @@ def prepare_face_zone(
         np.asarray(soft, dtype=np.int16) - np.asarray(core, dtype=np.int16), 0, 255
     ).astype(np.uint8)
     match_ring = Image.fromarray(match_ring_array, mode="L")
+
+    upload_analysis = _build_upload_analysis(
+        detection_score=detection_score,
+        detected_faces=detected_faces,
+        mesh_points=mesh_points,
+        semantic_labels=semantic_labels,
+        semantic_parser=semantic_parser,
+        hard_mask=hard,
+        hair_exclusion=hair_exclusion,
+        neck_anchor=neck_anchor,
+        identity_mesh=identity_mesh,
+    )
 
     month = datetime.now().strftime("%Y-%m")
     output_dir = root / "artifacts" / "face_zones" / month / job_id
@@ -1748,6 +2313,15 @@ def prepare_face_zone(
         "ear_lobes": included_ear_lobes,
         "semantic_parser": semantic_parser,
         "identity_mesh": identity_mesh,
+        "upload_analysis": upload_analysis,
+        "crop_preflight": {
+            "passed": not expandable_contacts,
+            "reroutes": _crop_attempt,
+            "factor_used": round(float(crop_factor), 6),
+            "boundary_contacts": boundary_contacts,
+            "expandable_contacts": expandable_contacts,
+            "rule": "expand and re-analyze any head/neck contour clipped by an available source edge before GPU",
+        },
         "crop_box": {"x": left, "y": top, "width": right - left, "height": bottom - top},
         "canvas_size": CANVAS_SIZE,
         "exclude_boxes": [list(box) for box in exclude_boxes],
@@ -1802,10 +2376,12 @@ def composite_generated(zone_file: Path, generated_crop: Path, output: Path) -> 
     with Image.open(artifacts["hard_mask"]) as opened:
         hard = np.asarray(opened.convert("L"), dtype=np.float32) / 255.0
     protected_color = np.zeros(hard.shape, dtype=np.float32)
+    protected_color_mask: Image.Image | None = None
     protected_color_path = artifacts.get("protected_color_features")
     if protected_color_path and Path(protected_color_path).is_file():
         with Image.open(protected_color_path) as opened:
-            protected_color = np.asarray(opened.convert("L"), dtype=np.float32) / 255.0
+            protected_color_mask = opened.convert("L").copy()
+            protected_color = np.asarray(protected_color_mask, dtype=np.float32) / 255.0
     # Preserve the generated skin's mean color while matching its contrast to
     # the target artwork. This harmonizes lighting/style without whitening the
     # intended Carey complexion. The soft ring below performs the seam match.
@@ -1858,9 +2434,18 @@ def composite_generated(zone_file: Path, generated_crop: Path, output: Path) -> 
         generated = Image.fromarray(np.uint8(np.clip(adjusted, 0, 255)), mode="RGB")
     box = zone["crop_box"]
     side = int(box["width"])
+    left, top = int(box["x"]), int(box["y"])
+    target_region = original.crop((left, top, left + side, top + side))
     generated = generated.resize((side, side), Image.Resampling.LANCZOS)
     soft = soft.resize((side, side), Image.Resampling.BILINEAR)
-    original.paste(generated, (int(box["x"]), int(box["y"])), soft)
+    if protected_color_mask is not None:
+        protected_material = protected_color_mask.resize(
+            (side, side), Image.Resampling.NEAREST
+        )
+        generated = restore_protected_material(
+            generated, target_region, protected_material
+        )
+    original.paste(generated, (left, top), soft)
     output.parent.mkdir(parents=True, exist_ok=True)
     original.save(output, "PNG", optimize=True)
     return output
@@ -1881,6 +2466,7 @@ def parse_args() -> argparse.Namespace:
     prepare.add_argument("--mesh-identity-strength", type=float)
     prepare.add_argument("--eye-protection", type=float, default=0.55)
     prepare.add_argument("--eye-source", choices=("identity", "target"), default="identity")
+    prepare.add_argument("--absent-accessory", action="append", default=[])
     prepare.add_argument("--manual-box", type=_parse_box)
     prepare.add_argument("--exclude-box", type=_parse_box, action="append", default=[])
     composite = sub.add_parser("composite", help="Composite a generated 512px crop through the saved soft zone.")
@@ -1905,6 +2491,7 @@ def main() -> int:
             mesh_identity_strength=args.mesh_identity_strength,
             eye_protection_strength=args.eye_protection,
             eye_source_mode=args.eye_source,
+            absent_accessories=args.absent_accessory,
             manual_box=args.manual_box,
             exclude_boxes=args.exclude_box,
         )

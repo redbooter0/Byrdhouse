@@ -1,6 +1,6 @@
 # Image Generation State — read before changing the GAMING image lane
 
-**Last updated:** 2026-07-14 (EDT, semantic neck-up-minus-hair masking and CPU identity mesh seeding tested; Naruto-seeded Gojo visual gate failed)  
+**Last updated:** 2026-07-15 (EDT, CPU crop reroute + adapter crop-preflight gate verified on the hard Vegeta target; integration suite green)  
 **Owner:** BYRD-GAMING (`E:\ByrdHouse`)  
 **Rule:** Read this file before changing an image model, graph, training set, or route. Update it after every real local test.
 
@@ -12,7 +12,7 @@ Do not promote or configure any candidate as the recipe's deployed identity LoRA
 
 ## Current CPU face-zone state
 
-The permanent target-edit architecture is **upload -> CPU 478-point mesh + semantic parser -> neck-connected face/head/ears above the neck minus hair/headwear/accessories/clothing -> CPU Carey-reference triangle warp -> low-denoise GPU cleanup inside the semantic mask -> CPU soft composite -> card/review**. Its detailed handoff is [`FACE_ZONE_EDIT_WORKFLOW.md`](FACE_ZONE_EDIT_WORKFLOW.md). The belt works end to end; this is not a quality or deployment approval.
+The permanent target-edit architecture is **upload -> CPU 478-point mesh + semantic parser -> neck-connected face/head/ears above the neck minus hair/headwear/accessories/clothing -> CPU Carey-reference triangle warp -> CPU-only seed/composite when that looks better than GPU cleanup -> CPU soft composite -> card/review**. Its detailed handoff is [`FACE_ZONE_EDIT_WORKFLOW.md`](FACE_ZONE_EDIT_WORKFLOW.md). The belt works end to end, and the CPU crop preflight now expands and re-audits clipped head/neck envelopes before any GPU work. For the current v2 lane, CPU-only seed finishing is the preferred default because the GPU cleanup degraded the hard target. This is still not a quality or deployment approval.
 
 - The CPU tool is `scripts/byrdfacezone.py`; the belt adapter is `scripts/byrdimage.py` (`edit_face_zone`); the worker route is `scripts/worker.py` (`face_zone_identity_edit`).
 - Recipe: `recipes/anime_face_zone_edit.v1.json`. Current GPU workflow: `workflows/sd15_face_mesh_seed_refine_api.json` (`VAEEncode` + `SetLatentNoiseMask`). The older `workflows/sd15_face_zone_inpaint_api.json` is only the no-reference fallback.
@@ -21,7 +21,7 @@ The permanent target-edit architecture is **upload -> CPU 478-point mesh + seman
 - The current anime fallback is `parsing_parsenet.pth`, 85,331,193 bytes, SHA-256 `3d558d8d0e42c20224f13cf5a29c79eba2d59913419f945545d8cf7b72920de2`. It is **private-local-evaluation-only** and requires a deployment license review/replacement before any funded, commercial, public, or redistributed lane.
 - Do not replace the semantic route with a rectangle editor. The CLI `--manual-box` is a reviewed recovery fallback that records `manual_zone: true`; it is not a normal UI edit mode. Stop rather than silently guessing when semantic confidence fails.
 - Reviewed preset references: Gojo -> `002_naruto.png`; Vegeta -> `013_yu-yu-hakusho.png`; Luffy close/full -> `003_one-piece.png`, all under `profiles/me/references/generated_anime_cartoon/`.
-- The Naruto-seeded Gojo job `face_mesh_gojo_naruto_d38_m60` completed with 854 triangles and 88.008% edit-zone coverage. Output: `artifacts/image_lab/2026-07/20260714_anime_face_zone_edit_face_mesh_gojo_naruto_d38_m60_00001_.png`. It proves the architecture and identity/color transfer, but **fails** visual quality for the eye/artifact/ear/seam defects above.
+- The Naruto-seeded Gojo job `face_mesh_gojo_naruto_d38_m60` completed with 854 triangles and 88.008% edit-zone coverage. Output: `artifacts/image_lab/2026-07/20260714_anime_face_zone_edit_face_mesh_gojo_naruto_d38_m60_00001_.png`. It proves the architecture and identity/color transfer, but **fails** visual quality for the eye/artifact/ear/seam defects above.\n- The hard Vegeta CPU reroute `vegeta_crop_reroute_jaw_fit_foundation_06` successfully expanded the crop from `x=212,y=42,w=288,h=288` after one reroute (`crop_preflight.reroutes = 1`) and passed the full neck-to-head analysis before GPU work.\n- The local CPU-only rerun `job_19f644b00fbkrcxdf` completed with `skip_gpu_cleanup = true` and archived the better-looking seed/composite path for the hard Vegeta target.
 - Current preview candidate: `artifacts/lora/candidates/carey_meina_sd15_expanded_hybrid_r32_20260714_125628-step00001200.safetensors`, rank 32 / step 1,200, SHA-256 `ad5d34e32d32099a6f0f813064dc62fdccd0b429b89ff415b0ba17e83e78fc13`. Preview only; never deployed.
 - All support references are audited: generated animation/cartoon IDs `001-100` and synthetic-photoreal IDs `101-200`. They remain support material, not automatic approval of any LoRA.
 
@@ -161,3 +161,5 @@ PhotoMaker V1 private test:
 - Fixed seeds: Gojo `7124`, Vegeta `7125`, Luffy close `7126`, Luffy full `7127`, high-influence Gojo `7133`.
 - A candidate must visibly read as Carey in normal target renders; a high-influence artifact is diagnostic evidence only, never a pass.
 - Rank-16 split-strength diagnostics added separate `strength_model` / `strength_clip` support to `scripts/byrdimage.py`; this is an experimental calibration control, not evidence of approval.
+
+
