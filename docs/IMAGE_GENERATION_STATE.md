@@ -65,6 +65,14 @@ v1, semantic enrichment next.
 - Next rungs (in order, small steps): semantic enrichment of the report
   (headwear/eye occlusion truth from the parser — Gojo blindfold), per-face
   preset auto-suggestion from flags, multi-face batch operation.
+- Thorough scrutiny (founder rule, 2026-07-15 later): `analyze --thorough` is
+  the DEFAULT for the quality-lane gate and the examine route (`engine.quick_report`
+  / `-Quick` opt out). Adds per-face scale-stability cross-check (re-detect at 2x,
+  landmark drift → `geometry_stability` 0–1), parser occlusion truth over the eye
+  line, a `recommended_lane` mapped to the FACE_OPS ladder, and `analysis_seconds`
+  on the report — provable effort before any edit. Operator entry point:
+  `scripts/facelab.ps1` (preflight/examine/quality/zone/auto/swap/collect/train);
+  full manual in `docs/FACE_OPS.md`.
 - First hardware test: `python scripts\byrdfacezone.py analyze --input <image>`
   on the five calibrated targets + one group shot + one no-face image; verify
   verdicts/flags match reality (Luffy close must flag extreme_expression);

@@ -420,6 +420,16 @@ def main():
               and '"examine"' in worker_source
               and "byrdimage.facezone_examine(" in worker_source
               and '"face-report"' in byrdimage_source)
+        check("thorough scrutiny is the founder default with a recommended lane",
+              "def _thorough_face_checks(" in facezone_source
+              and "geometry_stability" in facezone_source
+              and "def _recommend_lane(" in facezone_source
+              and "analysis_seconds" in facezone_source
+              and "thorough=not engine.get(\"quick_report\", False)" in byrdimage_source)
+        check("quality lane is drivable by hand (facelab.ps1 + --edit-face-zone CLI)",
+              "--edit-face-zone" in byrdimage_source
+              and (ROOT / "scripts" / "facelab.ps1").is_file()
+              and "quality" in (ROOT / "scripts" / "facelab.ps1").read_text(encoding="utf-8-sig"))
         check("face-zone adapter refuses an unconditioned production run",
               "face-zone edit requires an installed identity LoRA" in byrdimage_source
               and "selected_identity_lora = resolve_lora(" in byrdimage_source

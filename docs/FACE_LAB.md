@@ -17,6 +17,8 @@ Read `docs/IMAGE_GENERATION_STATE.md` before touching the quality lane — it is
 the live handoff (current verdict: architecture proven, no LoRA candidate
 approved yet; CPU-only seed finish preferred on hard targets).
 
+**Operating the system by hand (founder or Codex): see `docs/FACE_OPS.md` — one entry point `scripts\facelab.ps1`, the lane ladder (main + 5 backups), every model download, every command.**
+
 ## The one test that matters (run on the GAMING PC)
 
 Open **Claude Code on BYRD-GAMING** and paste this — it proves the actual

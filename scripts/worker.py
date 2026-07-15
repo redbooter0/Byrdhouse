@@ -433,6 +433,7 @@ def run_faceswap(job) -> None:
             ROOT, target, p.get("project", "sandbox"),
             p.get("purpose", "face report"),
             min_confidence=float(p.get("min_face_confidence", 0.35)),
+            thorough=bool(p.get("thorough", True)),
             job_id=job["id"])
         cards = []
         for png, card in saved:

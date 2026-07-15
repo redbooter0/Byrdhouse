@@ -728,13 +728,19 @@ def _resolve_face_zone_gpu_passes(engine: dict, defaults: dict, run_seed: int) -
             "denoise": denoise,
         }
     return resolved
-def _face_report(root, comfy_python, zone_script, target, min_confidence=0.35):
+def _face_report(root, comfy_python, zone_script, target, min_confidence=0.35,
+                 thorough=True):
     """Run the CPU examiner (byrdfacezone analyze) and gate on its verdict.
     Returns the parsed report dict; dies with the examiner's own reasons when
-    the image has no operable face — the belt never guesses where to edit."""
+    the image has no operable face — the belt never guesses where to edit.
+    thorough is the founder default: real scrutiny (scale-stability, occlusion
+    truth, lane recommendation) is spent BEFORE any GPU effort."""
+    cmd = [str(comfy_python), str(zone_script), "--root", str(root), "analyze",
+           "--input", str(target), "--min-confidence", str(min_confidence)]
+    if thorough:
+        cmd.append("--thorough")
     result = subprocess.run(
-        [str(comfy_python), str(zone_script), "--root", str(root), "analyze",
-         "--input", str(target), "--min-confidence", str(min_confidence)],
+        cmd,
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     if result.returncode == 3:
@@ -755,7 +761,7 @@ def _face_report(root, comfy_python, zone_script, target, min_confidence=0.35):
 
 
 def facezone_examine(root, target_path, project, purpose, min_confidence=0.35,
-                     job_id=None):
+                     thorough=True, job_id=None):
     """Standalone examiner job (route 'examine'): run the CPU face report on an
     upload and archive the clean overview + the JSON verdict as an artifact —
     no editing, any GPU mode. This is how the founder sees where the belt can
@@ -771,11 +777,13 @@ def facezone_examine(root, target_path, project, purpose, min_confidence=0.35,
     month_dir.mkdir(parents=True, exist_ok=True)
     overview = month_dir / f"{datetime.now():%Y%m%d}_face_report_{job_id}.png"
     report_path = overview.with_suffix(".json.txt")  # .png.json is the card's name
+    cmd = [str(comfy_python), str(zone_script), "--root", str(root), "analyze",
+           "--input", str(target), "--min-confidence", str(min_confidence),
+           "--report", str(report_path), "--overview", str(overview)]
+    if thorough:
+        cmd.append("--thorough")
     result = subprocess.run(
-        [str(comfy_python), str(zone_script), "--root", str(root), "analyze",
-         "--input", str(target), "--min-confidence", str(min_confidence),
-         "--report", str(report_path), "--overview", str(overview)],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     if result.returncode not in (0, 3):
         die(f"face examiner failed: {(result.stderr or result.stdout).strip()[-500:]}")
@@ -872,7 +880,8 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
     # and the report rides the card so every edit is explainable.
     face_report = _face_report(root, comfy_python, zone_script, target,
                                engine.get("min_face_confidence",
-                                          defaults.get("min_face_confidence", 0.35)))
+                                          defaults.get("min_face_confidence", 0.35)),
+                               thorough=not engine.get("quick_report", False))
 
     zone_cmd = [
         str(comfy_python), str(zone_script), "--root", str(root), "prepare",
@@ -1774,6 +1783,15 @@ def main() -> None:
     ap.add_argument("--preview", action="store_true",
                     help="CPU zone preview: detection only — saves the zone overlay "
                          "+ mask for approval, no checkpoint, no diffusion")
+    ap.add_argument("--edit-face-zone", metavar="TARGET_IMAGE",
+                    help="QUALITY lane by hand: examiner gate -> CPU mesh seed -> "
+                         "cleanup -> composite (recipe anime_face_zone_edit)")
+    ap.add_argument("--face-preset", default="auto",
+                    help="quality lane preset: auto|gojo|vegeta|luffy_close|luffy_full")
+    ap.add_argument("--face-index", type=int, default=0,
+                    help="which face when the examiner reports several (0 = largest)")
+    ap.add_argument("--face-recipe", default="anime_face_zone_edit",
+                    help="quality-lane recipe (pin a version with name@N)")
     ap.add_argument("--denoise", type=float, help="zone edit denoise (default 0.7)")
     ap.add_argument("--blend", type=float, default=0.0,
                     help="face swap style blend 0-0.65 (0.3-0.45 for anime targets)")
@@ -1786,6 +1804,12 @@ def main() -> None:
     if not root:
         die("BYRDHOUSE_ROOT not set — run the setup script first")
 
+    if args.edit_face_zone:
+        edit_face_zone(root, args.face_recipe, args.edit_face_zone,
+                       args.project, args.purpose,
+                       identity_lora=args.lora, target_preset=args.face_preset,
+                       engine={"face_index": args.face_index})
+        return
     if args.swap_target:
         if args.preview:
             facezone_preview(root, args.swap_target, args.project, args.purpose,

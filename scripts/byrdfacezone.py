@@ -15,6 +15,7 @@ import json
 import math
 import os
 import sys
+import time
 from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
@@ -2511,10 +2512,76 @@ def _face_geometry_reads(points: np.ndarray) -> dict:
     }
 
 
+def _thorough_face_checks(root: Path, image: Image.Image, face_entry: dict) -> dict:
+    """The founder's deep-scrutiny pass: re-detect the face at 2x scale and
+    measure landmark agreement (is the geometry STABLE, or did the detector
+    guess?), then ask the semantic parser for occlusion truth over the eye
+    line (the Gojo-blindfold case). Effort over speed — this runs before any
+    edit so the system provably understood the face it is about to work on."""
+    checks: dict = {}
+    x1, y1, x2, y2 = face_entry["box"]
+    side = max(x2 - x1, y2 - y1)
+    pad = int(side * 0.35)
+    crop_box = (max(0, x1 - pad), max(0, y1 - pad),
+                min(image.width, x2 + pad), min(image.height, y2 + pad))
+    crop = image.crop(crop_box)
+    # 1. geometry stability: detect again on a 2x upscale of the face crop and
+    # compare normalized landmark positions — big drift = unstable geometry.
+    try:
+        big = crop.resize((crop.width * 2, crop.height * 2), Image.Resampling.LANCZOS)
+        face_a, _, _, _ = _detect_face(root, crop, 0.2, 0)
+        face_b, _, _, _ = _detect_face(root, big, 0.2, 0)
+        pa = np.asarray(face_a["landmarks_xy"], dtype=np.float32) / max(1, crop.width)
+        pb = np.asarray(face_b["landmarks_xy"], dtype=np.float32) / max(1, big.width)
+        drift = float(np.mean(np.linalg.norm(pa - pb, axis=1)))
+        stability = max(0.0, 1.0 - drift * 20.0)  # ~0.01 normalized drift → 0.8
+        checks["geometry_stability"] = round(stability, 3)
+        if stability < 0.6:
+            checks["geometry_warning"] = ("landmarks disagree across scales — the "
+                                          "detector is guessing; prefer the zone route "
+                                          "with a reviewed mask")
+    except Exception as exc:
+        checks["geometry_stability"] = None
+        checks["geometry_warning"] = f"rescale re-detect failed: {exc}"
+    # 2. occlusion truth from the semantic parser (real photos; anime falls
+    # back to the eval-only parser inside prepare — here we only report).
+    try:
+        crop512 = crop.resize((512, 512), Image.Resampling.LANCZOS)
+        labels, _, parse_meta = _run_selfie_multiclass(root, crop512)
+        hair_like = np.isin(labels, (1,))  # selfie multiclass: 1 = hair
+        upper = hair_like[: labels.shape[0] // 2, :]
+        checks["upper_face_hair_coverage"] = round(float(upper.mean()), 3)
+        if float(upper.mean()) > 0.35:
+            checks["occlusion_note"] = ("heavy hair/headwear over the upper face — "
+                                        "forehead stays target-authentic; expect the "
+                                        "plan's keep-headwear branch")
+        checks["parser"] = parse_meta.get("model", "selfie_multiclass")
+    except Exception as exc:
+        checks["parser"] = f"unavailable ({exc})"
+    return checks
+
+
+def _recommend_lane(face_entry: dict) -> str:
+    """Map the verdict + flags to the lane ladder (docs/FACE_OPS.md)."""
+    flags = " ".join(face_entry.get("flags", []))
+    if face_entry["verdict"] == "refuse":
+        return "none — fix the refusal reason first (upscale / different image)"
+    if "extreme_expression" in flags:
+        return "quality lane v2 multipass, CPU-seed finish, low mesh strength; review closely"
+    if "strong_profile" in flags:
+        return "quality lane v2 with eye_source=target; zone route as backup"
+    if "small_face" in flags:
+        return "upscale the target first (image.refine), then quality lane or zone route"
+    return "quality lane (v2 proven / v3 guided when hardware-approved); auto route for quick drafts"
+
+
 def analyze_image(root: Path, image_path: Path, min_confidence: float = 0.35,
-                  min_face_px: int = 64) -> dict:
+                  min_face_px: int = 64, thorough: bool = False) -> dict:
     """Examine an upload: every face, where the belt can and can't operate, and
-    the per-face feature plan. Never edits anything."""
+    the per-face feature plan. Never edits anything. thorough=True adds the
+    founder's deep-scrutiny pass (scale-stability + occlusion truth + lane
+    recommendation) — effort spent BEFORE the edit, recorded with timing."""
+    started = time.monotonic()
     with Image.open(image_path) as opened:
         image = opened.convert("RGB")
     faces = []
@@ -2564,6 +2631,11 @@ def analyze_image(root: Path, image_path: Path, min_confidence: float = 0.35,
             "feature_plan": plan,
         })
     operable = [f for f in faces if f["verdict"] in ("operable", "operable_with_care")]
+    if thorough:
+        for face_entry in faces:
+            if face_entry["verdict"] != "refuse":
+                face_entry["thorough"] = _thorough_face_checks(root, image, face_entry)
+            face_entry["recommended_lane"] = _recommend_lane(face_entry)
     return {
         "image": str(image_path), "size": list(image.size),
         "faces": faces, "operable_faces": len(operable),
@@ -2571,6 +2643,8 @@ def analyze_image(root: Path, image_path: Path, min_confidence: float = 0.35,
                     else "operable_with_care" if operable else "refuse"),
         **({} if operable else {"reason": "every detected face is below the operable bar"}),
         "feature_plan_law": FEATURE_PLAN_DEFAULT,
+        "thorough": bool(thorough),
+        "analysis_seconds": round(time.monotonic() - started, 2),
     }
 
 
@@ -2623,6 +2697,9 @@ def parse_args() -> argparse.Namespace:
     analyze.add_argument("--min-face-px", type=int, default=64)
     analyze.add_argument("--report", type=Path, help="write the JSON report here")
     analyze.add_argument("--overview", type=Path, help="write the clean overview PNG here")
+    analyze.add_argument("--thorough", action="store_true",
+                         help="deep scrutiny: scale-stability cross-check, occlusion "
+                              "truth, lane recommendation (founder default before edits)")
     return parser.parse_args()
 
 
@@ -2649,7 +2726,8 @@ def main() -> int:
     elif args.command == "analyze":
         report = analyze_image(args.root, args.input,
                                min_confidence=args.min_confidence,
-                               min_face_px=args.min_face_px)
+                               min_face_px=args.min_face_px,
+                               thorough=args.thorough)
         if args.report:
             args.report.parent.mkdir(parents=True, exist_ok=True)
             args.report.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
