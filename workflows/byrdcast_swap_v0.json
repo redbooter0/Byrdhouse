@@ -1,0 +1,101 @@
+{
+  "_comment": "ByrdCast Swap V0 — the GPU route for a real-photo target swap. TARGET is the picture; FACE is the chosen approved reference. ReActor swaps identity onto the target (preserving pose/lighting/scene), then FaceDetailer (Impact Pack) does a masked face-only restore so hair/clothes/background are never touched. byrdcast_swap.py fills the TARGET/FACE LoadImage names, the restore model, denoise and filename prefix at submit time. Node titles are the contract (TARGET / FACE). Needs ComfyUI-ReActor + inswapper_128 (private research lane) and, for the refine, ComfyUI Impact Pack + a photoreal checkpoint. If FaceDetailer is absent the script skips node 20-24 and saves the ReActor output as the candidate.",
+  "target": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" },
+    "_meta": { "title": "TARGET" }
+  },
+  "face": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" },
+    "_meta": { "title": "FACE" }
+  },
+  "swap": {
+    "class_type": "ReActorFaceSwap",
+    "inputs": {
+      "enabled": true,
+      "input_image": ["target", 0],
+      "source_image": ["face", 0],
+      "swap_model": "inswapper_128.onnx",
+      "facedetection": "retinaface_resnet50",
+      "face_restore_model": "GFPGANv1.4.pth",
+      "face_restore_visibility": 1.0,
+      "codeformer_weight": 0.5,
+      "detect_gender_input": "no",
+      "detect_gender_source": "no",
+      "input_faces_index": "0",
+      "source_faces_index": "0",
+      "console_log_level": 1
+    },
+    "_meta": { "title": "REACTOR SWAP (identity onto target)" }
+  },
+  "swap_save": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "byrdcast_swap", "images": ["swap", 0] },
+    "_meta": { "title": "SAVE REACTOR CANDIDATE" }
+  },
+  "20": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "Meina V5.1 - Baked VAE.safetensors" },
+    "_meta": { "title": "PHOTOREAL CHECKPOINT (refine)" }
+  },
+  "21": {
+    "class_type": "UltralyticsDetectorProvider",
+    "inputs": { "model_name": "bbox/face_yolov8m.pt" },
+    "_meta": { "title": "FACE DETECTOR (refine)" }
+  },
+  "22": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "same person, natural skin texture, sharp in-focus face, consistent lighting", "clip": ["20", 1] },
+    "_meta": { "title": "REFINE POSITIVE" }
+  },
+  "23": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "blurry, seam, pasted face, deformed, extra face, plastic skin, artifact", "clip": ["20", 1] },
+    "_meta": { "title": "REFINE NEGATIVE" }
+  },
+  "24": {
+    "class_type": "FaceDetailer",
+    "inputs": {
+      "image": ["swap", 0],
+      "model": ["20", 0],
+      "clip": ["20", 1],
+      "vae": ["20", 2],
+      "positive": ["22", 0],
+      "negative": ["23", 0],
+      "bbox_detector": ["21", 0],
+      "guide_size": 512,
+      "guide_size_for": true,
+      "max_size": 896,
+      "seed": 0,
+      "steps": 20,
+      "cfg": 5.0,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "denoise": 0.25,
+      "feather": 8,
+      "noise_mask": true,
+      "force_inpaint": true,
+      "bbox_threshold": 0.5,
+      "bbox_dilation": 10,
+      "bbox_crop_factor": 3.0,
+      "sam_detection_hint": "center-1",
+      "sam_dilation": 0,
+      "sam_threshold": 0.93,
+      "sam_bbox_expansion": 0,
+      "sam_mask_hint_threshold": 0.7,
+      "sam_mask_hint_use_negative": "False",
+      "drop_size": 10,
+      "wildcard": "",
+      "cycle": 1,
+      "inpaint_model": false,
+      "noise_mask_feather": 20
+    },
+    "_meta": { "title": "FACEDETAILER MASKED RESTORE (face-only)" }
+  },
+  "25": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "byrdcast_refined", "images": ["24", 0] },
+    "_meta": { "title": "SAVE REFINED CANDIDATE" }
+  }
+}

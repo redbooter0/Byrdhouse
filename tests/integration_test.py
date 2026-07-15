@@ -55,7 +55,7 @@ def main():
     # ── build an isolated root ────────────────────────────────────────────────
     shutil.rmtree(ROOT, ignore_errors=True)
     ROOT.mkdir(parents=True)
-    for d in ("recipes", "workflows", "scripts", "router", "dashboard", "profiles"):
+    for d in ("recipes", "workflows", "scripts", "router", "dashboard", "profiles", "configs", "docs"):
         shutil.copytree(REPO / d, ROOT / d)
     # Give the root a minimal .git so router/worker build_sha resolves exactly as
     # it does on the machines (both run from a git checkout). Only HEAD + refs are
@@ -976,6 +976,112 @@ def main():
         check("refine records in_size/out_size/steps on the card",
               rref and all(k in json.loads(rref[0]["meta"]) for k in ("in_size", "out_size", "steps")),
               str(json.loads(rref[0]["meta"]) if rref else {}))
+
+        # ── ByrdCast Swap V0: self-contained target-image-first face swap ──
+        #    Structural contract: script exists, compiles, config/workflow/docs
+        #    present, and a dry-run produces every required acceptance file.
+        print("== ByrdCast Swap V0 (contract)")
+        bcs_script = ROOT / "scripts" / "byrdcast_swap.py"
+        bcs_config = ROOT / "configs" / "byrdcast_swap_v0.json"
+        bcs_workflow = ROOT / "workflows" / "byrdcast_swap_v0.json"
+        bcs_doc = ROOT / "docs" / "BYRDCAST_SWAP_V0.md"
+        check("byrdcast_swap.py exists", bcs_script.is_file())
+        check("byrdcast_swap config exists", bcs_config.is_file())
+        check("byrdcast_swap workflow exists", bcs_workflow.is_file())
+        check("byrdcast_swap docs exist", bcs_doc.is_file())
+
+        bcs_src = bcs_script.read_text(encoding="utf-8") if bcs_script.is_file() else ""
+        check("byrdcast_swap compiles",
+              subprocess.run([sys.executable, "-c",
+                              f"import py_compile; py_compile.compile({str(bcs_script)!r}, doraise=True)"],
+                             capture_output=True, timeout=30).returncode == 0)
+        check("byrdcast_swap has the 14-stage pipeline functions",
+              "def detect_face(" in bcs_src
+              and "def choose_reference(" in bcs_src
+              and "def build_masks(" in bcs_src
+              and "def run_swap(" in bcs_src
+              and "def score_candidate(" in bcs_src
+              and "def mask_overlay(" in bcs_src)
+        check("byrdcast_swap detector chain: insightface -> opencv -> placeholder",
+              '"method": "insightface"' in bcs_src
+              and '"method": "opencv_haar"' in bcs_src
+              and '"method": "placeholder_center"' in bcs_src)
+        check("byrdcast_swap fails closed (accepted=false with reasons)",
+              '"accepted": accepted' in bcs_src
+              and '"reasons": reasons' in bcs_src
+              and "accepted = (route" in bcs_src)
+        check("byrdcast_swap supports --dry-run",
+              '"--dry-run"' in bcs_src
+              and "dry-run: swap/refine/blend skipped" in bcs_src)
+
+        bcs_cfg = (json.loads(bcs_config.read_text(encoding="utf-8"))
+                   if bcs_config.is_file() else {})
+        check("byrdcast_swap config enforces 8GB budget",
+              bcs_cfg.get("hardware", {}).get("vram_budget_mb") == 7200
+              and bcs_cfg.get("hardware", {}).get("batch_size") == 1)
+        check("byrdcast_swap config has reference selection weights",
+              set(bcs_cfg.get("reference_selection", {}).get("weights", {}).keys())
+              == {"face_angle", "expression", "lighting", "quality"})
+        check("byrdcast_swap config has scoring weights + threshold",
+              set(bcs_cfg.get("scoring", {}).get("weights", {}).keys())
+              == {"identity_similarity", "mask_fit", "landmark_alignment",
+                  "blend_quality", "artifact_risk"}
+              and isinstance(bcs_cfg.get("scoring", {}).get("accept_threshold"), float))
+        check("byrdcast_swap config has quality modes",
+              {"fast", "balanced", "best"} <= set(bcs_cfg.get("quality_modes", {}).keys()))
+
+        bcs_wf = (json.loads(bcs_workflow.read_text(encoding="utf-8"))
+                  if bcs_workflow.is_file() else {})
+        bcs_node_types = {n.get("class_type") for n in bcs_wf.values()
+                          if isinstance(n, dict) and "class_type" in n}
+        check("byrdcast_swap workflow has ReActor + FaceDetailer nodes",
+              "ReActorFaceSwap" in bcs_node_types
+              and "FaceDetailer" in bcs_node_types)
+        check("byrdcast_swap workflow has TARGET and FACE load nodes",
+              bcs_wf.get("target", {}).get("_meta", {}).get("title") == "TARGET"
+              and bcs_wf.get("face", {}).get("_meta", {}).get("title") == "FACE")
+
+        # Dry-run acceptance test: build a synthetic target + refs, run --dry-run,
+        # verify every required output file is produced
+        bcs_test_dir = ROOT / "_byrdcast_test"
+        bcs_test_dir.mkdir(exist_ok=True)
+        bcs_target = bcs_test_dir / "target.png"
+        bcs_refs = bcs_test_dir / "refs"
+        bcs_refs.mkdir(exist_ok=True)
+        bcs_out = bcs_test_dir / "out"
+        Image.new("RGB", (512, 512), (180, 140, 120)).save(bcs_target)
+        Image.new("RGB", (256, 256), (200, 170, 150)).save(bcs_refs / "ref_01.png")
+        Image.new("RGB", (256, 256), (190, 160, 140)).save(bcs_refs / "ref_02.png")
+        bcs_run = subprocess.run(
+            [sys.executable, str(bcs_script),
+             "--identity", "TestId", "--target", str(bcs_target),
+             "--refs", str(bcs_refs), "--out", str(bcs_out),
+             "--quality", "best", "--dry-run"],
+            env={**os.environ, "BYRDHOUSE_ROOT": str(ROOT)},
+            capture_output=True, text=True, timeout=60)
+        check("byrdcast_swap dry-run exits 0", bcs_run.returncode == 0,
+              bcs_run.stderr[:300] if bcs_run.returncode != 0 else "")
+        # Find the job folder (timestamped)
+        bcs_jobs = sorted(bcs_out.glob("*")) if bcs_out.is_dir() else []
+        bcs_job = bcs_jobs[0] if bcs_jobs else Path("/nonexistent")
+        required_files = ["final.png", "face_detect_overlay.png", "mask_overlay.png",
+                          "selected_reference.png", "score.json", "sidecar.json"]
+        present = [f for f in required_files if (bcs_job / f).is_file()]
+        check("dry-run produces all 6 required output files",
+              len(present) == 6, f"got {present}")
+        masks_dir = bcs_job / "masks"
+        check("dry-run produces masks/ folder with zone PNGs",
+              masks_dir.is_dir() and len(list(masks_dir.glob("*.png"))) >= 5,
+              str(list(masks_dir.glob("*.png")) if masks_dir.is_dir() else []))
+        if (bcs_job / "sidecar.json").is_file():
+            bcs_sidecar = json.loads((bcs_job / "sidecar.json").read_text())
+            check("dry-run sidecar marks accepted=false",
+                  bcs_sidecar.get("accepted") is False)
+            check("dry-run sidecar records the detector method",
+                  bcs_sidecar.get("target_face", {}).get("method") in
+                  ("insightface", "opencv_haar", "placeholder_center"))
+            check("dry-run sidecar lists reasons for failure",
+                  len(bcs_sidecar.get("reasons", [])) >= 1)
 
         print("== stats + report + dashboard")
         st = api("/stats")
