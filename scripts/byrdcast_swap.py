@@ -188,13 +188,9 @@ def score_reference(target_obs: dict, ref_obs: dict, weights: dict) -> dict:
     if target_obs.get("angle") and ref_obs.get("angle"):
         d = sum(abs(a - b) for a, b in zip(target_obs["angle"], ref_obs["angle"]))
         measured["face_angle"] = max(0.0, 1.0 - d / 90.0)
-    if target_obs.get("landmarks") and ref_obs.get("landmarks"):
-        # crude expression proxy: mouth-openness ratio similarity (5-pt kps:
-        # 0,1 eyes; 2 nose; 3,4 mouth corners). Only a weak signal in V0.
-        def mouth_w(o):
-            l = o["landmarks"]
-            return abs(l[3][0] - l[4][0]) or 1
-        measured["expression"] = 1.0  # placeholder-neutral until 68pt lands
+    # expression: needs 68-point or dense mesh ratios (mouth openness, eyebrow
+    # height, eye state) for real matching. V0 5-point landmarks are too coarse.
+    # Recorded as unmeasured — renormalized away, never an artificial perfect score.
 
     used = {k: weights[k] for k in measured if k in weights}
     wsum = sum(used.values()) or 1.0
@@ -479,8 +475,11 @@ def main():
     if not target_path.is_file():
         die(f"target image not found: {target_path}")
     # 2. validate identity folder
+    id_root = Path(cfg["identities_root"])
+    if not id_root.is_absolute():
+        id_root = root / id_root
     refs_dir = Path(args.refs) if args.refs else (
-        Path(cfg["identities_root"]) / args.identity / cfg["approved_subdir"])
+        id_root / args.identity / cfg["approved_subdir"])
     if not refs_dir.is_dir():
         die(f"identity reference folder not found: {refs_dir}")
     # 3. load approved references
@@ -488,7 +487,10 @@ def main():
     if not ref_paths:
         die(f"no approved reference images in {refs_dir}")
 
-    out_root = Path(args.out) if args.out else Path(cfg["outputs_root"])
+    out_root_cfg = Path(cfg["outputs_root"])
+    if not out_root_cfg.is_absolute():
+        out_root_cfg = root / out_root_cfg
+    out_root = Path(args.out) if args.out else out_root_cfg
     jobid = f"{datetime.now():%Y%m%d_%H%M%S}_{args.identity}_{secrets.token_hex(3)}"
     jobdir = out_root / jobid
     jobdir.mkdir(parents=True, exist_ok=True)

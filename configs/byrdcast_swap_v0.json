@@ -1,9 +1,9 @@
 {
   "_comment": "ByrdCast Swap V0 config (docs/BYRDCAST_SWAP_V0.md). Target-image-first local face swap for the RTX 3070 8GB / i9-10850K / 32GB box. Hosts are NEVER hardcoded — the ComfyUI URL is read from byrdhouse.config.json services.comfyui. This file holds only tunables. identities_root uses <identity> as the folder name; approved references live in <identities_root>/<identity>/approved.",
   "version": 0,
-  "identities_root": "E:/ByrdHouse/Identities",
+  "identities_root": "Identities",
   "approved_subdir": "approved",
-  "outputs_root": "E:/ByrdHouse/Outputs/ByrdCastSwap",
+  "outputs_root": "Outputs/ByrdCastSwap",
   "workflow": "workflows/byrdcast_swap_v0.json",
   "hardware": {
     "_comment": "8GB rules: batch 1, no video, modest resolution first, unload LM Studio before the heavy ComfyUI pass, never assume >8GB.",
