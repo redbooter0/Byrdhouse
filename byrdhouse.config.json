@@ -30,13 +30,30 @@
     "dest": "CHANGE_ME_e.g._\\\\byrd-vault\\ByrdHouseBackup_or_F:/ByrdHouseBackup"
   },
   "image": {
-    "_comment": "Defaults for the byrdimage submit layer (scripts/byrdimage.py).",
+    "_comment": "Defaults for the byrdimage submit layer (scripts/byrdimage.py). faceswap_*: the ReActor face-swap route (docs/FACE_LAB.md) — restore model must exist in ComfyUI/models/facerestore_models; blend checkpoint is resolved by loose name like any checkpoint.",
     "workflow": "workflows/sdxl_base_api.json",
     "width": 1152,
     "height": 768,
     "cfg": 7.0,
     "sampler": "dpmpp_2m",
-    "scheduler": "karras"
+    "scheduler": "karras",
+    "faceswap_workflow": "workflows/reactor_faceswap_api.json",
+    "faceswap_blend_workflow": "workflows/reactor_faceswap_blend_api.json",
+    "faceswap_restore": "GFPGANv1.4.pth",
+    "faceswap_blend_checkpoint": "animagine-xl-4.0",
+    "faceswap_inpaint_workflow": "workflows/faceswap_inpaint_api.json",
+    "faceswap_inpaint_denoise": 0.7,
+    "faceswap_auto_workflow": "workflows/facezone_auto_api.json",
+    "faceswap_detector": "bbox/face_yolov8m.pt"
+  },
+  "training": {
+    "_comment": "LoRA lab (scripts/collect-training-images.ps1 + scripts/train-lora.ps1). sd_scripts_dir/trainer_python empty = auto-detect. vram_budget_mb: training refuses to start unless at least this much VRAM is free AND its settings are sized to stay under it (founder rule: never exceed 7200MB on the 8GB 3070). cpu_threads: how many CPU threads the trainer may use (founder rule: 16-18 of the 20).",
+    "datasets_dir": "training/datasets",
+    "loras_dir": "training/loras",
+    "sd_scripts_dir": "",
+    "trainer_python": "",
+    "vram_budget_mb": 7200,
+    "cpu_threads": 16
   },
   "gpu": {
     "_comment": "nvidia_smi: leave blank to auto-discover (PATH, then C:/Windows/System32/nvidia-smi.exe) — set the full .exe path only if discovery fails. vram_free_threshold_mb is the minimum free VRAM to enter IMAGE mode; vram_image_healthy_mb is the level below which we warn about possible SDXL OOM on the 8GB 3070 (warn only, still proceeds).",

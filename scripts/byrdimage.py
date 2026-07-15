@@ -532,20 +532,360 @@ def refine(root, source_path, project, purpose, prompt=None, negative=None,
     return job_id, run_graph(root, comfy, graph, job_id, project, card_base)
 
 
+def faceswap(root, target_path, face_path, project, purpose,
+             style_blend=0.0, prompt=None, negative=None, checkpoint=None,
+             lora=None, lora_strength=0.9, restore=None, seed=None,
+             job_id=None, dry_run=False):
+    """Put the face from face_path onto the image at target_path via ReActor.
+
+    style_blend == 0: direct swap (photoreal targets — fast, exact).
+    style_blend  > 0: swap, then a low-denoise img2img pass at that strength so
+    the swapped face melts into stylized/anime art (0.3–0.45 sweet spot) instead
+    of looking pasted on. The blend pass takes a character prompt, a checkpoint
+    (anime targets want an anime checkpoint) and optionally the identity LoRA.
+    Returns (job_id, [(png_path, card_dict), ...]) like generate()."""
+    root = Path(root)
+    cfg = load_json(root / "byrdhouse.config.json")
+    comfy = cfg["services"]["comfyui"].rstrip("/")
+    img_cfg = cfg.get("image", {})
+
+    target = Path(target_path)
+    face = Path(face_path)
+    if not target.exists():
+        die(f"faceswap target not found: {target}")
+    if not face.exists():
+        die(f"faceswap face photo not found: {face}")
+
+    blend = max(0.0, min(0.65, float(style_blend or 0)))
+    if blend > 0:
+        workflow_rel = img_cfg.get("faceswap_blend_workflow",
+                                   "workflows/reactor_faceswap_blend_api.json")
+    else:
+        workflow_rel = img_cfg.get("faceswap_workflow",
+                                   "workflows/reactor_faceswap_api.json")
+    graph = load_json(root / workflow_rel)
+    graph.pop("_comment", None)
+
+    job_id = job_id or new_id("job")
+    prefix = f"{datetime.now():%Y%m%d}_swap_{job_id}"
+    restore = restore or img_cfg.get("faceswap_restore", "GFPGANv1.4.pth")
+
+    # The swap graph names its image inputs: 'target' is the picture being
+    # swapped onto, 'face' is the identity source. Explicit ids, loud failure —
+    # a swapped pair would put the target's face onto the founder's photo.
+    if "target" not in graph or "face" not in graph or not any(
+            n.get("class_type") == "ReActorFaceSwap" for n in graph.values()):
+        die(f"{workflow_rel} must have 'target'/'face' LoadImage nodes and a "
+            "ReActorFaceSwap node")
+    for node in graph.values():
+        ct, inputs = node.get("class_type"), node.get("inputs", {})
+        if ct == "ReActorFaceSwap":
+            inputs["enabled"] = True
+            inputs["face_restore_model"] = restore
+        elif ct == "SaveImage":
+            inputs["filename_prefix"] = prefix
+
+    ckpt_requested = ckpt_used = None
+    ckpt_matched = True
+    if blend > 0:
+        prompt = prompt or ("portrait, keep the original character art style, "
+                            "seamless natural face, high quality, sharp detail")
+        negative = negative or ("deformed face, extra faces, disfigured, blurry, "
+                                "low quality, watermark, text")
+        ckpt_requested = (checkpoint or img_cfg.get("faceswap_blend_checkpoint")
+                          or "animagine-xl-4.0")
+        ckpt_used, ckpt_matched = resolve_checkpoint_info(root, ckpt_requested, comfy=comfy)
+        seed = int(seed) if seed else secrets.randbits(63)
+        for node in graph.values():
+            ct, inputs = node.get("class_type"), node.get("inputs", {})
+            if ct == "KSampler":
+                inputs["seed"] = seed
+                inputs["denoise"] = blend
+                inputs["cfg"] = img_cfg.get("cfg", 7.0)
+                inputs["sampler_name"] = img_cfg.get("sampler", "dpmpp_2m")
+                inputs["scheduler"] = img_cfg.get("scheduler", "karras")
+            elif ct == "CheckpointLoaderSimple":
+                inputs["ckpt_name"] = ckpt_used
+        # same stale-text guard as generate(): wire prompt/negative through the
+        # sampler's own sockets, never by node id
+        for node in graph.values():
+            if node.get("class_type") != "KSampler":
+                continue
+            for socket, text in (("positive", prompt), ("negative", negative)):
+                ref = node["inputs"].get(socket)
+                tgt = graph.get(str(ref[0])) if isinstance(ref, list) and ref else None
+                if not tgt or tgt.get("class_type") != "CLIPTextEncode":
+                    die(f"blend KSampler {socket} not wired to CLIPTextEncode")
+                tgt["inputs"]["text"] = text
+        if lora:
+            insert_lora(graph, resolve_lora(root, lora), lora_strength)
+            print(f"[byrdimage] identity LoRA attached to blend pass: {lora} @ {lora_strength}")
+    else:
+        seed = None  # no diffusion in a direct swap — an honest card has no seed
+
+    print(f"[byrdimage] faceswap {job_id}  target {target.name}  face {face.name}"
+          f"  blend {blend}" + (f"  ckpt {ckpt_used}" if ckpt_used else ""))
+    if dry_run:
+        print(json.dumps(graph, indent=2))
+        print("[byrdimage] dry run — nothing submitted")
+        return job_id, []
+
+    graph["target"]["inputs"]["image"] = upload_image(comfy, target)
+    graph["face"]["inputs"]["image"] = upload_image(comfy, face)
+
+    card_base = {
+        "recipe": "faceswap@1", "purpose": purpose,
+        "prompt": prompt or "", "negative": negative or "",
+        "seed": seed, "workflow": workflow_rel,
+        "slots": {}, "vary_picks": {},
+        "swap_target": str(target), "face_source": str(face),
+        "style_blend": blend, "restore": restore,
+        **({"checkpoint": ckpt_used} if ckpt_used else {}),
+        **({"lora": lora} if lora and blend > 0 else {}),
+        **({"checkpoint_requested": ckpt_requested, "checkpoint_fallback": True}
+           if ckpt_used and not ckpt_matched else {}),
+    }
+    return job_id, run_graph(root, comfy, graph, job_id, project, card_base)
+
+
+def faceswap_inpaint(root, target_path, mask_path, project, purpose,
+                     prompt=None, negative=None, denoise=None, checkpoint=None,
+                     lora=None, lora_strength=0.9, seed=None,
+                     job_id=None, dry_run=False):
+    """The founder lane's GPU step: edit ONLY inside an approved zone.
+
+    target_path is the picture; mask_path is the edit-zone image (WHITE = change
+    here, black = keep target-authentic — hair, blindfold, ear ink, collar stay
+    untouched). Identity comes from the trained LoRA + prompt, not from warping
+    a photo, so this is also the cleanup/harmonization pass over a CPU mesh seed
+    (byrdfacezone). denoise is the control: too low suppresses the LoRA, ~0.9
+    takes over with artifacts — clamped to the usable corridor, default 0.7."""
+    root = Path(root)
+    cfg = load_json(root / "byrdhouse.config.json")
+    comfy = cfg["services"]["comfyui"].rstrip("/")
+    img_cfg = cfg.get("image", {})
+
+    target = Path(target_path)
+    mask = Path(mask_path)
+    if not target.exists():
+        die(f"facezone target not found: {target}")
+    if not mask.exists():
+        die(f"facezone mask not found: {mask}")
+
+    workflow_rel = img_cfg.get("faceswap_inpaint_workflow",
+                               "workflows/faceswap_inpaint_api.json")
+    graph = load_json(root / workflow_rel)
+    graph.pop("_comment", None)
+    if "target" not in graph or "maskimg" not in graph or not any(
+            n.get("class_type") == "VAEEncodeForInpaint" for n in graph.values()):
+        die(f"{workflow_rel} must have 'target'/'maskimg' LoadImage nodes and a "
+            "VAEEncodeForInpaint node")
+
+    job_id = job_id or new_id("job")
+    prefix = f"{datetime.now():%Y%m%d}_facezone_{job_id}"
+    denoise = max(0.3, min(0.9, float(
+        denoise or img_cfg.get("faceswap_inpaint_denoise", 0.7))))
+    prompt = prompt or ("the same man's face, natural skin tone, matching the "
+                        "surrounding art style exactly, seamless flat cel shading, "
+                        "clean linework, high quality")
+    negative = negative or ("photorealistic skin on anime body, mismatched art "
+                            "styles, seam, hard edge, deformed face, text, "
+                            "watermark, low quality")
+    ckpt_requested = (checkpoint or img_cfg.get("faceswap_blend_checkpoint")
+                      or "animagine-xl-4.0")
+    ckpt_used, ckpt_matched = resolve_checkpoint_info(root, ckpt_requested, comfy=comfy)
+    seed = int(seed) if seed else secrets.randbits(63)
+
+    for node in graph.values():
+        ct, inputs = node.get("class_type"), node.get("inputs", {})
+        if ct == "KSampler":
+            inputs["seed"] = seed
+            inputs["denoise"] = denoise
+            inputs["cfg"] = img_cfg.get("cfg", 7.0)
+            inputs["sampler_name"] = img_cfg.get("sampler", "dpmpp_2m")
+            inputs["scheduler"] = img_cfg.get("scheduler", "karras")
+        elif ct == "CheckpointLoaderSimple":
+            inputs["ckpt_name"] = ckpt_used
+        elif ct == "SaveImage":
+            inputs["filename_prefix"] = prefix
+    for node in graph.values():
+        if node.get("class_type") != "KSampler":
+            continue
+        for socket, text in (("positive", prompt), ("negative", negative)):
+            ref = node["inputs"].get(socket)
+            tgt = graph.get(str(ref[0])) if isinstance(ref, list) and ref else None
+            if not tgt or tgt.get("class_type") != "CLIPTextEncode":
+                die(f"facezone KSampler {socket} not wired to CLIPTextEncode")
+            tgt["inputs"]["text"] = text
+    if lora:
+        insert_lora(graph, resolve_lora(root, lora), lora_strength)
+        print(f"[byrdimage] identity LoRA attached to zone edit: {lora} @ {lora_strength}")
+
+    print(f"[byrdimage] facezone {job_id}  target {target.name}  mask {mask.name}"
+          f"  denoise {denoise}  ckpt {ckpt_used}")
+    if dry_run:
+        print(json.dumps(graph, indent=2))
+        print("[byrdimage] dry run — nothing submitted")
+        return job_id, []
+
+    graph["target"]["inputs"]["image"] = upload_image(comfy, target)
+    graph["maskimg"]["inputs"]["image"] = upload_image(comfy, mask)
+
+    card_base = {
+        "recipe": "facezone@1", "purpose": purpose,
+        "prompt": prompt, "negative": negative,
+        "seed": seed, "checkpoint": ckpt_used, "workflow": workflow_rel,
+        "slots": {}, "vary_picks": {},
+        "swap_target": str(target), "mask_source": str(mask),
+        "denoise": denoise,
+        **({"lora": lora} if lora else {}),
+        **({"checkpoint_requested": ckpt_requested, "checkpoint_fallback": True}
+           if not ckpt_matched else {}),
+    }
+    return job_id, run_graph(root, comfy, graph, job_id, project, card_base)
+
+
+def facezone_auto(root, target_path, project, purpose,
+                  prompt=None, negative=None, denoise=None, checkpoint=None,
+                  lora=None, lora_strength=0.9, detector=None, seed=None,
+                  job_id=None, dry_run=False):
+    """The daily driver: upload any character picture -> the detector finds the
+    face, masks it, redraws it as YOU (identity LoRA + prompt) in the target's
+    own art style, composites it back. No hand mask, no face photo — one step.
+    Uses Impact Pack's FaceDetailer (detect->mask->inpaint->composite) with a
+    YOLO face detector that handles anime faces. Same denoise corridor as the
+    zone route. Returns (job_id, [(png_path, card_dict), ...])."""
+    root = Path(root)
+    cfg = load_json(root / "byrdhouse.config.json")
+    comfy = cfg["services"]["comfyui"].rstrip("/")
+    img_cfg = cfg.get("image", {})
+
+    target = Path(target_path)
+    if not target.exists():
+        die(f"facezone target not found: {target}")
+
+    workflow_rel = img_cfg.get("faceswap_auto_workflow",
+                               "workflows/facezone_auto_api.json")
+    graph = load_json(root / workflow_rel)
+    graph.pop("_comment", None)
+    fd_nodes = [n for n in graph.values() if n.get("class_type") == "FaceDetailer"]
+    if "target" not in graph or not fd_nodes:
+        die(f"{workflow_rel} must have a 'target' LoadImage node and a FaceDetailer node")
+
+    job_id = job_id or new_id("job")
+    prefix = f"{datetime.now():%Y%m%d}_facezone_{job_id}"
+    denoise = max(0.3, min(0.9, float(
+        denoise or img_cfg.get("faceswap_inpaint_denoise", 0.7))))
+    detector = detector or img_cfg.get("faceswap_detector", "bbox/face_yolov8m.pt")
+    prompt = prompt or ("the same man's face, natural skin tone, matching the "
+                        "surrounding art style exactly, seamless flat cel shading, "
+                        "clean linework, high quality")
+    negative = negative or ("photorealistic skin on anime body, mismatched art "
+                            "styles, seam, hard edge, deformed face, text, "
+                            "watermark, low quality")
+    ckpt_requested = (checkpoint or img_cfg.get("faceswap_blend_checkpoint")
+                      or "animagine-xl-4.0")
+    ckpt_used, ckpt_matched = resolve_checkpoint_info(root, ckpt_requested, comfy=comfy)
+    seed = int(seed) if seed else secrets.randbits(63)
+
+    for node in graph.values():
+        ct, inputs = node.get("class_type"), node.get("inputs", {})
+        if ct == "FaceDetailer":
+            inputs["seed"] = seed
+            inputs["denoise"] = denoise
+            inputs["cfg"] = img_cfg.get("cfg", 7.0)
+            inputs["sampler_name"] = img_cfg.get("sampler", "dpmpp_2m")
+            inputs["scheduler"] = img_cfg.get("scheduler", "karras")
+        elif ct == "CheckpointLoaderSimple":
+            inputs["ckpt_name"] = ckpt_used
+        elif ct == "UltralyticsDetectorProvider":
+            inputs["model_name"] = detector
+        elif ct == "SaveImage":
+            inputs["filename_prefix"] = prefix
+    # wire prompt/negative through the FaceDetailer's own sockets — same
+    # stale-text guard as generate(), just a different sampler-bearing node
+    for node in fd_nodes:
+        for socket, text in (("positive", prompt), ("negative", negative)):
+            ref = node["inputs"].get(socket)
+            tgt = graph.get(str(ref[0])) if isinstance(ref, list) and ref else None
+            if not tgt or tgt.get("class_type") != "CLIPTextEncode":
+                die(f"FaceDetailer {socket} not wired to CLIPTextEncode")
+            tgt["inputs"]["text"] = text
+    if lora:
+        insert_lora(graph, resolve_lora(root, lora), lora_strength)
+        print(f"[byrdimage] identity LoRA attached to auto zone: {lora} @ {lora_strength}")
+
+    print(f"[byrdimage] facezone-auto {job_id}  target {target.name}  "
+          f"detector {detector}  denoise {denoise}  ckpt {ckpt_used}")
+    if dry_run:
+        print(json.dumps(graph, indent=2))
+        print("[byrdimage] dry run — nothing submitted")
+        return job_id, []
+
+    graph["target"]["inputs"]["image"] = upload_image(comfy, target)
+
+    card_base = {
+        "recipe": "facezone_auto@1", "purpose": purpose,
+        "prompt": prompt, "negative": negative,
+        "seed": seed, "checkpoint": ckpt_used, "workflow": workflow_rel,
+        "slots": {}, "vary_picks": {},
+        "swap_target": str(target), "detector": detector,
+        "denoise": denoise,
+        **({"lora": lora} if lora else {}),
+        **({"checkpoint_requested": ckpt_requested, "checkpoint_fallback": True}
+           if not ckpt_matched else {}),
+    }
+    return job_id, run_graph(root, comfy, graph, job_id, project, card_base)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--recipe", required=True)
+    ap.add_argument("--recipe")
     ap.add_argument("--set", action="append", default=[], metavar="key=value")
     ap.add_argument("--project", default="sandbox")
     ap.add_argument("--purpose", required=True)
     ap.add_argument("--batch", type=int)
     ap.add_argument("--checkpoint")
+    ap.add_argument("--swap-target", help="face swap: image to put the face onto (instead of --recipe)")
+    ap.add_argument("--swap-face", help="face swap: face photo (e.g. profiles/me/references/front.jpg)")
+    ap.add_argument("--swap-mask", help="zone edit: mask image (WHITE = change zone) — uses the "
+                                        "inpaint route; identity from --lora + --prompt")
+    ap.add_argument("--auto", action="store_true",
+                    help="auto route: detector finds the face, masks and redraws it "
+                         "as you (--lora + --prompt) — no mask, no face photo")
+    ap.add_argument("--denoise", type=float, help="zone edit denoise (default 0.7)")
+    ap.add_argument("--blend", type=float, default=0.0,
+                    help="face swap style blend 0-0.65 (0.3-0.45 for anime targets)")
+    ap.add_argument("--lora")
+    ap.add_argument("--prompt")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
     root = os.environ.get("BYRDHOUSE_ROOT")
     if not root:
         die("BYRDHOUSE_ROOT not set — run the setup script first")
+
+    if args.swap_target:
+        if args.auto:
+            facezone_auto(root, args.swap_target, args.project, args.purpose,
+                          prompt=args.prompt, denoise=args.denoise,
+                          checkpoint=args.checkpoint, lora=args.lora,
+                          dry_run=args.dry_run)
+            return
+        if args.swap_mask:
+            faceswap_inpaint(root, args.swap_target, args.swap_mask, args.project,
+                             args.purpose, prompt=args.prompt, denoise=args.denoise,
+                             checkpoint=args.checkpoint, lora=args.lora,
+                             dry_run=args.dry_run)
+            return
+        if not args.swap_face:
+            die("--swap-target needs --swap-face, --swap-mask (zone) or --auto")
+        faceswap(root, args.swap_target, args.swap_face, args.project,
+                 args.purpose, style_blend=args.blend, prompt=args.prompt,
+                 checkpoint=args.checkpoint, lora=args.lora, dry_run=args.dry_run)
+        return
+    if not args.recipe:
+        die("--recipe is required (or use --swap-target for a face swap)")
 
     slots = {}
     for kv in args.set:

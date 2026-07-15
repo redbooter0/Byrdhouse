@@ -31,6 +31,26 @@ screenshot steer the look:
 - Graph: `workflows/sdxl_ipadapter_api.json` (already in the repo); recipe:
   `recipes/game_ref.v1.json`.
 
+## Face Lab (required for image.faceswap — docs/FACE_LAB.md)
+- Nodes: `ComfyUI-ReActor` (Gourieff) in `ComfyUI/custom_nodes` (ComfyUI Manager:
+  search "ReActor"), then restart ComfyUI.
+- Models: `inswapper_128.onnx` → `ComfyUI\models\insightface`;
+  `GFPGANv1.4.pth` → `ComfyUI\models\facerestore_models`;
+  `buffalo_l` (detection) auto-downloads on first run.
+- Graphs: `workflows/reactor_faceswap_api.json` (direct swap) and
+  `workflows/reactor_faceswap_blend_api.json` (swap + anime style blend).
+- **AUTO route (the daily driver — one-step "redraw as me")**: install
+  **ComfyUI Impact Pack** AND **ComfyUI Impact Subpack** via ComfyUI Manager,
+  restart. The `face_yolov8m.pt` detector (handles anime faces) installs with
+  the Subpack into `ComfyUI\models\ultralytics\bbox`. Graph:
+  `workflows/facezone_auto_api.json` (FaceDetailer: detect → mask → inpaint →
+  composite in one node).
+- Verify with `python scripts\facelab_preflight.py` — it asks the live ComfyUI
+  what is installed and cross-checks the workflow schema.
+- **License**: inswapper_128 is insightface **research/non-commercial** — fine for
+  personal experiments; for monetized output use the identity-LoRA +
+  IP-Adapter-FaceID route (`me_as_character` recipe) instead.
+
 ## How to install a checkpoint
 1. Download the `.safetensors` into `E:/ByrdHouse/Generators/ComfyUI/models/checkpoints`.
 2. The belt resolves checkpoints by loose name with a recorded fallback

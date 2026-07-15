@@ -1,0 +1,22 @@
+{
+  "id": "me_as_character",
+  "version": 1,
+  "kind": "image.generate",
+  "subject_profile": "me",
+  "category": "Fantasy",
+  "_note": "YOU as a named anime/game character (Gojo, Vegeta, Luffy...). This is the GENERATION route of the Face Lab (docs/FACE_LAB.md): IP-Adapter FaceID holds your face while the prompt draws the character's signature look around it. Add your trained identity LoRA (dashboard LoRA field, e.g. carey_face_v2) to lock the likeness harder. For swapping onto an EXISTING picture of the character, use the Face Swap panel (image.faceswap) instead.",
+  "workflow": "workflows/sdxl_ipadapter_face_api.json",
+  "template": "portrait of a man as {character}, wearing {character}'s signature outfit and hairstyle, {franchise_style}, {scene}, {lighting}, anime key visual quality, sharp detailed face, dynamic composition",
+  "negative": "text, letters, words, watermark, blurry, low quality, deformed face, extra limbs, different person, photorealistic skin on anime body, mismatched art styles",
+  "slots": {
+    "character": { "required": true, "label": "Character (e.g. Gojo Satoru, Vegeta, Monkey D. Luffy)" },
+    "franchise_style": { "required": false, "default": "modern anime art style", "label": "Franchise style (e.g. Jujutsu Kaisen anime style)" }
+  },
+  "vary": {
+    "scene": ["battle-ready stance amid swirling energy", "iconic scene backdrop from the series", "dramatic close-up with power aura", "mid-action leap with motion lines"],
+    "lighting": ["high-contrast anime rim light", "glowing energy backlight", "sunset key-visual warmth", "cool moonlit shadows"]
+  },
+  "defaults": { "checkpoint": "animagine-xl-4.0", "steps": 30, "batch": 4 },
+  "compose": { "text_zone": "bottom", "max_words": 3, "style": "accent", "font_weight": 900, "stroke": true, "drop_shadow": true },
+  "rubric": { "identity": "1-5 — is this recognizably the same person as the reference photos?", "character_fidelity": "1-5 — is the character's signature look unmistakable?", "style_cohesion": "1-5 — do face and art style fuse seamlessly (no pasted-on look)?", "postability": "1-5" }
+}

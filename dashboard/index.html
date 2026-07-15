@@ -393,6 +393,7 @@ V.home = async () => {
 function friendlyType(t) {
   return { 'image.generate':'Image generation', 'content.thumbnail':'Thumbnail',
            'image.refine':'Upscale / riff', 'image.judge':'Auto-judging',
+           'image.faceswap':'Face swap',
            'content.enhance':'Prompt enhancement', 'report.daily':'Daily report' }[t] || t;
 }
 
@@ -445,6 +446,34 @@ V.create = async () => {
       <details class="opts" id="engineDetails"><summary>Engine controls ${qtip('Direct ComfyUI parameters — checkpoint, sampler, steps, CFG. Only for power users.')}</summary>
         <div id="engineControls" style="opacity:.5;font-size:12px;color:var(--dim)">loading from ComfyUI...</div>
       </details>
+    </div>
+
+    <div class="panel"><h2>Face Swap ${qtip('Put your face (from your profile photos in profiles/me/references) onto any picture — 100% local through ComfyUI. For anime characters use a blend so the face melts into the art style.')}</h2>
+      <label>Picture to swap onto</label>
+      <input id="swapFile" type="file" accept="image/*" onchange="uploadSwapTarget(this)">
+      <div id="swapPreview" class="muted" style="margin-top:6px"></div>
+      <label>Route ${qtip('Auto: the detector finds the character’s face, masks it and redraws it as you in the picture’s own art style — one step, use with your identity LoRA. Direct swap: ReActor puts your photo’s face on (use blend for anime). A zone mask below overrides both.')}</label>
+      <select id="swapRoute">
+        <option value="auto" selected>Auto — find the face, redraw as me</option>
+        <option value="swap">Direct swap (photo face + blend)</option>
+      </select>
+      <label>Art blend (direct swap only) ${qtip('0 = photo target (plain swap). Anime/stylized characters (Gojo, Vegeta, Luffy) want 0.35 so the swapped face adopts the art style. 0.45 melts harder but drifts more.')}</label>
+      <select id="swapBlend">
+        <option value="0">Photo — no blend</option>
+        <option value="0.35" selected>Anime character — 0.35</option>
+        <option value="0.45">Strong style melt — 0.45</option>
+      </select>
+      <label>Character notes (optional) ${qtip('Steers the blend pass only — describe the character/style, e.g. "Gojo Satoru, white hair, black blindfold, Jujutsu Kaisen anime style".')}</label>
+      <input id="swapPrompt" placeholder="e.g. Gojo Satoru, white hair, black blindfold">
+      <label>Identity LoRA (optional) ${qtip('A trained LoRA of your face (train-lora.ps1) keeps the blend pass looking like YOU. Loose name match, e.g. carey_face_v2.')}</label>
+      <input id="swapLora" placeholder="e.g. carey_face_v2">
+      <label>Edit-zone mask (optional) ${qtip('The zone lane: WHITE = change here, black = keep target-authentic (hair, blindfold, collar). With a mask the GPU edits ONLY inside the zone and identity comes from your LoRA + notes — masks come from byrdfacezone.py or hand-drawn.')}</label>
+      <input id="swapMask" type="file" accept="image/*" onchange="uploadSwapMask(this)">
+      <div id="swapMaskPreview" class="muted" style="margin-top:6px"></div>
+      <label>What is this for?</label>
+      <input id="swapPurpose" placeholder="e.g. gojo face swap test">
+      <div class="row" style="margin-top:12px"><button class="b" onclick="submitSwap()">Swap my face on</button></div>
+      <div id="swapMsg" style="color:var(--yellow);font-size:12.5px;min-height:16px;margin-top:8px"></div>
     </div>
 
     <div class="panel"><h2>References ${qtip('Upload thumbnails you love. The judge scores new images against these so approvals match your taste.')}</h2>
@@ -506,6 +535,71 @@ function clearSource() {
   if ($('srcFile')) $('srcFile').value = '';
   if ($('srcPreview')) $('srcPreview').innerHTML = '';
   saveDraft();
+}
+/* ── Face Swap: upload the target picture, then queue image.faceswap.
+   The face itself comes from profiles/me/references on the worker — same
+   auto-wiring the me-recipes use, so nothing personal passes through here. ── */
+function swapSay(t) { if ($('swapMsg')) $('swapMsg').textContent = t; }
+async function uploadSwapTarget(input) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  const name = f.name.replace(/[^\w. -]+/g, '_');
+  const project = ($('project') ? $('project').value.trim() : '') || 'careyrpg';
+  swapSay('uploading...');
+  try {
+    const r = await fetch(`/sources/${encodeURIComponent(name)}?project=${encodeURIComponent(project)}`, {
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + _adminToken, 'X-Actor': 'dashboard' }, body: f });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    window._swapTarget = { id: j.id, name };
+    $('swapPreview').innerHTML =
+      `<span style="color:var(--green)">saved</span> ${esc(name)}`
+      + `<br><img src="/artifacts/${esc(j.id)}/file" style="height:52px;border-radius:6px;margin-top:4px">`;
+    swapSay('target saved — pick a blend, then Swap');
+  } catch (e) { swapSay('upload error: ' + e.message); }
+}
+async function uploadSwapMask(input) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  const name = ('mask_' + f.name).replace(/[^\w. -]+/g, '_');
+  const project = ($('project') ? $('project').value.trim() : '') || 'careyrpg';
+  swapSay('uploading mask...');
+  try {
+    const r = await fetch(`/sources/${encodeURIComponent(name)}?project=${encodeURIComponent(project)}`, {
+      method: 'POST', headers: { 'Authorization': 'Bearer ' + _adminToken, 'X-Actor': 'dashboard' }, body: f });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || r.status);
+    window._swapMask = { id: j.id, name };
+    $('swapMaskPreview').innerHTML =
+      `<span style="color:var(--green)">zone saved</span> ${esc(name)} — GPU will only edit inside it`;
+    swapSay('zone mask saved');
+  } catch (e) { swapSay('mask upload error: ' + e.message); }
+}
+async function submitSwap() {
+  const t = window._swapTarget;
+  if (!t) return swapSay('upload a picture to swap onto first');
+  const project = ($('project') ? $('project').value.trim() : '') || 'careyrpg';
+  const payload = {
+    target_artifact: t.id, subject_profile: 'me',
+    style_blend: parseFloat($('swapBlend').value || '0') || 0,
+    project, purpose: $('swapPurpose').value.trim() || `face swap onto ${t.name}`,
+  };
+  const notes = $('swapPrompt').value.trim();
+  if (notes) payload.prompt = notes;
+  const lora = $('swapLora').value.trim();
+  if (lora) payload.lora = lora;
+  if (window._swapMask) payload.mask_artifact = window._swapMask.id;
+  else if ($('swapRoute') && $('swapRoute').value === 'auto') payload.route = 'auto';
+  try {
+    await jpost('/jobs', { type: 'image.faceswap', project,
+      required_mode: 'IMAGE', required_caps: ['comfyui'], payload });
+    swapSay('queued — watch Results below');
+    window._swapTarget = null; window._swapMask = null;
+    if ($('swapFile')) $('swapFile').value = '';
+    if ($('swapPreview')) $('swapPreview').innerHTML = '';
+    if ($('swapMask')) $('swapMask').value = '';
+    if ($('swapMaskPreview')) $('swapMaskPreview').innerHTML = '';
+  } catch (e) { swapSay('queue error: ' + e.message); }
 }
 /* The recipe currently selected in the form (id@version pinned). */
 function currentRecipe() {

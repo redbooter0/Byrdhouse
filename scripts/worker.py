@@ -359,6 +359,80 @@ def run_generate(job) -> None:
     register_cards(job, cards)
 
 
+def run_faceswap(job) -> None:
+    """image.faceswap: put a face onto an existing image via ReActor. The face
+    defaults to the founder's profile photo (profiles/me/references) exactly like
+    the me-recipes; the target arrives as an uploaded artifact (dashboard) or a
+    local path (already on this machine). style_blend > 0 adds the low-denoise
+    img2img pass that melts the swap into stylized/anime art."""
+    p = json.loads(job["payload"])
+    dest = ROOT / "artifacts" / "_sources"
+    target = p.get("target_path")
+    if not target and p.get("target_artifact"):
+        target = str(fetch_artifact_file(p["target_artifact"], dest))
+    if not target:
+        raise RuntimeError("image.faceswap needs target_path or target_artifact")
+
+    # AUTO route (the daily driver): detector finds the face, masks it, redraws
+    # it as the founder (LoRA + prompt) in the target's art style — one step.
+    if p.get("route") == "auto" or p.get("auto"):
+        _, saved = byrdimage.facezone_auto(
+            ROOT, target, p.get("project", "sandbox"),
+            p.get("purpose", "auto face zone"),
+            prompt=p.get("prompt"), negative=p.get("negative"),
+            denoise=p.get("denoise"), checkpoint=p.get("checkpoint"),
+            lora=p.get("lora"), lora_strength=float(p.get("lora_strength", 0.9)),
+            detector=p.get("detector"), seed=p.get("seed"), job_id=job["id"])
+        cards = []
+        for png, card in saved:
+            card["path"] = str(png)
+            cards.append(card)
+        register_cards(job, cards)
+        return
+
+    # Zone route (the founder lane): a mask means the GPU edits ONLY inside the
+    # approved zone — identity comes from the LoRA + prompt, no face photo needed.
+    mask = p.get("mask_path")
+    if not mask and p.get("mask_artifact"):
+        mask = str(fetch_artifact_file(p["mask_artifact"], dest))
+    if mask:
+        _, saved = byrdimage.faceswap_inpaint(
+            ROOT, target, mask, p.get("project", "sandbox"),
+            p.get("purpose", "zone edit"),
+            prompt=p.get("prompt"), negative=p.get("negative"),
+            denoise=p.get("denoise"), checkpoint=p.get("checkpoint"),
+            lora=p.get("lora"), lora_strength=float(p.get("lora_strength", 0.9)),
+            seed=p.get("seed"), job_id=job["id"])
+        cards = []
+        for png, card in saved:
+            card["path"] = str(png)
+            cards.append(card)
+        register_cards(job, cards)
+        return
+
+    face = p.get("face_path")
+    if not face and p.get("face_artifact"):
+        face = str(fetch_artifact_file(p["face_artifact"], dest))
+    if not face:
+        face = resolve_profile_reference(ROOT, p.get("subject_profile") or "me")
+    if not face:
+        raise RuntimeError("image.faceswap has no face: put photos in "
+                           "profiles/me/references/ or pass face_path/face_artifact")
+    _, saved = byrdimage.faceswap(
+        ROOT, target, face, p.get("project", "sandbox"),
+        p.get("purpose", "face swap"),
+        style_blend=float(p.get("style_blend", 0) or 0),
+        prompt=p.get("prompt"), negative=p.get("negative"),
+        checkpoint=p.get("checkpoint"), lora=p.get("lora"),
+        lora_strength=float(p.get("lora_strength", 0.9)),
+        restore=p.get("restore"), seed=p.get("seed"), job_id=job["id"])
+    cards = []
+    for png, card in saved:
+        card["path"] = str(png)
+        cards.append(card)
+    register_cards(job, cards)
+
+
 def run_content_enhance(job) -> None:
     """OPERATOR-mode pass: the local model rewrites the founder's words into an
     SDXL-engineered prompt, then enqueues the actual generation. Two jobs
@@ -626,6 +700,7 @@ def run_export_csv(job) -> None:
 
 
 RUNNERS = {"image.generate": run_generate, "image.judge": run_judge,
+           "image.faceswap": run_faceswap,
            "image.refine": run_refine, "image.upscale": run_refine,
            "report.daily": run_report,
            "content.enhance": run_content_enhance,

@@ -1,0 +1,33 @@
+{
+  "_comment": "ReActor direct face swap: put the face from 'face' onto the picture in 'target'. No diffusion pass — fast, exact, best on photoreal targets. Needs the ComfyUI-ReActor node pack (Gourieff) + inswapper_128.onnx in models/insightface + GFPGANv1.4.pth in models/facerestore_models (see docs/MODELS.md). Detection (the 'outline/mask' step) runs on CPU via onnxruntime — that is normal. byrdimage.faceswap() fills the LoadImage names, restore model and filename prefix at submit time.",
+  "target": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" }
+  },
+  "face": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" }
+  },
+  "swap": {
+    "class_type": "ReActorFaceSwap",
+    "inputs": {
+      "enabled": true,
+      "input_image": ["target", 0],
+      "source_image": ["face", 0],
+      "swap_model": "inswapper_128.onnx",
+      "facedetection": "retinaface_resnet50",
+      "face_restore_model": "GFPGANv1.4.pth",
+      "face_restore_visibility": 1.0,
+      "codeformer_weight": 0.5,
+      "detect_gender_input": "no",
+      "detect_gender_source": "no",
+      "input_faces_index": "0",
+      "source_faces_index": "0",
+      "console_log_level": 1
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "byrdhouse_swap", "images": ["swap", 0] }
+  }
+}
