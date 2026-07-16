@@ -53,17 +53,33 @@ GOJO_AVENUE_ENGINE = {
     "eye_protection": 1.0,
 }
 
-# FINISH pass: complete an ALREADY-good composite (the almost-perfect Vegeta
-# case) — no mesh re-seed, no identity change; one low-denoise pass over the
-# face zone removes speckle/patchiness/seam remnants, guards intact.
-FINISH_ENGINE = {
-    "no_identity_mesh": True,
-    "workflow": "workflows/sd15_face_zone_inpaint_api.json",
-    "gpu_passes": {"finish": {"steps": 12, "denoise": 0.14, "cfg": 4.5}},
-    "skip_gpu_cleanup": False,
-    "eye_source": "target",
-    "eye_protection": 1.0,
-}
+def finish_source(image: Path) -> dict:
+    """FINISH never edits a processed image (belt law: generation is ALWAYS 1,
+    no generated parents — _require_original_target enforces it). Instead it
+    reads the output's card, recovers the immutable ORIGINAL target and the
+    captured settings (reproduce block, same seed), and re-renders from
+    scratch through the repaired pipeline. Raises ValueError when the image
+    has no card (then it IS an original — run it directly)."""
+    card_file = Path(str(image) + ".json")
+    if not card_file.is_file():
+        raise ValueError(
+            "no generation card next to this image. If it is an ORIGINAL "
+            "target, run it directly (facelab.ps1 run -Image <it>); finish "
+            "only re-renders belt outputs from their immutable original.")
+    card = json.loads(card_file.read_text(encoding="utf-8-sig"))
+    rep = card.get("reproduce") or {}
+    original = rep.get("target") or card.get("target")
+    if not original:
+        raise ValueError("card records no original target — cannot re-render safely")
+    recipe = str(rep.get("recipe") or card.get("recipe") or "anime_face_zone_edit@2")
+    rid, _, rver = recipe.partition("@")
+    return {"original": original,
+            "seed": rep.get("seed", card.get("seed")),
+            "lora": rep.get("lora", card.get("lora")),
+            "preset": rep.get("target_preset", card.get("target_preset") or "auto"),
+            "engine": dict(rep.get("engine") or {}),
+            "recipe": f"{rid}.v{rver}" if rver else rid,
+            "from_job": card.get("job_id")}
 
 
 def find_identity_photo(root: Path, profile: str = "me"):
@@ -145,18 +161,32 @@ def run(argv=None) -> int:
         return 2
 
     if args.finish:
-        print(f"[byrdswap] FINISH pass on {target.name} (no re-seed, denoise 0.14, eyes protected)")
+        try:
+            src = finish_source(target)
+        except ValueError as exc:
+            print(f"[byrdswap] finish refused: {exc}")
+            return 1
+        original = Path(src["original"])
+        if not original.is_file():
+            print(f"[byrdswap] the recorded immutable original is missing: {original}")
+            return 1
+        print("[byrdswap] FINISH: re-rendering GENERATION 1 from the immutable original")
+        print(f"[byrdswap]   original: {original}")
+        print(f"[byrdswap]   settings from job {src['from_job']} (same seed {src['seed']}) "
+              "through the repaired pipeline (d0.28 + GPU finish + guards)")
+        engine = dict(src["engine"])
+        engine.pop("skip_gpu_cleanup", None)  # the promoted GPU finish completes it
         try:
             job_id, saved = byrdimage.edit_face_zone(
-                root, args.recipe, target, args.project,
-                "byrdswap finish: speckle/seam cleanup on an approved-direction composite",
-                identity_lora=args.lora, target_preset=args.preset,
-                engine=dict(FINISH_ENGINE))
+                root, src["recipe"], original, args.project,
+                f"byrdswap finish: fresh re-render of job {src['from_job']} — no generated parent",
+                identity_lora=args.lora or src["lora"], target_preset=src["preset"],
+                seed=src["seed"], engine=engine)
         except SystemExit as exc:
             print(f"[byrdswap] finish refused: {exc}")
             return 1
         for f, card in saved:
-            print(f"[byrdswap] finished: {f}  (status={card.get('status')}, + .verify.json)")
+            print(f"[byrdswap] finished: {f}  (status={card.get('status')}, generation 1, + .verify.json)")
         return 0
 
     # 1. examine (thorough) — the bot's eyes; runs under the ComfyUI venv

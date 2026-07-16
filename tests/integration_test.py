@@ -1338,11 +1338,33 @@ def main():
               and replay.extract_golden_params(modern_card)
                   ["denoise_per_pass"]["identity_fill"] == 0.28)
 
-        check("finish pass exists: no re-seed, low denoise, guards intact",
-              byrdswap.FINISH_ENGINE["no_identity_mesh"] is True
-              and byrdswap.FINISH_ENGINE["gpu_passes"]["finish"]["denoise"] <= 0.2
-              and "no_identity_mesh" in bi_source
-              and "finish pass (identity from the existing pixels)" in bi_source
+        # FINISH never edits a processed image: it re-renders generation 1
+        # from the immutable original using the card's captured settings.
+        fin_img = ROOT / "artifacts" / "fin_test.png"
+        fin_img.parent.mkdir(parents=True, exist_ok=True)
+        fin_img.write_bytes(b"png")
+        Path(str(fin_img) + ".json").write_text(json.dumps(
+            {"job_id": "job_x", "reproduce": {
+                "target": "E:/originals/vegeta.jpg", "seed": 99,
+                "lora": "hybrid_r32.safetensors", "target_preset": "vegeta",
+                "recipe": "anime_face_zone_edit@2",
+                "engine": {"crop_size": 640}}}))
+        fsrc = byrdswap.finish_source(fin_img)
+        check("finish re-renders from the immutable original with the same seed",
+              fsrc["original"] == "E:/originals/vegeta.jpg" and fsrc["seed"] == 99
+              and fsrc["recipe"] == "anime_face_zone_edit.v2"
+              and fsrc["engine"] == {"crop_size": 640})
+        bare = ROOT / "artifacts" / "bare.png"
+        bare.write_bytes(b"png")
+        try:
+            byrdswap.finish_source(bare)
+            fin_refused = False
+        except ValueError as exc:
+            fin_refused = "no generation card" in str(exc)
+        check("finish refuses a cardless image instead of guessing", fin_refused)
+        check("every card is generation 1 (edit-on-edit structurally refused)",
+              bi_source.count('"generation": 1,') >= 3
+              and "fresh-retry policy rejected" in bi_source
               and '"finish"' in (ROOT / "scripts" / "facelab.ps1").read_text(encoding="utf-8-sig"))
 
         print("== stats + report + dashboard")
