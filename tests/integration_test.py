@@ -1312,6 +1312,22 @@ def main():
         check("replay emits an exact rerun command",
               "-Lora" in replay.rerun_command(gp) and "quality" in replay.rerun_command(gp))
 
+        # Complete settings capture: every card carries a full reproduce block
+        empty_block = bi.reproduce_block()
+        check("reproduce block always contains every required key (None when n/a)",
+              set(bi.REPRODUCE_REQUIRED) <= set(empty_block)
+              and all(empty_block[k] is None for k in bi.REPRODUCE_REQUIRED))
+        check("both face-zone card paths embed the reproduce block",
+              bi_source.count('"reproduce": reproduce,') >= 2
+              and '"workflow_sha256"' in bi_source)
+        modern_card = {"seed": 42,
+                       "reproduce": {"seed": 7, "lora": "x.safetensors",
+                                     "gpu_passes": [{"id": "identity_fill", "denoise": 0.28}]}}
+        check("replay prefers the complete reproduce block over legacy fields",
+              replay.extract_golden_params(modern_card)["seed"] == 7
+              and replay.extract_golden_params(modern_card)
+                  ["denoise_per_pass"]["identity_fill"] == 0.28)
+
         check("finish pass exists: no re-seed, low denoise, guards intact",
               byrdswap.FINISH_ENGINE["no_identity_mesh"] is True
               and byrdswap.FINISH_ENGINE["gpu_passes"]["finish"]["denoise"] <= 0.2

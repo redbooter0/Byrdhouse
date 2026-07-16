@@ -236,6 +236,31 @@ def resolve_lora(root: Path, requested: str) -> str:
     return requested if requested.lower().endswith(".safetensors") else f"{requested}.safetensors"
 
 
+# Complete settings capture (founder law, 2026-07-16): every output's card
+# must let a future run reproduce it EXACTLY. The reproduce block always
+# contains every key below — inapplicable values are recorded as None
+# explicitly, never omitted, so "it wasn't captured" can never happen again
+# (the d28/m40 golden runs survived only in a filename).
+REPRODUCE_REQUIRED = (
+    "tool_version", "recipe", "seed", "checkpoint",
+    "workflow", "workflow_sha256",
+    "lora", "lora_status", "identity_model_strength", "identity_clip_strength",
+    "target", "target_sha256", "target_preset",
+    "engine", "gpu_passes", "canvas",
+    "mesh_identity_strength", "eye_source", "eye_protection",
+    "identity_reference", "identity_reference_sha256",
+    "prompt", "negative",
+)
+
+
+def reproduce_block(**values) -> dict:
+    """Build the card's reproduce block: all required keys present (None when
+    not applicable), extras appended — one place to look, always complete."""
+    block = {key: values.get(key) for key in REPRODUCE_REQUIRED}
+    block.update({k: v for k, v in values.items() if k not in REPRODUCE_REQUIRED})
+    return block
+
+
 def select_identity_lora(root: Path, identity: dict, override: str | None) -> tuple[str, str]:
     """Honest identity-LoRA selection (repair G, 2026-07-16).
 
@@ -1259,6 +1284,27 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         if "skip_gpu_cleanup" in engine
         else defaults.get("skip_gpu_cleanup", False)
     )
+    # Complete settings capture — identical block on every card this run makes.
+    zone_mesh_meta = dict(zone.get("identity_mesh") or {})
+    reproduce = reproduce_block(
+        tool_version="byrdimage.edit_face_zone/2",
+        recipe=f"{recipe['id']}@{recipe['version']}",
+        seed=run_seed, checkpoint=checkpoint_name,
+        workflow=workflow_rel, workflow_sha256=_file_sha256(root / workflow_rel),
+        lora=selected_identity_lora, lora_status=lora_status,
+        identity_model_strength=identity_model_weight,
+        identity_clip_strength=identity_clip_weight,
+        target=str(target), target_sha256=_file_sha256(target),
+        target_preset=preset_key, engine=engine,
+        gpu_passes=[] if skip_gpu_cleanup else list(gpu_passes.values()),
+        canvas=canvas,
+        mesh_identity_strength=zone_mesh_meta.get("mesh_identity_strength"),
+        eye_source=zone_mesh_meta.get("eye_source_mode"),
+        eye_protection=engine.get("eye_protection", preset.get("eye_protection")),
+        identity_reference=str(identity_reference_path) if identity_reference_path else None,
+        identity_reference_sha256=zone_mesh_meta.get("reference_sha256"),
+        prompt=prompt, negative=negative,
+        vary_picks=vary_picks, geometry_gate_stable=gate["stable"])
     if skip_gpu_cleanup:
         zone_dir = Path(zone["zone_file"]).parent
         generated_crop = Path(zone["artifacts"]["identity_mesh_seed"])
@@ -1323,6 +1369,7 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
             "identity_clip_strength": identity_clip_weight,
             "lora": selected_identity_lora,
             "lora_status": lora_status,
+            "reproduce": reproduce,
             "geometry_gate": gate,
             "composite_verification": composite_verification,
             "gate_failures": cpu_publish_blockers,
@@ -1476,6 +1523,7 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         "identity_clip_strength": identity_clip_weight,
         "lora": selected_identity_lora,
         "lora_status": lora_status,
+        "reproduce": reproduce,
         "geometry_gate": gate,
         "face_report": face_report,
         "face_zone": zone_record,

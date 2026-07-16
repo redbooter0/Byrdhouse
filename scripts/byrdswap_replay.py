@@ -32,7 +32,17 @@ GOLDEN_KEYS = ("recipe", "seed", "checkpoint", "lora", "workflow",
 
 
 def extract_golden_params(card: dict) -> dict:
-    """Pull the reproduction-relevant fields out of a sidecar card."""
+    """Pull the reproduction-relevant fields out of a sidecar card.
+    Cards written after 2026-07-16 carry a complete 'reproduce' block — use
+    it as the source of truth; older cards fall back to field scraping."""
+    if isinstance(card.get("reproduce"), dict):
+        block = card["reproduce"]
+        golden = {k: v for k, v in block.items() if v is not None}
+        passes = block.get("gpu_passes") or []
+        if isinstance(passes, list):
+            golden["denoise_per_pass"] = {p.get("id", f"pass_{i}"): p.get("denoise")
+                                          for i, p in enumerate(passes)}
+        return golden
     golden = {k: card.get(k) for k in GOLDEN_KEYS if card.get(k) is not None}
     passes = card.get("gpu_passes") or []
     if isinstance(passes, list):
