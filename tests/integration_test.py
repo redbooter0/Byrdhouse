@@ -456,8 +456,8 @@ def main():
               and (ROOT / "scripts" / "facelab.ps1").is_file()
               and "quality" in (ROOT / "scripts" / "facelab.ps1").read_text(encoding="utf-8-sig"))
         check("face-zone adapter refuses an unconditioned production run",
-              "face-zone edit requires an installed identity LoRA" in byrdimage_source
-              and "selected_identity_lora = resolve_lora(" in byrdimage_source
+              "no deployed identity LoRA exists" in byrdimage_source
+              and "select_identity_lora(root, identity, identity_lora)" in byrdimage_source
               and 'lora_id="byrd_identity_lora"' in byrdimage_source)
 
         # aspect presets snap to SDXL-native dims; LoRA splices into the graph
@@ -1082,6 +1082,159 @@ def main():
                   ("insightface", "opencv_haar", "placeholder_center"))
             check("dry-run sidecar lists reasons for failure",
                   len(bcs_sidecar.get("reasons", [])) >= 1)
+
+        # ── Face-lane repair guards (2026-07-16, hard Vegeta failure) ──────
+        # The 10 required automated tests: honest diffdiff graphs, pre-submit
+        # model gating, LoRA truth, outside-mask preservation, eye protection,
+        # geometry gate fail-closed, and rich ComfyUI HTTP errors.
+        print("== face-lane repair guards")
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import byrdimage as bi
+        import facezone_composite as fzc
+        from PIL import Image as PILImage, ImageDraw as PILDraw
+
+        # 1. JSON workflow validation
+        dd_true = json.loads((ROOT / "workflows" / "sd15_face_zone_diffdiff_api.json").read_text())
+        dd_combo = json.loads((ROOT / "workflows" / "sd15_face_zone_diffdiff_canny_api.json").read_text())
+        check("diffdiff workflows are valid JSON graphs",
+              any(n.get("class_type") == "KSampler" for n in dd_true.values() if isinstance(n, dict))
+              and any(n.get("class_type") == "KSampler" for n in dd_combo.values() if isinstance(n, dict)))
+
+        # 3. TRUE diffdiff contains no ControlNet anything
+        true_classes = {n.get("class_type") for n in dd_true.values() if isinstance(n, dict)}
+        check("TRUE diffdiff has no ControlNet nodes",
+              not any(c and "ControlNet" in c for c in true_classes),
+              str(true_classes))
+        check("TRUE diffdiff keeps the graded-mask seam killer",
+              {"DifferentialDiffusion", "SetLatentNoiseMask"} <= true_classes)
+        sampler = next(n for n in dd_true.values()
+                       if isinstance(n, dict) and n.get("class_type") == "KSampler")
+        check("TRUE diffdiff sampler conditioned straight from the prompts",
+              sampler["inputs"]["positive"][0] == "5" and sampler["inputs"]["negative"][0] == "6")
+        combo_classes = {n.get("class_type") for n in dd_combo.values() if isinstance(n, dict)}
+        check("combined diffdiff-canny is clearly the ControlNet variant",
+              "ControlNetLoader" in combo_classes and "DifferentialDiffusion" in combo_classes)
+
+        # 2. /object_info-style schema validation (same helper preflight uses live)
+        core_catalog = {c for c in (true_classes | combo_classes) if c} - {"ControlNetLoader"}
+        check("schema validation passes for TRUE diffdiff on a ControlNet-less server",
+              bi.validate_graph_classes(dd_true, core_catalog) == [])
+        check("schema validation names ControlNetLoader missing for the combined graph",
+              bi.validate_graph_classes(dd_combo, core_catalog) == ["ControlNetLoader"])
+
+        # 4. combined route refuses BEFORE submit when the canny model is missing
+        def raises_value(fn, *fargs):
+            try:
+                fn(*fargs)
+                return None
+            except ValueError as exc:
+                return str(exc)
+        msg = raises_value(bi.require_workflow_models, ROOT, dd_combo,
+                           "workflows/sd15_face_zone_diffdiff_canny_api.json")
+        check("combined graph refuses pre-submit and names the missing model",
+              bool(msg) and "control_v11p_sd15_canny" in msg and "NOT installed" in msg, str(msg)[:120])
+        check("TRUE diffdiff needs no model gate",
+              raises_value(bi.require_workflow_models, ROOT, dd_true, "x") is None)
+        cn_dir = ROOT / "Generators" / "ComfyUI" / "models" / "controlnet"
+        cn_dir.mkdir(parents=True, exist_ok=True)
+        (cn_dir / "control_v11p_sd15_canny.safetensors").write_bytes(b"fake")
+        check("combined graph passes once the canny model exists",
+              raises_value(bi.require_workflow_models, ROOT, dd_combo, "x") is None)
+
+        # 5. job LoRA overrides stale recipe value; no silent preview promotion
+        lora_dir = ROOT / "Generators" / "ComfyUI" / "models" / "loras"
+        lora_dir.mkdir(parents=True, exist_ok=True)
+        (lora_dir / "carey_preview_hybrid_r32_1200.safetensors").write_bytes(b"fake")
+        name, status = bi.select_identity_lora(ROOT, {"lora": "carey_meina_sd15_v1.safetensors"},
+                                               "carey_preview_hybrid_r32_1200")
+        check("explicit -Lora overrides the stale recipe LoRA cleanly",
+              name == "carey_preview_hybrid_r32_1200.safetensors"
+              and "explicit-override" in status and "preview" in status)
+        msg = raises_value(bi.select_identity_lora, ROOT,
+                           {"lora": "carey_meina_sd15_v1.safetensors"}, None)
+        check("stale recipe LoRA is refused by name, never partial-matched to a preview",
+              bool(msg) and "carey_meina_sd15_v1" in msg and "not installed" in msg)
+        msg = raises_value(bi.select_identity_lora, ROOT, {}, None)
+        check("no deployed LoRA is said plainly",
+              bool(msg) and "no deployed identity LoRA" in msg)
+        for rv in ("2", "3"):
+            rj = json.loads((ROOT / "recipes" / f"anime_face_zone_edit.v{rv}.json").read_text())
+            check(f"anime_face_zone_edit v{rv} no longer ships the stale deployed-LoRA claim",
+                  rj["identity"]["lora"] is None)
+
+        # 6. outside-mask pixels remain unchanged (and tampering is caught)
+        orig = PILImage.new("RGB", (64, 64), (40, 80, 120))
+        gen = PILImage.new("RGB", (64, 64), (200, 60, 60))
+        mask = PILImage.new("L", (64, 64), 0)
+        PILDraw.Draw(mask).ellipse((20, 20, 44, 44), fill=255)
+        final_img = orig.copy()
+        final_img.paste(gen, (0, 0), mask)
+        check("outside-mask preservation verifies a clean composite",
+              fzc.verify_outside_mask(orig, final_img, mask)["passed"] is True)
+        tampered = final_img.copy()
+        tampered.putpixel((2, 2), (255, 255, 255))
+        bad = fzc.verify_outside_mask(orig, tampered, mask)
+        check("outside-mask verification catches a leak",
+              bad["passed"] is False and bad["changed_pixels"] >= 1)
+        leaky = PILImage.new("L", (64, 64), 0)
+        PILDraw.Draw(leaky).rectangle((0, 0, 63, 30), fill=255)  # touches the border
+        clamped, frac = fzc.clamp_mask_border(leaky)
+        check("rectangular border leak is clamped and measured",
+              frac > 0 and clamped.getpixel((0, 0)) == 0 and clamped.getpixel((32, 20)) == 255)
+
+        # 7. eye_source=target restores protected eye pixels exactly
+        eye_mask = PILImage.new("L", (64, 64), 0)
+        PILDraw.Draw(eye_mask).ellipse((24, 26, 40, 36), fill=255)
+        restored = fzc.restore_protected_material(gen, orig, eye_mask)
+        check("protected target-eye pixels are restored after generation",
+              restored.getpixel((32, 31)) == (40, 80, 120)
+              and restored.getpixel((5, 5)) == (200, 60, 60))
+
+        # D. raw-triangle shard heuristic
+        shardy = PILImage.new("L", (128, 128), 128)
+        d = PILDraw.Draw(shardy)
+        for i in range(0, 128, 9):
+            d.line((0, i, 127, i), fill=255, width=1)
+            d.line((i, 0, i, 127), fill=255, width=1)
+        full = PILImage.new("L", (128, 128), 255)
+        verdict = fzc.mesh_shard_score(shardy.convert("RGB"), full)
+        check("shard detector flags dense straight seams",
+              verdict["shards_detected"] is True, str(verdict))
+        smooth = PILImage.new("RGB", (128, 128), (120, 110, 100))
+        check("shard detector passes a smooth face crop",
+              fzc.mesh_shard_score(smooth, full)["shards_detected"] is False)
+
+        # 8. geometry_stability=0 can never yield a CPU-only founder-facing final
+        unstable_report = {"faces": [{"index": 0, "flags": ["strong_profile"],
+                                      "checks": {"geometry_stability": 0.0,
+                                                 "geometry_warning": "landmarks disagree across scales"}}]}
+        g = bi.geometry_gate(unstable_report)
+        check("geometry gate blocks unstable mesh case and CPU-only final",
+              g["mesh_case_allowed"] is False and g["cpu_final_allowed"] is False
+              and len(g["reasons"]) >= 2 and "reviewed-mask" in g["fallback"])
+        stable_report = {"faces": [{"index": 0, "flags": [],
+                                    "checks": {"geometry_stability": 0.92}}]}
+        g2 = bi.geometry_gate(stable_report)
+        check("geometry gate passes stable geometry",
+              g2["mesh_case_allowed"] is True and g2["reasons"] == [])
+        g3 = bi.geometry_gate({"faces": [{"index": 0, "flags": [], "checks": {}}]})
+        check("unmeasurable stability fails closed",
+              g3["mesh_case_allowed"] is False)
+
+        # 9. HTTP 400 responses surface the body, node_errors, ids and classes
+        err_body = json.dumps({
+            "error": {"type": "prompt_outputs_failed_validation",
+                      "message": "Prompt outputs failed validation"},
+            "node_errors": {"13": {"class_type": "ControlNetLoader", "errors": [
+                {"type": "value_not_in_list",
+                 "message": "control_net_name 'control_v11p_sd15_canny.safetensors' not in []"}]}}})
+        formatted = bi._format_comfy_http_error(400, err_body)
+        check("ComfyUI HTTP 400 surfaces status, node id, class and message",
+              "HTTP 400" in formatted and "node 13" in formatted
+              and "ControlNetLoader" in formatted and "value_not_in_list" in formatted,
+              formatted[:160])
+        check("non-JSON error bodies are still printed",
+              "some html error page" in bi._format_comfy_http_error(500, "some html error page"))
 
         print("== stats + report + dashboard")
         st = api("/stats")

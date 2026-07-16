@@ -236,6 +236,120 @@ def resolve_lora(root: Path, requested: str) -> str:
     return requested if requested.lower().endswith(".safetensors") else f"{requested}.safetensors"
 
 
+def select_identity_lora(root: Path, identity: dict, override: str | None) -> tuple[str, str]:
+    """Honest identity-LoRA selection (repair G, 2026-07-16).
+
+    Order: an explicit job -Lora ALWAYS wins and resolves normally. A
+    recipe-declared LoRA must exist EXACTLY (normalized name) — a stale
+    recipe value never partial-matches its way onto an unapproved preview
+    candidate. When neither yields a real file, say so plainly.
+    Returns (resolved_name, lora_status). Raises ValueError with the exact
+    reason otherwise.
+    """
+    def norm(t):
+        return re.sub(r"[^a-z0-9]+", "", str(t).lower())
+    loras_dir = root / "Generators" / "ComfyUI" / "models" / "loras"
+    installed = sorted(loras_dir.glob("*.safetensors")) if loras_dir.is_dir() else []
+    if override:
+        exact = [p for p in installed if norm(p.stem) == norm(override) or norm(p.name) == norm(override)]
+        partial = [p for p in installed if norm(override) in norm(p.name)]
+        chosen = exact[0] if exact else (min(partial, key=lambda p: len(p.name)) if partial else None)
+        if chosen is None:
+            raise ValueError(
+                f"-Lora '{override}' is not installed in models/loras — installed: "
+                + (", ".join(p.name for p in installed) or "none"))
+        return chosen.name, "explicit-override (preview/private until a candidate is promoted)"
+    declared = identity.get("lora")
+    if declared:
+        exact = [p for p in installed if norm(p.stem) == norm(declared) or norm(p.name) == norm(declared)]
+        if exact:
+            return exact[0].name, "recipe-deployed"
+        raise ValueError(
+            f"recipe requests identity LoRA '{declared}' but it is not installed and "
+            "NO identity LoRA has been deployed/approved. Pass -Lora <installed file> "
+            "explicitly to run with a private preview candidate (it stays a preview — "
+            "this never promotes it). Installed: "
+            + (", ".join(p.name for p in installed) or "none"))
+    raise ValueError(
+        "no deployed identity LoRA exists: the recipe declares none and no -Lora was "
+        "provided. Every current candidate is a private preview "
+        "(docs/IMAGE_GENERATION_STATE.md) — pass -Lora explicitly to use one.")
+
+
+def validate_graph_classes(graph: dict, node_catalog) -> list:
+    """Return the class_types a graph needs that the ComfyUI catalog lacks.
+    node_catalog is the /object_info response (dict of class_type -> spec) or
+    any iterable of known class names. Used by preflight for live schema
+    validation and by the suite for honest-workflow checks (repair E)."""
+    known = set(node_catalog.keys() if isinstance(node_catalog, dict) else node_catalog)
+    needed = {node.get("class_type") for node in graph.values()
+              if isinstance(node, dict) and node.get("class_type")}
+    return sorted(needed - known)
+
+
+def require_workflow_models(root: Path, graph: dict, workflow_rel: str) -> None:
+    """Refuse BEFORE submit when a graph needs a model file that is not
+    installed (repair E: the combined diffdiff+canny graph must state the
+    missing ControlNet instead of dying as an HTTP 400)."""
+    for node_id, node in graph.items():
+        if not isinstance(node, dict):
+            continue
+        if node.get("class_type") == "ControlNetLoader":
+            name = str(node.get("inputs", {}).get("control_net_name", ""))
+            model = root / "Generators" / "ComfyUI" / "models" / "controlnet" / name
+            if not model.is_file():
+                raise ValueError(
+                    f"workflow {workflow_rel} needs ControlNet model '{name}' "
+                    f"(node {node_id}) which is NOT installed in models/controlnet. "
+                    "Install it per docs/MODELS.md, or use the TRUE "
+                    "DifferentialDiffusion workflow "
+                    "(workflows/sd15_face_zone_diffdiff_api.json) which requires "
+                    "no ControlNet model.")
+
+
+def geometry_gate(face_report: dict, face_index: int = 0,
+                  stability_threshold: float = 0.35,
+                  profile_threshold: float = 0.6) -> dict:
+    """Fail-closed geometry gate (repair A, 2026-07-16 — hard Vegeta).
+
+    Decides, from the examiner's thorough checks, whether this face may be
+    treated as a normal mesh-warp case and whether a CPU-only warp result may
+    ever be founder-facing. Unstable geometry (low/missing stability score,
+    cross-scale landmark disagreement, or a strong profile without solid
+    stability) blocks both — those targets go to the reviewed-mask route.
+    The decision dict rides the artifact card either way.
+    """
+    faces = {f.get("index"): f for f in face_report.get("faces", [])}
+    face = faces.get(face_index) or (face_report.get("faces") or [{}])[0]
+    checks = dict(face.get("checks") or {})
+    flags = list(face.get("flags") or [])
+    stability = checks.get("geometry_stability")
+    warning = checks.get("geometry_warning")
+    reasons = []
+    if stability is None:
+        reasons.append("geometry stability could not be measured (rescale re-detect failed)")
+    elif stability < stability_threshold:
+        reasons.append(f"geometry_stability {stability} is below the {stability_threshold} floor")
+    if warning:
+        reasons.append(str(warning))
+    if "strong_profile" in " ".join(flags) and (stability is None or stability < profile_threshold):
+        reasons.append(f"strong_profile with unstable geometry "
+                       f"(stability {stability} < {profile_threshold})")
+    stable = not reasons
+    return {
+        "geometry_stability": stability,
+        "flags": flags,
+        "stable": stable,
+        "mesh_case_allowed": stable,
+        "cpu_final_allowed": stable,
+        "reasons": reasons,
+        "fallback": ("reviewed-mask route: facelab preview -> founder approves the "
+                     "semantic mask -> facelab zone (no mesh warp, no detector guess)"
+                     if not stable else None),
+        "thresholds": {"stability": stability_threshold, "strong_profile": profile_threshold},
+    }
+
+
 def insert_lora(graph: dict, lora_name: str, strength: float = 0.9,
                 lora_id: str = "byrd_lora", source_id: str | None = None,
                 clip_strength: float | None = None) -> None:
@@ -280,12 +394,52 @@ def upload_image(comfy: str, path: Path) -> str:
         return json.loads(r.read().decode()).get("name", path.name)
 
 
+def _format_comfy_http_error(status: int, body: str) -> str:
+    """Turn a ComfyUI HTTP error into a diagnosable message: status, error
+    text, prompt-validation details, and every offending node id/class_type
+    from node_errors. Never just 'HTTP Error 400: Bad Request' (repair F,
+    2026-07-16 — the diffdiff 400 was undiagnosable without the body)."""
+    lines = [f"ComfyUI returned HTTP {status}"]
+    body = (body or "").strip()
+    try:
+        payload = json.loads(body)
+    except (ValueError, TypeError):
+        if body:
+            lines.append(f"response body: {body[:1500]}")
+        return "\n".join(lines)
+    err = payload.get("error")
+    if isinstance(err, dict):
+        lines.append(f"error: {err.get('type', '?')} — {err.get('message', '')}"
+                     + (f" ({err.get('details')})" if err.get("details") else ""))
+    elif err:
+        lines.append(f"error: {err}")
+    node_errors = payload.get("node_errors") or {}
+    for node_id, node_err in node_errors.items():
+        class_type = (node_err or {}).get("class_type", "?")
+        for detail in (node_err or {}).get("errors", []):
+            lines.append(f"node {node_id} ({class_type}): "
+                         f"{detail.get('type', '?')} — {detail.get('message', '')}"
+                         + (f" [{detail.get('details')}]" if detail.get("details") else ""))
+        if not (node_err or {}).get("errors"):
+            lines.append(f"node {node_id} ({class_type}): {node_err}")
+    if len(lines) == 1 and body:
+        lines.append(f"response body: {body[:1500]}")
+    return "\n".join(lines)
+
+
 def http_json(url: str, payload=None, timeout=30):
     data = json.dumps(payload).encode() if payload is not None else None
     req = urllib.request.Request(url, data=data,
                                  headers={"Content-Type": "application/json"} if data else {})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode())
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode())
+    except urllib.error.HTTPError as exc:
+        try:
+            body = exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            body = ""
+        die(_format_comfy_http_error(exc.code, body))
 
 
 def generate(root, recipe_name, slots, project, purpose,
@@ -833,10 +987,10 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         die(f"recipe '{recipe.get('id', recipe_name)}' is not a face-zone identity-edit recipe")
 
     identity = dict(recipe.get("identity") or {})
-    selected_identity_lora = identity.get("lora") if identity_lora is None else identity_lora
-    if not selected_identity_lora:
-        die("face-zone edit requires an installed identity LoRA")
-    selected_identity_lora = resolve_lora(root, selected_identity_lora)
+    try:
+        selected_identity_lora, lora_status = select_identity_lora(root, identity, identity_lora)
+    except ValueError as exc:
+        die(str(exc))
 
     prompt, vary_picks = _render_recipe_prompt(recipe, dict(slots or {}))
     preset_key = target_preset or "auto"
@@ -888,6 +1042,18 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
                                engine.get("min_face_confidence",
                                           defaults.get("min_face_confidence", 0.35)),
                                thorough=not engine.get("quick_report", False))
+
+    # Repair A (2026-07-16, hard Vegeta): fail-closed geometry gate. Unstable
+    # geometry (low stability, cross-scale landmark disagreement, strong
+    # profile without solid stability) may never be treated as a normal mesh
+    # case and may never ship a CPU-only warp — route to the reviewed-mask
+    # path or refuse with the exact reason. The decision rides the card.
+    gate = geometry_gate(face_report, int(engine.get("face_index", 0)),
+                         float(engine.get("gate_stability_threshold", 0.35)))
+    if identity_reference_path is not None and not gate["mesh_case_allowed"]:
+        die("geometry gate: this target may not use the mesh-warp lane — "
+            + "; ".join(gate["reasons"])
+            + f". Use the reviewed-mask fallback instead: {gate['fallback']}")
 
     # Flow fix (founder, 2026-07-15): work at the face's native detail. The
     # examiner already measured every face — pick the crop canvas from the
@@ -1013,6 +1179,12 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         die(f"face-zone lane requires '{checkpoint_requested}', not fallback '{checkpoint_name}'")
     graph = load_json(root / workflow_rel)
     graph.pop("_comment", None)
+    # Repair E (2026-07-16): a graph that needs an uninstalled model refuses
+    # HERE with the model's name, instead of dying later as a bare HTTP 400.
+    try:
+        require_workflow_models(root, graph, workflow_rel)
+    except ValueError as exc:
+        die(str(exc))
     crop_title = "IDENTITY MESH SEED" if identity_reference_path is not None else "FACE CROP"
     _, crop_node = _named_node(graph, "LoadImage", crop_title)
     _, mask_node = _named_node(graph, "LoadImage", "EDIT ZONE MASK")
@@ -1087,6 +1259,21 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         zone_record["generated_crop"] = str(generated_crop)
         zone_record["final"] = str(final)
         Path(zone["zone_file"]).write_text(json.dumps(zone_record, indent=2) + "\n", encoding="utf-8")
+        # Repair D (2026-07-16): a raw CPU triangle warp may be conditioning or
+        # an intermediate, never a founder-facing final unless it PROVES smooth.
+        # The composite wrote a verification card; the shard heuristic or the
+        # geometry gate failing marks this artifact rejected — saved as
+        # evidence, never published as a normal draft.
+        verify_file = Path(str(final) + ".verify.json")
+        composite_verification = load_json(verify_file) if verify_file.is_file() else {}
+        shard = dict(composite_verification.get("shard_check") or {})
+        cpu_publish_blockers = list(gate["reasons"]) if not gate["cpu_final_allowed"] else []
+        if shard.get("shards_detected"):
+            cpu_publish_blockers.append(
+                "triangle-shard heuristic tripped on the CPU seed "
+                f"(straight_edge_fraction {shard.get('straight_edge_fraction')}, "
+                f"edge_density {shard.get('edge_density')}) — raw warp must not ship")
+        cpu_status = "rejected" if cpu_publish_blockers else "draft"
         card = {
             "artifact_id": f"art.{resolved_job_id}.0",
             "job_id": resolved_job_id,
@@ -1116,9 +1303,12 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
             "identity_model_strength": identity_model_weight,
             "identity_clip_strength": identity_clip_weight,
             "lora": selected_identity_lora,
+            "lora_status": lora_status,
+            "geometry_gate": gate,
+            "composite_verification": composite_verification,
+            "gate_failures": cpu_publish_blockers,
             "face_zone": zone_record,
             "upload_analysis": upload_analysis,
-        "face_report": face_report,
             "face_report": face_report,
             "crop_preflight": crop_preflight,
             **({"identity_reference": str(identity_reference_path)} if identity_reference_path else {}),
@@ -1132,9 +1322,10 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
             "skin_match": "generated mean preserved; target contrast harmonized 35%; soft boundary ring composite",
             **({"subject_profile": subject_profile} if subject_profile else {}),
             "score": None,
-            "tags": ["cpu-face-outline", "graded-mask", "skin-match", "cpu-only-seed"],
+            "tags": ["cpu-face-outline", "graded-mask", "skin-match", "cpu-only-seed"]
+            + (["gate-blocked-cpu-final"] if cpu_publish_blockers else []),
             "caption": "",
-            "status": "draft",
+            "status": cpu_status,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         final.with_suffix(final.suffix + ".json").write_text(
@@ -1142,7 +1333,11 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         )
         print(f"[byrdimage] CPU face outline: {zone['artifacts']['outline_preview']}")
         print(f"[byrdimage] skin-match zone: {zone['artifacts']['skin_match_ring']}")
-        print(f"[byrdimage] archived {final} (+card)")
+        if cpu_publish_blockers:
+            print("[byrdimage] REJECTED (fail-closed, saved as evidence only):")
+            for blocker in cpu_publish_blockers:
+                print(f"[byrdimage]   - {blocker}")
+        print(f"[byrdimage] archived {final} (+card, status={cpu_status})")
         return resolved_job_id, [(final, card)]
     sampler_nodes = []
     for node in graph.values():
@@ -1260,6 +1455,9 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         "identity_model_strength": identity_model_weight,
         "identity_clip_strength": identity_clip_weight,
         "lora": selected_identity_lora,
+        "lora_status": lora_status,
+        "geometry_gate": gate,
+        "face_report": face_report,
         "face_zone": zone_record,
         "upload_analysis": upload_analysis,
         "crop_preflight": crop_preflight,
@@ -1283,6 +1481,9 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         card["candidate"] = crop_index + 1
         card["candidates"] = len(saved_candidates)
         card["canvas"] = canvas
+        candidate_verify = Path(str(final) + ".verify.json")
+        if candidate_verify.is_file():
+            card["composite_verification"] = load_json(candidate_verify)
         final.with_suffix(final.suffix + ".json").write_text(
             json.dumps(card, indent=2) + "\n", encoding="utf-8"
         )

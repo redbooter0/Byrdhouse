@@ -134,3 +134,40 @@ sets are support material; never train on Gojo/Vegeta/Luffy/Link images.
 - ReActor/FaceID = private lane only (research licenses); the funded lane is
   the mesh-seed + owner-LoRA architecture.
 - Every artifact has a sidecar card; every change is reproducible.
+
+## 6. 2026-07-16 repair — unstable-profile law (hard Vegeta)
+
+The examiner's thorough checks now feed a **fail-closed geometry gate**
+before any mesh work: `geometry_stability < 0.35`, unmeasurable stability,
+"landmarks disagree across scales", or `strong_profile` without solid
+stability (< 0.6) means the target is NOT a normal v2 mesh case. The quality
+lane refuses with the exact reasons, and a raw CPU triangle warp can never be
+the founder-facing final (shard heuristic + gate both mark it rejected).
+
+**Reviewed-mask fallback for gated targets** (no center rectangle, no silent
+detector guess — the founder approves the zone):
+
+```powershell
+# 1. examine the immutable original (see the gate's reasons yourself)
+facelab.ps1 examine -Image "E:\ByrdHouse\Images\Targets\anime_games\anime_game_4.jpg"
+# 2. preview route: archives the zone overlay + soft semantic mask as
+#    reviewable artifacts (dashboard -> Face Swap -> Preview, or route preview)
+# 3. after YOU approve the mask, run the zone edit with it + an explicit LoRA
+facelab.ps1 zone -Image "<target>" -Mask "<approved_mask.png>" -Lora "<preview lora>"
+```
+
+**Diffdiff is now two honest graphs:** `-Workflow diffdiff` = TRUE
+DifferentialDiffusion (zero extra models, core nodes); `-Workflow
+diffdiff-canny` = the COMBINED ControlNet variant, refused before submit
+until `control_v11p_sd15_canny.safetensors` is installed.
+
+**No deployed identity LoRA exists.** Recipes declare none; pass `-Lora`
+explicitly per job (candidates stay private previews; nothing promotes them).
+
+**Hardware rules for every retest:** batch 1, 512/640 crop, one checkpoint
+loaded, unload LM Studio first (`use-image-mode.ps1`), record peak VRAM
+(`nvidia-smi --query-gpu=memory.used --format=csv`), ≤7200MB assumed, the
+immutable original is re-read for every retry. Test order: easy front-face →
+Gojo (occlusion) → Vegeta (gate + fallback proof). Save original, examiner
+report, mask, crop, intermediates, final, `.verify.json`, sidecar, VRAM peak,
+runtime, route, and pass/fail reasons for each.

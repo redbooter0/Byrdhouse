@@ -1,5 +1,5 @@
 {
- "_comment": "TRUE DifferentialDiffusion-only face-zone cleanup: zero additional models. The graded mask (SetLatentNoiseMask) drives differential denoise via the core DifferentialDiffusion node; no ControlNetLoader/Apply anywhere. Combined Canny variant: sd15_face_zone_diffdiff_canny_api.json (gated on the canny model).",
+ "_comment": "COMBINED DifferentialDiffusion + Canny ControlNet face-zone cleanup. REQUIRES control_v11p_sd15_canny.safetensors in models/controlnet \u2014 byrdimage refuses before submit when it is missing (require_workflow_models). For the zero-extra-model seam killer use sd15_face_zone_diffdiff_api.json (TRUE diffdiff, no ControlNet).",
  "1": {
   "class_type": "LoadImage",
   "inputs": {
@@ -98,6 +98,56 @@
    "title": "LIMIT CLEANUP TO FACE ZONE"
   }
  },
+ "12": {
+  "class_type": "Canny",
+  "inputs": {
+   "image": [
+    "1",
+    0
+   ],
+   "low_threshold": 0.3,
+   "high_threshold": 0.65
+  },
+  "_meta": {
+   "title": "SEED GEOMETRY EDGES"
+  }
+ },
+ "13": {
+  "class_type": "ControlNetLoader",
+  "inputs": {
+   "control_net_name": "control_v11p_sd15_canny.safetensors"
+  },
+  "_meta": {
+   "title": "CANNY CONTROLNET"
+  }
+ },
+ "14": {
+  "class_type": "ControlNetApplyAdvanced",
+  "inputs": {
+   "positive": [
+    "5",
+    0
+   ],
+   "negative": [
+    "6",
+    0
+   ],
+   "control_net": [
+    "13",
+    0
+   ],
+   "image": [
+    "12",
+    0
+   ],
+   "strength": 0.55,
+   "start_percent": 0.0,
+   "end_percent": 0.75
+  },
+  "_meta": {
+   "title": "HOLD CAREY GEOMETRY WHILE REDRAWING MATERIAL"
+  }
+ },
  "9": {
   "class_type": "KSampler",
   "inputs": {
@@ -112,12 +162,12 @@
     0
    ],
    "positive": [
-    "5",
+    "14",
     0
    ],
    "negative": [
-    "6",
-    0
+    "14",
+    1
    ],
    "latent_image": [
     "15",

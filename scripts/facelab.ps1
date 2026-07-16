@@ -71,6 +71,19 @@ switch ($Command.ToLower()) {
     }
     "quality" {
         Need-Image
+        # Workflow aliases (repair 2026-07-16): 'diffdiff' is the TRUE
+        # DifferentialDiffusion graph (zero extra models); 'diffdiff-canny'
+        # is the COMBINED graph and refuses before submit when the canny
+        # ControlNet model is not installed.
+        $workflowAliases = @{
+            'diffdiff'       = 'workflows/sd15_face_zone_diffdiff_api.json'
+            'diffdiff-canny' = 'workflows/sd15_face_zone_diffdiff_canny_api.json'
+            'controlnet'     = 'workflows/sd15_face_zone_controlnet_api.json'
+            'ipadapter'      = 'workflows/sd15_face_zone_ipadapter_api.json'
+        }
+        if ($Workflow -and $workflowAliases.ContainsKey($Workflow.ToLower())) {
+            $Workflow = $workflowAliases[$Workflow.ToLower()]
+        }
         $args2 = @($byrdimage, "--edit-face-zone", $Image, "--face-preset", $Preset,
                    "--face-index", "$FaceIndex", "--project", $Project, "--purpose", $Purpose)
         if ($Workflow) { $args2 += @("--workflow", $Workflow) }
