@@ -1339,6 +1339,10 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
                 "triangle-shard heuristic tripped on the CPU seed "
                 f"(straight_edge_fraction {shard.get('straight_edge_fraction')}, "
                 f"edge_density {shard.get('edge_density')}) — raw warp must not ship")
+        if dict(composite_verification.get("edit_applied") or {}).get("edited") is False:
+            cpu_publish_blockers.append(
+                "output is an untouched copy of the original — no edit was applied "
+                "inside the zone; rejected instead of shipped")
         cpu_status = "rejected" if cpu_publish_blockers else "draft"
         card = {
             "artifact_id": f"art.{resolved_job_id}.0",
@@ -1555,6 +1559,11 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         candidate_verify = Path(str(final) + ".verify.json")
         if candidate_verify.is_file():
             card["composite_verification"] = load_json(candidate_verify)
+            if dict(card["composite_verification"].get("edit_applied") or {}).get("edited") is False:
+                card["status"] = "rejected"
+                card["gate_failures"] = ["output is an untouched copy of the original — "
+                                         "no edit was applied inside the zone"]
+                print(f"[byrdimage] REJECTED no-op candidate {crop_index + 1} (untouched copy)")
         final.with_suffix(final.suffix + ".json").write_text(
             json.dumps(card, indent=2) + "\n", encoding="utf-8"
         )
@@ -1616,6 +1625,22 @@ def run_graph(root: Path, comfy: str, graph: dict, job_id: str, project: str,
                 "score": None, "tags": [], "caption": "",
                 "status": "draft", "created_at": now_iso,
             }
+            # No-op law (2026-07-16): an edit route that spits the input back
+            # out (detector found nothing / sampler no-opped) must never
+            # present that copy as a result — reject it with the reason.
+            no_op_source = card_base.get("target") or card_base.get("source")
+            if no_op_source and Path(str(no_op_source)).is_file():
+                try:
+                    from facezone_composite import images_effectively_identical
+                    if images_effectively_identical(Path(str(no_op_source)), dest):
+                        card["status"] = "rejected"
+                        card["tags"] = ["no-op-output"]
+                        card["gate_failures"] = [
+                            "output is an untouched copy of the input — no edit was "
+                            "applied (detector found no face or the sampler no-opped)"]
+                        print(f"[byrdimage]   REJECTED no-op output (untouched copy): {dest.name}")
+                except Exception:
+                    pass  # the guard must never break archiving
             dest.with_suffix(dest.suffix + ".json").write_text(
                 json.dumps(card, indent=2), encoding="utf-8")
             saved.append((dest, card))

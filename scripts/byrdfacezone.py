@@ -2508,8 +2508,11 @@ def composite_generated(zone_file: Path, generated_crop: Path, output: Path) -> 
     with Image.open(output) as opened:
         final_saved = opened.convert("RGB")
     outside = verify_outside_mask(pristine, final_saved, effective)
+    from facezone_composite import edit_delta
+    applied = edit_delta(pristine, final_saved, effective)
     verification = {
         "outside_mask": outside,
+        "edit_applied": applied,
         "border_leak_fraction": border_leak_fraction,
         "eyes_restored_after_generation": eyes_restored,
         "eye_source_mode": identity_mesh_meta.get("eye_source_mode"),

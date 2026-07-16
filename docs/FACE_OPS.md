@@ -1,5 +1,14 @@
 # FACE OPS — how the founder (or Codex) operates the Face Lab by hand
 
+**THE MISSION (never forget what we're doing):** upload any character image →
+get the SAME image back with Carey's face believably in the character's own
+art style. Everything else in this file serves that sentence. Three outputs
+are never acceptable: a broken face (guards reject it), a changed scene
+(outside-mask proof forbids it), and **an untouched copy of the input** —
+the no-op law (2026-07-16) rejects any output that isn't measurably edited
+inside the zone, with the reason on the card. A 2–3 second "generation" is
+a no-op symptom, not a fast win.
+
 *The goal (founder, 2026-07-15): professional-grade face swaps like the viral
 multi-person IG posts — identity carried perfectly while the target image's
 entire look and feel (lighting, grain, linework, pose, clothes, vibe) stays

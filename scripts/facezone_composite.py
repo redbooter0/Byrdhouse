@@ -94,6 +94,41 @@ def verify_outside_mask(
             "changed_pixels": changed, "max_delta": max_delta}
 
 
+def edit_delta(original: Image.Image, final: Image.Image,
+               mask: Image.Image | None = None) -> dict:
+    """Measure whether an edit ACTUALLY happened (founder law, 2026-07-16:
+    an untouched copy must never be presented as a result). Compares final
+    vs original — inside ``mask`` when given, else the whole image — and
+    returns {edited, mean_delta, max_delta, changed_fraction}. Thresholds
+    tolerate recompression noise but catch sampler no-ops and detector
+    pass-throughs."""
+    from PIL import ImageChops
+    if final.size != original.size:
+        final = final.resize(original.size, Image.Resampling.LANCZOS)
+    diff = ImageChops.difference(original.convert("RGB"), final.convert("RGB")).convert("L")
+    if mask is not None:
+        region = mask.convert("L").point(lambda v: 255 if v > 8 else 0)
+        diff = ImageChops.multiply(diff, region)
+        total = sum(1 for v in region.getdata() if v > 0)
+    else:
+        total = diff.size[0] * diff.size[1]
+    data = diff.getdata()
+    changed = sum(1 for v in data if v > 8)
+    mean_delta = (sum(data) / total) if total else 0.0
+    extrema = diff.getextrema()
+    edited = bool(total and (mean_delta >= 1.0 or (changed / total) >= 0.005))
+    return {"edited": edited, "mean_delta": round(mean_delta, 3),
+            "max_delta": int(extrema[1]),
+            "changed_fraction": round(changed / total, 5) if total else 0.0}
+
+
+def images_effectively_identical(a_path, b_path) -> bool:
+    """True when two image files are the same picture for practical purposes
+    (the 'spat my input back out' detector for full-image routes)."""
+    with Image.open(a_path) as a_img, Image.open(b_path) as b_img:
+        return not edit_delta(a_img.convert("RGB"), b_img.convert("RGB"))["edited"]
+
+
 def mesh_shard_score(image: Image.Image, warp_mask: Image.Image,
                      edge_threshold: int = 48, min_run: int = 12) -> dict:
     """Detect raw-triangle-warp shard artifacts inside the warped region.

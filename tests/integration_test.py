@@ -1367,6 +1367,22 @@ def main():
               and "fresh-retry policy rejected" in bi_source
               and '"finish"' in (ROOT / "scripts" / "facelab.ps1").read_text(encoding="utf-8-sig"))
 
+        # No-op law: an untouched copy must never ship as a result.
+        same = PILImage.new("RGB", (64, 64), (90, 90, 90))
+        check("edit_delta calls an untouched copy a no-op",
+              fzc.edit_delta(same, same.copy())["edited"] is False)
+        changed_img = same.copy()
+        PILDraw.Draw(changed_img).ellipse((20, 20, 44, 44), fill=(180, 120, 90))
+        check("edit_delta confirms a real zone edit",
+              fzc.edit_delta(same, changed_img)["edited"] is True
+              and fzc.edit_delta(same, changed_img, mask)["edited"] is True)
+        bi_source_now = (ROOT / "scripts" / "byrdimage.py").read_text(encoding="utf-8-sig")
+        check("no-op outputs are rejected on every lane (run_graph + zone paths)",
+              bi_source_now.count("untouched copy") >= 3
+              and "images_effectively_identical" in bi_source_now
+              and '"edit_applied"' in (ROOT / "scripts" / "byrdfacezone.py")
+                  .read_text(encoding="utf-8-sig"))
+
         print("== stats + report + dashboard")
         st = api("/stats")
         check("stats counts artifacts", st["artifacts_total"] >= 4, str(st))
