@@ -2,7 +2,7 @@
 
 *One page of current truth. Update weekly or on any milestone. Paste this to any AI to resume work instantly.*
 
-**Last updated:** 2026-07-12 · **Current unlock: U1 IMAGE LAB · Phase B (Product Recovery Sprint) shipped** · **North star: R0 (first thumbnail shipped on Carey's channel)**
+**Last updated:** 2026-07-16 · **Current unlock: U1 IMAGE LAB · Handoff P0 (baseline & governance) repo-side complete** · **North star: R0 (first thumbnail shipped on Carey's channel)**
 
 **U0 status:** functionally complete on real hardware.
 
@@ -43,6 +43,16 @@ Odysseus/smart-home/Stripe is removed from this repo. Cherry Studio remains the 
   style-blend two-pass), dashboard Face Swap panel, `me_as_character` recipe,
   dataset collector + versioned LoRA trainer (7200MB VRAM / 16-thread founder
   limits), `facelab_preflight.py` on-PC proof tool — see docs/FACE_LAB.md
+- **Handoff P0 (2026-07-16)**: the 2026-07-15 implementation handoff is adopted
+  as spec of record with live-state precedence — response in
+  `docs/fable-implementation-report.md`. Governance kit shipped: machine
+  inventory, model-license manifest (row required before any install),
+  agent-safety policy (tiers 0–4), identity-stack review (research registry
+  dispositions), five-target identity benchmark spec. New scripts:
+  `byrdhouse-preflight.ps1` (read-only machine/service baseline) and
+  `identity-benchmark.ps1` (repeatable scorecard runner). **Next action:** run
+  the preflight on both machines and paste results into the inventory; then P1
+  Identity Lab (RMBG → facetools → Forbidden Vision, isolated ComfyUI).
 
 ## What worked before (U0 foundation)
 
