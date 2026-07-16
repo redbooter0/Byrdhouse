@@ -1,0 +1,90 @@
+{
+  "_comment": "ByrdCoder Local V0 single source of truth for command/directory/branch allowlists (docs/BYRDCODER_LOCAL.md). Enforced three ways: opencode agent permission blocks (configs/byrdcoder/opencode.example.json) mirror commands.allow/deny; start-byrdcoder.ps1 enforces branches; tests/integration_test.py contract checks keep all three in sync. Edit here first, then mirror.",
+  "version": 0,
+  "commands": {
+    "allow": [
+      "git status",
+      "git diff",
+      "git log",
+      "git show",
+      "git add",
+      "git commit",
+      "git restore",
+      "git stash",
+      "python -m py_compile",
+      "python -m json.tool",
+      "python tests/integration_test.py",
+      "node tests/dashboard_draft_test.js"
+    ],
+    "deny": [
+      "git push",
+      "git merge",
+      "git rebase",
+      "git checkout main",
+      "git switch main",
+      "git reset --hard",
+      "git clean",
+      "rm",
+      "del",
+      "rmdir",
+      "Remove-Item",
+      "rd",
+      "format",
+      "shutdown",
+      "restart-computer",
+      "curl",
+      "wget",
+      "Invoke-WebRequest",
+      "Invoke-RestMethod",
+      "npm install",
+      "npx",
+      "pip install",
+      "powershell",
+      "pwsh",
+      "cmd",
+      "reg",
+      "schtasks",
+      "setx"
+    ]
+  },
+  "directories": {
+    "allowed_roots": [
+      "scripts",
+      "docs",
+      "configs",
+      "recipes",
+      "workflows",
+      "router",
+      "dashboard",
+      "tests",
+      "LLM"
+    ],
+    "forbidden": [
+      ".env",
+      ".env.*",
+      "secrets",
+      "credentials",
+      "db",
+      "artifacts",
+      "inbox",
+      "profiles/*/references",
+      "profiles/*/lora_dataset",
+      "Generators/ComfyUI",
+      "Generators/sd-scripts",
+      "Images",
+      "Video",
+      "Media",
+      "Backups"
+    ]
+  },
+  "branches": {
+    "protected": ["main"],
+    "allowed_prefixes": ["byrdcoder/", "feature/", "agent/", "claude/"]
+  },
+  "tests_allowlisted": [
+    "python tests/integration_test.py",
+    "node tests/dashboard_draft_test.js",
+    "python -m py_compile",
+    "python -m json.tool"
+  ]
+}

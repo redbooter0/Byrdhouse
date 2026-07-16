@@ -1,0 +1,124 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["opencode-lmstudio@0.3.1"],
+  "share": "disabled",
+  "autoupdate": false,
+  "provider": {
+    "lmstudio": {
+      "options": {
+        "baseURL": "{{LMSTUDIO_URL}}"
+      }
+    }
+  },
+  "permission": {
+    "edit": "deny",
+    "webfetch": "deny",
+    "bash": {
+      "*": "deny"
+    }
+  },
+  "agent": {
+    "byrd-ask": {
+      "description": "Tier 0 — read-only explanation of ByrdHouse code. No writes, no commands.",
+      "mode": "primary",
+      "temperature": 0.1,
+      "prompt": "{file:./prompts/byrd-ask.md}",
+      "tools": { "write": false, "edit": false, "bash": false },
+      "permission": { "edit": "deny", "webfetch": "deny", "bash": { "*": "deny" } }
+    },
+    "byrd-patch": {
+      "description": "Tier 1 — propose unified-diff patch previews; never applies them. Read-only git inspection allowed.",
+      "mode": "primary",
+      "temperature": 0.1,
+      "prompt": "{file:./prompts/byrd-patch.md}",
+      "tools": { "write": false, "edit": false, "bash": true },
+      "permission": {
+        "edit": "deny",
+        "webfetch": "deny",
+        "bash": {
+          "git status*": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "*": "deny"
+        }
+      }
+    },
+    "byrd-build": {
+      "description": "Tier 2 — edits + commits ONLY on an approved feature branch (launcher refuses main). No push, no merge.",
+      "mode": "primary",
+      "temperature": 0.1,
+      "prompt": "{file:./prompts/byrd-build.md}",
+      "tools": { "write": true, "edit": true, "bash": true },
+      "permission": {
+        "edit": "allow",
+        "webfetch": "deny",
+        "bash": {
+          "git status*": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "git add *": "allow",
+          "git commit *": "allow",
+          "git restore *": "allow",
+          "git stash*": "allow",
+          "python -m py_compile *": "allow",
+          "python -m json.tool *": "allow",
+          "python tests/integration_test.py": "allow",
+          "git push*": "deny",
+          "git merge*": "deny",
+          "git rebase*": "deny",
+          "git checkout main*": "deny",
+          "git switch main*": "deny",
+          "git reset --hard*": "deny",
+          "git clean*": "deny",
+          "*": "deny"
+        }
+      }
+    },
+    "byrd-test": {
+      "description": "Tier 3 — executes ONLY the allowlisted test commands. No edits.",
+      "mode": "primary",
+      "temperature": 0.1,
+      "prompt": "{file:./prompts/byrd-test.md}",
+      "tools": { "write": false, "edit": false, "bash": true },
+      "permission": {
+        "edit": "deny",
+        "webfetch": "deny",
+        "bash": {
+          "python tests/integration_test.py": "allow",
+          "node tests/dashboard_draft_test.js": "allow",
+          "python -m py_compile *": "allow",
+          "python -m json.tool *": "allow",
+          "git status*": "allow",
+          "git diff*": "allow",
+          "*": "deny"
+        }
+      }
+    },
+    "byrd-review": {
+      "description": "Tier 0/1 — reviews another model's patch (approve / request changes / block). Read-only.",
+      "mode": "all",
+      "temperature": 0.1,
+      "prompt": "{file:./prompts/byrd-review.md}",
+      "tools": { "write": false, "edit": false, "bash": false },
+      "permission": { "edit": "deny", "webfetch": "deny", "bash": { "*": "deny" } }
+    },
+    "byrd-offline": {
+      "description": "Read-only, local-only: remote providers and web access prohibited (this config defines no cloud provider; webfetch denied).",
+      "mode": "primary",
+      "temperature": 0.1,
+      "prompt": "{file:./prompts/byrd-offline.md}",
+      "tools": { "write": false, "edit": false, "bash": false, "webfetch": false },
+      "permission": { "edit": "deny", "webfetch": "deny", "bash": { "*": "deny" } }
+    },
+    "byrd-private": {
+      "description": "Read-only, privacy-hardened: local models only, no external data transmission (share disabled, webfetch denied, no cloud providers configured).",
+      "mode": "primary",
+      "temperature": 0.1,
+      "prompt": "{file:./prompts/byrd-private.md}",
+      "tools": { "write": false, "edit": false, "bash": false, "webfetch": false },
+      "permission": { "edit": "deny", "webfetch": "deny", "bash": { "*": "deny" } }
+    }
+  }
+}

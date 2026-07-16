@@ -53,6 +53,16 @@ Odysseus/smart-home/Stripe is removed from this repo. Cherry Studio remains the 
   `identity-benchmark.ps1` (repeatable scorecard runner). **Next action:** run
   the preflight on both machines and paste results into the inventory; then P1
   Identity Lab (RMBG → facetools → Forbidden Vision, isolated ComfyUI).
+- **ByrdCoder Local V0 (2026-07-16)**: permanent local coding agent so work
+  continues when Codex/cloud usage is exhausted — OpenCode + pinned
+  `opencode-lmstudio@0.3.1` bridge over the existing LM Studio, isolated
+  config (`OPENCODE_CONFIG` → gitignored `LLM\byrdcoder\`), seven byrd-*
+  profiles defaulting read-only, tiers 0–4 enforced (no push/merge/main/
+  secrets/production-ComfyUI), 7-task model benchmark harness, two-agent
+  review loop (fail-closed block). See docs/BYRDCODER_LOCAL.md. **Next
+  action on GAMING:** install opencode CLI, run `byrdcoder-preflight.ps1` +
+  `test-byrdcoder.ps1`, then the acceptance checkpoint and Phase 5 benchmark
+  of the installed Qwen/Qwopus models.
 
 ## What worked before (U0 foundation)
 

@@ -1083,6 +1083,79 @@ def main():
             check("dry-run sidecar lists reasons for failure",
                   len(bcs_sidecar.get("reasons", [])) >= 1)
 
+        # ── ByrdCoder Local V0 contract (docs/BYRDCODER_LOCAL.md) ──────────
+        # Config / permission / allowlist behavior: the local coding agent
+        # must default read-only, pin its bridge, never hardcode hosts, and
+        # keep push/merge/secret paths structurally impossible.
+        print("== byrdcoder local v0 contract")
+        bc_dir = ROOT / "configs" / "byrdcoder"
+        bc_profiles = ("byrd-ask", "byrd-patch", "byrd-build", "byrd-test",
+                       "byrd-review", "byrd-offline", "byrd-private")
+        for fname in ("BYRDCODER_LOCAL.md", "byrdcoder-model-benchmark.md",
+                      "byrdcoder-security-review.md"):
+            check(f"byrdcoder doc {fname} exists", (ROOT / "docs" / fname).is_file())
+        for sname in ("byrdcoder-preflight.ps1", "start-byrdcoder.ps1",
+                      "test-byrdcoder.ps1", "byrdcoder-benchmark.ps1"):
+            check(f"byrdcoder script {sname} exists",
+                  (ROOT / "scripts" / sname).is_file())
+        for pyname in ("byrdcoder_models.py", "byrdcoder_review.py"):
+            check(f"byrdcoder helper {pyname} compiles",
+                  subprocess.run([sys.executable, "-m", "py_compile",
+                                  str(ROOT / "scripts" / pyname)],
+                                 capture_output=True).returncode == 0)
+
+        bc_cfg = json.loads((bc_dir / "opencode.example.json").read_text())
+        check("byrdcoder bridge plugin pinned",
+              any(p.startswith("opencode-lmstudio@") and p[18:19].isdigit()
+                  for p in bc_cfg.get("plugin", [])), str(bc_cfg.get("plugin")))
+        check("byrdcoder LM Studio URL is a placeholder (zero hardcoded hosts)",
+              bc_cfg["provider"]["lmstudio"]["options"]["baseURL"] == "{{LMSTUDIO_URL}}")
+        check("byrdcoder default is read-only (global edit+bash+webfetch deny)",
+              bc_cfg["permission"]["edit"] == "deny"
+              and bc_cfg["permission"]["bash"].get("*") == "deny"
+              and bc_cfg["permission"]["webfetch"] == "deny")
+        check("byrdcoder share disabled + autoupdate off",
+              bc_cfg.get("share") == "disabled" and bc_cfg.get("autoupdate") is False)
+        check("byrdcoder defines all 7 profiles",
+              set(bc_profiles) <= set(bc_cfg.get("agent", {})))
+        for ro in ("byrd-ask", "byrd-review", "byrd-offline", "byrd-private"):
+            a = bc_cfg["agent"][ro]
+            check(f"byrdcoder {ro} is read-only",
+                  a["permission"]["edit"] == "deny"
+                  and a["tools"]["write"] is False and a["tools"]["edit"] is False)
+        bb = bc_cfg["agent"]["byrd-build"]["permission"]["bash"]
+        check("byrdcoder byrd-build cannot push/merge/reach main",
+              bb.get("git push*") == "deny" and bb.get("git merge*") == "deny"
+              and bb.get("git checkout main*") == "deny" and bb.get("*") == "deny")
+        bt = bc_cfg["agent"]["byrd-test"]["permission"]
+        check("byrdcoder byrd-test executes only allowlisted tests",
+              bt["edit"] == "deny" and bt["bash"].get("*") == "deny"
+              and bt["bash"].get("python tests/integration_test.py") == "allow")
+        check("byrdcoder byrd-patch never applies (edit deny)",
+              bc_cfg["agent"]["byrd-patch"]["permission"]["edit"] == "deny")
+
+        bc_allow = json.loads((bc_dir / "allowlist.json").read_text())
+        check("byrdcoder allowlist protects main",
+              "main" in bc_allow["branches"]["protected"])
+        check("byrdcoder deny list covers push/merge/delete/net/install",
+              {"git push", "git merge", "git reset --hard", "rm", "Remove-Item",
+               "pip install", "Invoke-WebRequest"} <= set(bc_allow["commands"]["deny"]))
+        check("byrdcoder allow list has no escape hatches",
+              not [c for c in bc_allow["commands"]["allow"]
+                   if any(w in c for w in ("push", "merge", "rm", "del",
+                                           "install", "curl", "wget"))])
+        check("byrdcoder forbidden dirs cover secrets/identity/production",
+              {".env", "secrets", "credentials", "db", "profiles/*/references",
+               "Generators/ComfyUI"} <= set(bc_allow["directories"]["forbidden"]))
+        for prof in bc_profiles:
+            prompt = bc_dir / "prompts" / f"{prof}.md"
+            check(f"byrdcoder prompt {prof}.md is substantive",
+                  prompt.is_file() and len(prompt.read_text()) > 200)
+        raw_cfg = (bc_dir / "opencode.example.json").read_text()
+        check("byrdcoder example config has no hardcoded host/IP",
+              "byrd-gaming" not in raw_cfg and "http://" not in raw_cfg.replace(
+                  "https://opencode.ai/config.json", ""))
+
         print("== stats + report + dashboard")
         st = api("/stats")
         check("stats counts artifacts", st["artifacts_total"] >= 4, str(st))
