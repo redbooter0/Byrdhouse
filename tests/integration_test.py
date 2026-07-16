@@ -1289,6 +1289,29 @@ def main():
         p = byrdswap.plan_ladder(stable_rep, lora="preview", identity_photo=None)
         check("conductor's LoRA lane rides the gojo avenue",
               p["lanes"][0]["engine"].get("mesh_identity_strength") == 0.40)
+        # Golden-run replay (reproduce the runs that actually worked)
+        import byrdswap_replay as replay
+        golden_card = {"recipe": "anime_face_zone_edit@2", "seed": 42,
+                       "lora": "carey_hybrid_r32.safetensors",
+                       "workflow": "workflows/sd15_face_mesh_seed_multipass_api.json",
+                       "target": "E:/x/gojo.png", "target_preset": "gojo",
+                       "gpu_passes": [{"id": "identity_fill", "denoise": 0.28},
+                                      {"id": "line_harmonize", "denoise": 0.12}],
+                       "face_zone": {"identity_mesh": {"mesh_identity_strength": 0.40,
+                                                       "eye_source_mode": "target"}}}
+        gp = replay.extract_golden_params(golden_card)
+        check("replay recovers the golden parameters from a card",
+              gp["denoise_per_pass"]["identity_fill"] == 0.28
+              and gp["mesh_identity_strength"] == 0.40 and gp["seed"] == 42)
+        today = json.loads((ROOT / "recipes" / "anime_face_zone_edit.v2.json")
+                           .read_text(encoding="utf-8-sig"))
+        drift = replay.diff_vs_recipe(gp, today)
+        check("replay names the drift between the golden run and today's recipe",
+              any("0.28" in d and "0.38" in d for d in drift)
+              and any("LoRA" in d for d in drift))
+        check("replay emits an exact rerun command",
+              "-Lora" in replay.rerun_command(gp) and "quality" in replay.rerun_command(gp))
+
         check("finish pass exists: no re-seed, low denoise, guards intact",
               byrdswap.FINISH_ENGINE["no_identity_mesh"] is True
               and byrdswap.FINISH_ENGINE["gpu_passes"]["finish"]["denoise"] <= 0.2
