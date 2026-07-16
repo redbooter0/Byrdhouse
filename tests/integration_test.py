@@ -491,8 +491,12 @@ def main():
               and 'crop_preflight.get("passed") is False' in byrdimage_source
               and 'CPU crop preflight did not contain the full head/neck before GPU work' in byrdimage_source
               and '"crop_preflight": crop_preflight' in byrdimage_source)
-        check("face-zone v2 defaults can stop at the better CPU seed",
-              '"skip_gpu_cleanup": true' in v2_recipe_path.read_text(encoding="utf-8-sig")
+        # 2026-07-16: defaults promoted to the founder-VERIFIED golden runs —
+        # GPU finish ON by default (the d28 Gojo was a GPU-finished crop; the
+        # raw CPU-only ship is what produced the broken Vegeta). The CPU-only
+        # finish remains available as an engine capability, never the default.
+        check("face-zone v2 defaults run the verified GPU finish (CPU-only stays available)",
+              '"skip_gpu_cleanup": false' in v2_recipe_path.read_text(encoding="utf-8-sig")
               and 'skip_gpu_cleanup = bool(' in byrdimage_source
               and 'CPU identity mesh seed used without GPU cleanup' in byrdimage_source
               and 'cpu_face_zone_sd15_seed_only' in byrdimage_source)
@@ -526,7 +530,7 @@ def main():
               list(v2_plan) == ["identity_fill", "line_harmonize"]
               and [entry["seed"] for entry in v2_plan.values()] == [7132, 7133]
               and [entry["steps"] for entry in v2_plan.values()] == [16, 8]
-              and [entry["denoise"] for entry in v2_plan.values()] == [0.38, 0.12], str(v2_plan))
+              and [entry["denoise"] for entry in v2_plan.values()] == [0.28, 0.12], str(v2_plan))
         try:
             byrdimage._resolve_face_zone_gpu_passes(
                 {"gpu_passes": {"identity_fill": {"denoise": 0}}}, v2_recipe["defaults"], 7132
@@ -1306,9 +1310,15 @@ def main():
         today = json.loads((ROOT / "recipes" / "anime_face_zone_edit.v2.json")
                            .read_text(encoding="utf-8-sig"))
         drift = replay.diff_vs_recipe(gp, today)
-        check("replay names the drift between the golden run and today's recipe",
-              any("0.28" in d and "0.38" in d for d in drift)
+        check("replay names remaining drift (recipe now MATCHES the golden denoise)",
+              not any("identity_fill" in d for d in drift)
               and any("LoRA" in d for d in drift))
+        old_recipe = {"defaults": {"gpu_passes": {"identity_fill": {"denoise": 0.38}},
+                                   "skip_gpu_cleanup": True}, "identity": {}}
+        old_drift = replay.diff_vs_recipe(gp, old_recipe)
+        check("replay catches denoise + skip drift against a stale recipe",
+              any("0.28" in d and "0.38" in d for d in old_drift)
+              and any("SKIPS gpu cleanup" in d for d in old_drift))
         check("replay emits an exact rerun command",
               "-Lora" in replay.rerun_command(gp) and "quality" in replay.rerun_command(gp))
 

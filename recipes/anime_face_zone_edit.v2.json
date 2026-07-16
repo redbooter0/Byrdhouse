@@ -35,17 +35,18 @@
   "min_face_confidence": 0.35,
   "batch": 1,
   "min_mesh_coverage": 0.55,
-  "skip_gpu_cleanup": true,
+  "skip_gpu_cleanup": false,
   "gpu_passes": {
    "identity_fill": {
     "steps": 16,
-    "denoise": 0.38
+    "denoise": 0.28
    },
    "line_harmonize": {
     "steps": 8,
     "denoise": 0.12
    }
-  }
+  },
+  "_defaults_note": "2026-07-16: promoted the founder-VERIFIED golden parameters (the d28/m40 Gojo + near-perfect Vegeta outputs): identity_fill denoise 0.28 (the old 0.38 default is the one the run log flagged for eye distortion), GPU cleanup ON so line_harmonize + the composite guards finish every output, mesh strength 0.40 per preset. byrdswap.py's gojo avenue matches."
  },
  "target_presets": {
   "auto": {
@@ -55,7 +56,10 @@
    "expected_preserved_materials": [
     "headwear",
     "clothing"
-   ]
+   ],
+   "mesh_identity_strength": 0.4,
+   "eye_source": "target",
+   "eye_protection": 1.0
   },
   "gojo": {
    "label": "Gojo close portrait",
@@ -70,7 +74,8 @@
    "expected_preserved_materials": [
     "headwear",
     "clothing"
-   ]
+   ],
+   "mesh_identity_strength": 0.4
   },
   "vegeta": {
    "label": "Vegeta close portrait",
@@ -101,7 +106,8 @@
    "expected_preserved_materials": [
     "headwear",
     "clothing"
-   ]
+   ],
+   "mesh_identity_strength": 0.4
   },
   "luffy_full": {
    "label": "Luffy full body",
@@ -116,7 +122,8 @@
    "expected_preserved_materials": [
     "headwear",
     "clothing"
-   ]
+   ],
+   "mesh_identity_strength": 0.4
   }
  },
  "rubric": {
