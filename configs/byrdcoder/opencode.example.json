@@ -17,6 +17,28 @@
       "*": "deny"
     }
   },
+  "mcp": {
+    "byrd-comfy": {
+      "type": "local",
+      "command": ["python", "{{BYRDHOUSE_ROOT}}/scripts/byrd_comfy_mcp.py"],
+      "environment": {
+        "BYRDHOUSE_ROOT": "{{BYRDHOUSE_ROOT}}",
+        "BYRD_COMFY_MCP_READONLY": "1"
+      },
+      "enabled": true
+    },
+    "comfyui-lab": {
+      "type": "local",
+      "command": ["npx", "-y", "comfyui-mcp@0.34.0"],
+      "environment": {
+        "COMFYUI_URL": "CHANGE_ME_lab_instance_loopback_port_8189_see_comfyui-mcp-lab.env.example",
+        "COMFYUI_MCP_PANEL_AUTOINSTALL": "0",
+        "COMFYUI_MCP_AUTOUPDATE": "0",
+        "COMFYUI_MCP_TOOL_MODE": "compact"
+      },
+      "enabled": false
+    }
+  },
   "agent": {
     "byrd-ask": {
       "description": "Tier 0 — read-only explanation of ByrdHouse code. No writes, no commands.",
@@ -109,7 +131,7 @@
       "mode": "primary",
       "temperature": 0.1,
       "prompt": "{file:./prompts/byrd-offline.md}",
-      "tools": { "write": false, "edit": false, "bash": false, "webfetch": false },
+      "tools": { "write": false, "edit": false, "bash": false, "webfetch": false, "byrd-comfy*": false, "comfyui-lab*": false },
       "permission": { "edit": "deny", "webfetch": "deny", "bash": { "*": "deny" } }
     },
     "byrd-private": {
@@ -117,7 +139,7 @@
       "mode": "primary",
       "temperature": 0.1,
       "prompt": "{file:./prompts/byrd-private.md}",
-      "tools": { "write": false, "edit": false, "bash": false, "webfetch": false },
+      "tools": { "write": false, "edit": false, "bash": false, "webfetch": false, "byrd-comfy*": false, "comfyui-lab*": false },
       "permission": { "edit": "deny", "webfetch": "deny", "bash": { "*": "deny" } }
     }
   }

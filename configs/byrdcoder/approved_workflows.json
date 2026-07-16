@@ -1,0 +1,28 @@
+{
+  "_comment": "Curated recipe set for the byrd-comfy-executor MCP (Role A, docs/BYRDCODER_COMFY_MCP.md). ONLY entries listed here are executable by the local coding agent — the full workflows/ and recipes/ directories are deliberately NOT auto-exposed. Adding an entry is a founder decision: recipe must exist, workflow path must live under workflows/, every overridable parameter must be mapped here with type + bounds (unmapped overrides are rejected by name). 'slot' routes an override into the recipe's slots; 'top' routes it to a top-level job payload field.",
+  "version": 0,
+  "approved": {
+    "fast_preview": {
+      "recipe": "fast_preview",
+      "recipe_version": 1,
+      "kind": "image.generate",
+      "workflow": "workflows/sdxl_base_api.json",
+      "description": "12-step speed run for composition/prompt previews — the harmless default for executor smoke tests (batch of drafts, no identity, no LoRA).",
+      "params": {
+        "prompt": { "type": "string", "maxlen": 500, "slot": "prompt" },
+        "aspect": { "type": "enum", "values": ["16:9", "9:16", "1:1", "2:3", "3:2", "21:9"], "top": "aspect" }
+      }
+    },
+    "hires_art": {
+      "recipe": "hires_art",
+      "recipe_version": 1,
+      "kind": "image.generate",
+      "workflow": "workflows/sdxl_base_api.json",
+      "description": "30-step quality pass with 1.5x hires scale — for winners picked from fast_preview batches.",
+      "params": {
+        "prompt": { "type": "string", "maxlen": 500, "slot": "prompt" },
+        "aspect": { "type": "enum", "values": ["16:9", "9:16", "1:1", "2:3", "3:2", "21:9"], "top": "aspect" }
+      }
+    }
+  }
+}

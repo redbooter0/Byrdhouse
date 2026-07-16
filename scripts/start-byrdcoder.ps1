@@ -36,6 +36,7 @@ if ($Regen -or -not (Test-Path $machineCfg)) {
     New-Item -ItemType Directory -Path $cfgDir -Force | Out-Null
     $body = Get-Content (Join-Path $exampleDir 'opencode.example.json') -Raw
     $body = $body.Replace('{{LMSTUDIO_URL}}', $lmUrl)
+    $body = $body.Replace('{{BYRDHOUSE_ROOT}}', ($root -replace '\\', '/'))
     Set-Content -Path $machineCfg -Value $body -Encoding UTF8
     Copy-Item (Join-Path $exampleDir 'prompts') $cfgDir -Recurse -Force
     Copy-Item (Join-Path $exampleDir 'allowlist.json') $cfgDir -Force

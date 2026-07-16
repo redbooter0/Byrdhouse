@@ -22,6 +22,8 @@ is a client of LM Studio the same way Cherry Studio is; the belt is untouched.
 | `scripts/test-byrdcoder.ps1` | Config / permission / allowlist behavior tests (live parts skip when services are down). |
 | `scripts/byrdcoder-benchmark.ps1` | Phase 5: the 7-task protocol per model in a disposable clone. |
 | `scripts/byrdcoder_review.py` | Phase 6: two-agent loop reviewer (approve / request_changes / block, fail-closed). |
+| `scripts/byrd_comfy_mcp.py` + `configs/byrdcoder/approved_workflows.json` | ComfyUI MCP layer, Role A: narrow approved-recipe executor over the belt (docs/BYRDCODER_COMFY_MCP.md). |
+| `configs/byrdcoder/comfyui-mcp-lab.env.example` | ComfyUI MCP layer, Role B: isolated workflow-architect lab (`comfyui-mcp@0.34.0`, pinned; disabled until the lab exists). |
 
 **Pinned bridge:** `opencode-lmstudio@0.3.1` (MIT, stable 2026-06-21 — pinned
 over the 1.0.0-rc prerelease deliberately). It discovers models from LM

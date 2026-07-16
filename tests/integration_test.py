@@ -1156,6 +1156,116 @@ def main():
               "byrd-gaming" not in raw_cfg and "http://" not in raw_cfg.replace(
                   "https://opencode.ai/config.json", ""))
 
+        # ── ByrdCoder ComfyUI MCP layer (docs/BYRDCODER_COMFY_MCP.md) ──────
+        # Role A behavioral proof: path traversal and unmapped parameter
+        # overrides are REJECTED; dangerous upstream tools stay absent;
+        # read-only mode hides write tools. Role B: pinned version + hard env.
+        print("== byrdcoder comfyui mcp layer")
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import byrd_comfy_mcp as bcm
+
+        check("comfy-mcp doc exists", (ROOT / "docs" / "BYRDCODER_COMFY_MCP.md").is_file())
+        manifest = bcm.load_manifest(ROOT)
+        check("comfy-mcp approved manifest loads with entries",
+              len(manifest["approved"]) >= 1, str(sorted(manifest["approved"])))
+        for rid, entry in manifest["approved"].items():
+            try:
+                bcm.resolve_workflow_path(ROOT, entry["workflow"])
+                wf_ok = True
+            except ValueError:
+                wf_ok = False
+            check(f"comfy-mcp approved '{rid}' workflow resolves safely", wf_ok)
+            rec = ROOT / "recipes" / f"{entry['recipe']}.v{entry['recipe_version']}.json"
+            check(f"comfy-mcp approved '{rid}' recipe file exists", rec.is_file())
+            check(f"comfy-mcp approved '{rid}' params are typed",
+                  all(p.get("type") in ("string", "int", "float", "enum")
+                      for p in entry.get("params", {}).values()))
+
+        def rejects(fn, *fargs):
+            try:
+                fn(*fargs)
+                return False
+            except ValueError:
+                return True
+        check("comfy-mcp rejects .. path traversal",
+              rejects(bcm.resolve_workflow_path, ROOT, "workflows/../db/byrdhouse.db"))
+        check("comfy-mcp rejects parent-escape traversal",
+              rejects(bcm.resolve_workflow_path, ROOT, "../secrets/evil.json"))
+        check("comfy-mcp rejects absolute paths",
+              rejects(bcm.resolve_workflow_path, ROOT, "/etc/passwd")
+              and rejects(bcm.resolve_workflow_path, ROOT, "C:/Windows/evil.json"))
+        check("comfy-mcp rejects paths outside workflows/",
+              rejects(bcm.resolve_workflow_path, ROOT, "recipes/fast_preview.v1.json"))
+
+        fp_entry = manifest["approved"]["fast_preview"]
+        check("comfy-mcp rejects unmapped override by name",
+              rejects(bcm.validate_overrides, fp_entry,
+                      {"prompt": "ok", "checkpoint_path": "../../evil"}))
+        check("comfy-mcp rejects enum value outside allowed set",
+              rejects(bcm.validate_overrides, fp_entry, {"aspect": "4:3"}))
+        check("comfy-mcp rejects overlong string override",
+              rejects(bcm.validate_overrides, fp_entry, {"prompt": "x" * 501}))
+        check("comfy-mcp accepts a valid mapped override set",
+              bcm.validate_overrides(fp_entry,
+                                     {"prompt": "castle at dawn", "aspect": "16:9"})
+              == {"prompt": "castle at dawn", "aspect": "16:9"})
+        int_entry = {"params": {"steps": {"type": "int", "min": 1, "max": 40}}}
+        check("comfy-mcp rejects out-of-bounds int override",
+              rejects(bcm.validate_overrides, int_entry, {"steps": 999})
+              and rejects(bcm.validate_overrides, int_entry, {"steps": 0}))
+
+        roster = {t["name"] for t in bcm.TOOLS}
+        check("comfy-mcp removed upstream tools stay absent",
+              not (roster & set(bcm.REMOVED_TOOLS)), str(roster & set(bcm.REMOVED_TOOLS)))
+        check("comfy-mcp keeps the useful surface",
+              {"list_recipes", "describe_recipe", "submit_recipe", "job_status",
+               "cancel_job", "regenerate", "asset_meta", "last_error"} <= roster)
+        os.environ["BYRD_COMFY_MCP_READONLY"] = "1"
+        try:
+            ro_roster = {t["name"] for t in bcm.visible_tools()}
+            check("comfy-mcp read-only mode hides write tools",
+                  not ({"submit_recipe", "cancel_job", "regenerate"} & ro_roster)
+                  and "list_recipes" in ro_roster)
+            blocked, is_err = bcm.call_tool({}, "submit_recipe", {"recipe_id": "fast_preview"})
+            check("comfy-mcp read-only mode blocks submit with a tier message",
+                  is_err and "read-only" in blocked.get("error", ""))
+        finally:
+            del os.environ["BYRD_COMFY_MCP_READONLY"]
+
+        oc_cfg = json.loads((bc_dir / "opencode.example.json").read_text())
+        mcp = oc_cfg.get("mcp", {})
+        check("comfy-mcp wired into opencode config, read-only by default",
+              mcp.get("byrd-comfy", {}).get("environment", {})
+                 .get("BYRD_COMFY_MCP_READONLY") == "1"
+              and mcp.get("byrd-comfy", {}).get("enabled") is True)
+        lab = mcp.get("comfyui-lab", {})
+        check("comfyui-lab pinned to 0.34.0 and disabled by default",
+              any("comfyui-mcp@0.34.0" in c for c in lab.get("command", []))
+              and lab.get("enabled") is False)
+        lab_env = lab.get("environment", {})
+        check("comfyui-lab env: no autoinstall/autoupdate, compact mode, no tokens",
+              lab_env.get("COMFYUI_MCP_PANEL_AUTOINSTALL") == "0"
+              and lab_env.get("COMFYUI_MCP_AUTOUPDATE") == "0"
+              and lab_env.get("COMFYUI_MCP_TOOL_MODE") == "compact"
+              and not ({"CIVITAI_API_TOKEN", "HUGGINGFACE_TOKEN", "COMFYUI_API_KEY"}
+                       & set(lab_env)))
+        for prof in ("byrd-offline", "byrd-private"):
+            tools = oc_cfg["agent"][prof]["tools"]
+            check(f"comfy-mcp servers disabled in {prof}",
+                  tools.get("byrd-comfy*") is False and tools.get("comfyui-lab*") is False)
+
+        lab_env_file = (bc_dir / "comfyui-mcp-lab.env.example").read_text()
+        check("comfyui-lab env example pins version + reviewed commit",
+              "comfyui-mcp@0.34.0" in lab_env_file
+              and "6a7ceeb9b578a149b0da65b43e0def708f0b3078" in lab_env_file)
+        lab_url_lines = [ln for ln in lab_env_file.splitlines()
+                         if ln.startswith("COMFYUI_URL=")]
+        check("comfyui-lab env example never points at production :8188",
+              lab_url_lines and all("8188" not in ln for ln in lab_url_lines))
+        check("lab + candidates gate READMEs exist",
+              (ROOT / "workflows" / "experiments" / "comfyui-mcp-lab" / "README.md").is_file()
+              and (ROOT / "workflows" / "candidates" / "README.md").is_file())
+
         print("== stats + report + dashboard")
         st = api("/stats")
         check("stats counts artifacts", st["artifacts_total"] >= 4, str(st))

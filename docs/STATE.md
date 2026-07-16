@@ -63,6 +63,15 @@ Odysseus/smart-home/Stripe is removed from this repo. Cherry Studio remains the 
   action on GAMING:** install opencode CLI, run `byrdcoder-preflight.ps1` +
   `test-byrdcoder.ps1`, then the acceptance checkpoint and Phase 5 benchmark
   of the installed Qwen/Qwopus models.
+- **ByrdCoder ComfyUI MCP layer (2026-07-16)**: two strictly separated roles —
+  Role A `byrd_comfy_mcp.py`, a narrow approved-recipe executor that submits
+  normal belt jobs (curated manifest only, traversal/unmapped overrides
+  rejected + tested, publish/output-root/set_defaults structurally absent,
+  read-only by default); Role B `comfyui-mcp@0.34.0` (pinned, commit
+  `6a7ceeb9…`) as an isolated workflow architect against a future Workflow
+  Lab ComfyUI, disabled until that lab exists, candidates gated by the
+  7-gate checklist in `workflows/candidates/README.md`. See
+  docs/BYRDCODER_COMFY_MCP.md for the acceptance checkpoint.
 
 ## What worked before (U0 foundation)
 
