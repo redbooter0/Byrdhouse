@@ -987,10 +987,6 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         die(f"recipe '{recipe.get('id', recipe_name)}' is not a face-zone identity-edit recipe")
 
     identity = dict(recipe.get("identity") or {})
-    try:
-        selected_identity_lora, lora_status = select_identity_lora(root, identity, identity_lora)
-    except ValueError as exc:
-        die(str(exc))
 
     prompt, vary_picks = _render_recipe_prompt(recipe, dict(slots or {}))
     preset_key = target_preset or "auto"
@@ -1027,6 +1023,21 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         die(f"engine.workflow does not exist: {workflow_rel}")
     if "mesh_seed" in workflow_rel and identity_reference_path is None:
         die("face-zone mesh workflow requires a reviewed identity reference; refusing generic inpaint fallback")
+
+    # Identity conditioning (free-lane skeleton, 2026-07-16): a workflow that
+    # anchors identity to a REAL photo (IP-Adapter plus-face — its graph has
+    # an "IDENTITY PHOTO" LoadImage) may run with NO LoRA at all; that is the
+    # 100% license-clean path while no identity LoRA is deployed. Everything
+    # else still requires an explicit, honestly-labeled LoRA.
+    photo_anchored = '"IDENTITY PHOTO"' in (root / workflow_rel).read_text(encoding="utf-8-sig")
+    try:
+        selected_identity_lora, lora_status = select_identity_lora(root, identity, identity_lora)
+    except ValueError as exc:
+        if photo_anchored:
+            selected_identity_lora = None
+            lora_status = "none — photo-anchored identity (IP-Adapter plus-face, license-clean)"
+        else:
+            die(str(exc))
 
     # This command is deliberately separate from ComfyUI: face outlining uses
     # CPU PyTorch even while the image server remains on the RTX 3070.
@@ -1384,8 +1395,9 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
     identity_clip_weight = float(
         engine.get("identity_clip_strength") or identity.get("clip_strength") or identity_model_weight
     )
-    insert_lora(graph, selected_identity_lora, identity_model_weight,
-                lora_id="byrd_identity_lora", clip_strength=identity_clip_weight)
+    if selected_identity_lora:
+        insert_lora(graph, selected_identity_lora, identity_model_weight,
+                    lora_id="byrd_identity_lora", clip_strength=identity_clip_weight)
 
     outputs = submit_and_wait(comfy, graph, resolved_job_id)
     zone_dir = Path(zone["zone_file"]).parent

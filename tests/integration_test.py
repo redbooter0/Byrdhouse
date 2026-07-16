@@ -1236,6 +1236,24 @@ def main():
         check("non-JSON error bodies are still printed",
               "some html error page" in bi._format_comfy_http_error(500, "some html error page"))
 
+        # Free swap stack skeleton (docs/FREE_SWAP_STACK.md): photo-anchored
+        # identity needs NO LoRA and the doc keeps the lane license-clean.
+        free_doc = (ROOT / "docs" / "FREE_SWAP_STACK.md")
+        check("free swap stack skeleton doc exists",
+              free_doc.is_file() and "Excluded on purpose" in free_doc.read_text())
+        bi_source = (ROOT / "scripts" / "byrdimage.py").read_text(encoding="utf-8-sig")
+        check("photo-anchored workflows run LoRA-free (license-clean identity)",
+              '"IDENTITY PHOTO\\"" in' in repr(bi_source) or '\'"IDENTITY PHOTO"\'' in bi_source
+              or '"IDENTITY PHOTO"' in bi_source)
+        check("LoRA splice is conditional, never mandatory",
+              "if selected_identity_lora:" in bi_source
+              and "photo-anchored identity" in bi_source)
+        ipad_graph = json.loads((ROOT / "workflows" / "sd15_face_zone_ipadapter_api.json")
+                                .read_text(encoding="utf-8-sig"))
+        check("avenue-B zone graph really has the IDENTITY PHOTO anchor node",
+              any(n.get("_meta", {}).get("title") == "IDENTITY PHOTO"
+                  for n in ipad_graph.values() if isinstance(n, dict)))
+
         print("== stats + report + dashboard")
         st = api("/stats")
         check("stats counts artifacts", st["artifacts_total"] >= 4, str(st))
