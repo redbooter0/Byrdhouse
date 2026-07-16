@@ -1,0 +1,78 @@
+{
+  "workflow_family": "BYRDHOUSE LIGHTWEIGHT SOCIAL FACE INSERTION",
+  "version": "1.0.0",
+  "comfyui_root": "E:\\ByrdHouse\\Generators\\ComfyUI",
+  "reference_folder": "E:\\ByrdHouse\\profiles\\me\\references",
+  "target_folder": "E:\\ByrdHouse\\Images\\Targets",
+  "input_folder": "E:\\ByrdHouse\\Generators\\ComfyUI\\input",
+  "model": "inswapper_128.onnx",
+  "workflows": [
+    {
+      "slug": "social_main_head_fast",
+      "description": "BYRDHOUSE — SOCIAL MAIN HEAD / FAST",
+      "face_mode": "PRIMARY_HEAD_ONLY",
+      "api": "byrdhouse_social_main_head_fast_api_v1.json",
+      "ui": "byrdhouse_social_main_head_fast_ui_v1.json"
+    },
+    {
+      "slug": "social_main_head_polished",
+      "description": "BYRDHOUSE — SOCIAL MAIN HEAD / POLISHED",
+      "face_mode": "PRIMARY_HEAD_ONLY",
+      "api": "byrdhouse_social_main_head_polished_api_v1.json",
+      "ui": "byrdhouse_social_main_head_polished_ui_v1.json"
+    },
+    {
+      "slug": "social_group_main_only",
+      "description": "BYRDHOUSE — GROUP PHOTO / MAIN PERSON ONLY",
+      "face_mode": "PRIMARY_HEAD_ONLY",
+      "api": "byrdhouse_social_group_main_only_api_v1.json",
+      "ui": "byrdhouse_social_group_main_only_ui_v1.json"
+    },
+    {
+      "slug": "social_group_all_heads_same_face",
+      "description": "BYRDHOUSE — GROUP PHOTO / ALL HEADS SAME FACE",
+      "face_mode": "ALL_HEADS",
+      "api": "byrdhouse_social_group_all_heads_same_face_api_v1.json",
+      "ui": "byrdhouse_social_group_all_heads_same_face_ui_v1.json"
+    },
+    {
+      "slug": "game_character_main_head",
+      "description": "BYRDHOUSE — GAME CHARACTER / MAIN HEAD",
+      "face_mode": "PRIMARY_HEAD_ONLY",
+      "api": "byrdhouse_game_character_main_head_api_v1.json",
+      "ui": "byrdhouse_game_character_main_head_ui_v1.json"
+    },
+    {
+      "slug": "social_main_head_zoom_manual",
+      "description": "BYRDHOUSE ? PRIMARY FACE SWAP WITH COMFY CROP/ZOOM LOOP",
+      "face_mode": "PRIMARY_HEAD_ONLY",
+      "api": "byrdhouse_social_main_head_zoom_manual_api_v1.json",
+      "ui": "byrdhouse_social_main_head_zoom_manual_ui_v1.json"
+    },
+    {
+      "slug": "social_main_head_face_model_v3",
+      "description": "BYRDHOUSE — CAREY V3 BLENDED IDENTITY MODEL / FULL OUTPUT",
+      "face_mode": "PRIMARY_HEAD_ONLY",
+      "identity_model": "byrdhouse_carey_v3.safetensors",
+      "api": "byrdhouse_social_main_head_face_model_v3_api_v1.json"
+    },
+    {
+      "slug": "social_main_head_face_model_v3_aiupscale",
+      "description": "BYRDHOUSE — CAREY V3 MODEL / REAL-ESRGAN PRE-UPSCALE",
+      "face_mode": "PRIMARY_HEAD_ONLY",
+      "identity_model": "byrdhouse_carey_v3.safetensors",
+      "upscale_model": "RealESRGAN_x4plus.pth",
+      "api": "byrdhouse_social_main_head_face_model_v3_aiupscale_api_v1.json"
+    }
+  ],
+  "operator_notes": [
+    "Put any target social or game image in the ComfyUI input folder.",
+    "Set TARGET IMAGE to that filename in the target LoadImage node.",
+    "Use target face index 0 for the main detected face.",
+    "Use comma-separated indices such as 0,1,2 to apply the same source face to multiple heads.",
+    "The all-heads preset is intentionally separate and opt-in.",
+    "The zoom workflow uses ImageCrop and ImageScale after face swap; adjust crop x/y/width/height to make the selected person more visible.",
+    "The Carey V3 model blends original photos with cloud-generated neutral, three-quarter, profile, and teeth-visible smile references.",
+    "The Real-ESRGAN preset is for small or blurry game artwork; it creates face pixels before ReActor runs."
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "_comment": "ByrdCast Swap V0 config (docs/BYRDCAST_SWAP_V0.md). Target-image-first local face swap for the RTX 3070 8GB / i9-10850K / 32GB box. Hosts are NEVER hardcoded — the ComfyUI URL is read from byrdhouse.config.json services.comfyui. This file holds only tunables. identities_root uses <identity> as the folder name; approved references live in <identities_root>/<identity>/approved.",
+  "version": 0,
+  "identities_root": "Identities",
+  "approved_subdir": "approved",
+  "outputs_root": "Outputs/ByrdCastSwap",
+  "workflow": "workflows/byrdcast_swap_v0.json",
+  "hardware": {
+    "_comment": "8GB rules: batch 1, no video, modest resolution first, unload LM Studio before the heavy ComfyUI pass, never assume >8GB.",
+    "vram_budget_mb": 7200,
+    "batch_size": 1,
+    "preview_size": 768,
+    "refine_size": 896,
+    "unload_lmstudio_before_swap": true,
+    "keep_debug_files": true
+  },
+  "reference_selection": {
+    "_comment": "Weights for choosing the best approved reference against the target face. Higher weight = matters more. When a detector cannot measure a factor (e.g. angle/expression without landmarks), that factor is recorded as neutral and the weights renormalize over what WAS measured — honest, never a silent guess.",
+    "weights": {
+      "face_angle": 0.35,
+      "expression": 0.15,
+      "lighting": 0.25,
+      "quality": 0.25
+    },
+    "min_reference_face_px": 96
+  },
+  "masks": {
+    "_comment": "Geometric mask fractions relative to the detected face box; used when a semantic parser is unavailable. face = inner oval; jaw = lower third; hairline = top band; ears = side bands; neck = below-chin band; skin = union minus hair band. Feather softens every boundary.",
+    "feather_px": 9,
+    "face_oval_scale": 1.02,
+    "jaw_band_frac": 0.34,
+    "hairline_band_frac": 0.20,
+    "ear_band_frac": 0.22,
+    "neck_band_frac": 0.28
+  },
+  "swap": {
+    "_comment": "Route order tried in turn; the first available wins and is recorded. 'comfy_reactor' submits the workflow to the configured ComfyUI; 'insightface' runs inswapper in-process if the package is importable. If none is available the job fails closed (accepted=false).",
+    "route_order": ["comfy_reactor", "insightface"],
+    "restore_model": "GFPGANv1.4.pth",
+    "restore_visibility": 1.0,
+    "codeformer_weight": 0.5
+  },
+  "refine": {
+    "_comment": "Masked restore/refinement AFTER the swap — face-only, must not touch hair/clothes/background. FaceDetailer (Impact Pack) if present, else a light face-only sharpen. Optional low-denoise inpaint blend around the face/hair/neck seam.",
+    "use_facedetailer_if_available": true,
+    "facedetailer_denoise": 0.25,
+    "inpaint_blend": {
+      "enabled": true,
+      "denoise": 0.2,
+      "grow_mask_px": 12
+    }
+  },
+  "scoring": {
+    "_comment": "Candidate score 0-1 per factor, then a weighted overall. accept_threshold gates accepted=true; below it the run is SAVED but marked accepted=false with the weakest factors named. identity_similarity uses the face embedding cosine when both sides were embedded (insightface); otherwise it is recorded as unmeasured and cannot alone pass the gate.",
+    "weights": {
+      "identity_similarity": 0.40,
+      "mask_fit": 0.15,
+      "landmark_alignment": 0.20,
+      "blend_quality": 0.15,
+      "artifact_risk": 0.10
+    },
+    "accept_threshold": 0.62
+  },
+  "quality_modes": {
+    "_comment": "quality flag presets. fast = swap + light restore, no inpaint blend; best = swap + FaceDetailer + inpaint blend + the larger refine size.",
+    "fast":    { "use_facedetailer": false, "inpaint_blend": false, "refine_size": 768 },
+    "balanced":{ "use_facedetailer": true,  "inpaint_blend": false, "refine_size": 768 },
+    "best":    { "use_facedetailer": true,  "inpaint_blend": true,  "refine_size": 896 }
+  }
+}

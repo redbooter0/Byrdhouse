@@ -1,0 +1,48 @@
+{
+  "_comment": "CPU zone preview — the inspectable pre-step (Codex's rule, belt edition): the GPU must not decide the mask. This graph runs ONLY detection: find the face on the target, build the soft combined mask, and save BOTH a diagnostic overlay (zone glowing on the character) and the mask itself — no checkpoint, no diffusion, seconds not minutes. The founder eyeballs/approves the zone, then the swap runs with that exact mask (image.faceswap mask_artifact). Needs Impact Pack (BboxDetectorSEGS/SegsToCombinedMask) + the Ultralytics face detector; MaskToImage/ImageBlend are core ComfyUI.",
+  "target": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" }
+  },
+  "det": {
+    "class_type": "UltralyticsDetectorProvider",
+    "inputs": { "model_name": "bbox/face_yolov8m.pt" }
+  },
+  "segs": {
+    "class_type": "BboxDetectorSEGS",
+    "inputs": {
+      "bbox_detector": ["det", 0],
+      "image": ["target", 0],
+      "threshold": 0.5,
+      "dilation": 10,
+      "crop_factor": 3.0,
+      "drop_size": 10,
+      "labels": "all"
+    }
+  },
+  "cmask": {
+    "class_type": "SegsToCombinedMask",
+    "inputs": { "segs": ["segs", 0] }
+  },
+  "maskimg": {
+    "class_type": "MaskToImage",
+    "inputs": { "mask": ["cmask", 0] }
+  },
+  "overlay": {
+    "class_type": "ImageBlend",
+    "inputs": {
+      "image1": ["target", 0],
+      "image2": ["maskimg", 0],
+      "blend_factor": 0.4,
+      "blend_mode": "screen"
+    }
+  },
+  "save_overlay": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "byrdhouse_zone_overlay", "images": ["overlay", 0] }
+  },
+  "save_mask": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "byrdhouse_zone_mask", "images": ["maskimg", 0] }
+  }
+}

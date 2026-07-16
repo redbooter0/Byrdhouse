@@ -1,0 +1,8 @@
+{
+  "prompt_id": "3b938a70-9ad8-44b0-a051-9b8968f58906",
+  "workflow": "E:\\ByrdHouse\\Images\\Workflows\\byrdhouse_face_swap_social\\byrdhouse_social_main_head_direct_source_aiupscale_api_v1.json",
+  "target": "E:\\ByrdHouse\\Images\\Targets\\anime_games\\anime_game_4.jpg",
+  "source": "E:\\ByrdHouse\\profiles\\me\\references\\me_photo_08.jpg",
+  "face_index": "0",
+  "comfy_output": "E:\\ByrdHouse\\Generators\\ComfyUI\\output\\ByrdHouse\\FaceSwap\\carey_direct_source_realesrgan_00005_.png"
+}

@@ -2,93 +2,8 @@
   "id": "00000000-0000-0000-0000-000000000000",
   "revision": 1,
   "last_node_id": 127,
-  "last_link_id": 112,
+  "last_link_id": 122,
   "nodes": [
-    {
-      "id": 108,
-      "type": "GetNode",
-      "pos": [
-        783.7565041461629,
-        -115.87653602234522
-      ],
-      "size": [
-        210,
-        58
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 0,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "VAE",
-          "type": "VAE",
-          "links": [
-            90
-          ]
-        }
-      ],
-      "title": "Get_Vae",
-      "properties": {
-        "ue_properties": {
-          "version": "7.8",
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {}
-        }
-      },
-      "widgets_values": [
-        "Vae"
-      ],
-      "color": "#322",
-      "bgcolor": "#533"
-    },
-    {
-      "id": 117,
-      "type": "SetNode",
-      "pos": [
-        -365.0572875355777,
-        -176.40315288255076
-      ],
-      "size": [
-        210,
-        58
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 42,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "INT",
-          "type": "INT",
-          "link": 97
-        }
-      ],
-      "outputs": [
-        {
-          "name": "*",
-          "type": "*",
-          "links": null
-        }
-      ],
-      "title": "Set_Height",
-      "properties": {
-        "previousName": "Height",
-        "ue_properties": {
-          "version": "7.8",
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {}
-        }
-      },
-      "widgets_values": [
-        "Height"
-      ],
-      "color": "#1b4669",
-      "bgcolor": "#29699c"
-    },
     {
       "id": "92:62",
       "type": "Flux2Scheduler",
@@ -120,7 +35,7 @@
           "widget": {
             "name": "width"
           },
-          "link": 98
+          "link": 118
         },
         {
           "name": "height",
@@ -128,7 +43,7 @@
           "widget": {
             "name": "height"
           },
-          "link": 99
+          "link": 119
         }
       ],
       "outputs": [
@@ -159,211 +74,6 @@
       "bgcolor": "#335"
     },
     {
-      "id": 119,
-      "type": "GetNode",
-      "pos": [
-        2224.0601055887328,
-        37.30069068760406
-      ],
-      "size": [
-        210,
-        58
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 1,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "INT",
-          "type": "INT",
-          "links": [
-            99
-          ]
-        }
-      ],
-      "title": "Get_Height",
-      "properties": {
-        "ue_properties": {
-          "version": "7.8",
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {}
-        }
-      },
-      "widgets_values": [
-        "Height"
-      ],
-      "color": "#1b4669",
-      "bgcolor": "#29699c"
-    },
-    {
-      "id": 118,
-      "type": "GetNode",
-      "pos": [
-        2095.3903219468816,
-        31.725208903727342
-      ],
-      "size": [
-        210,
-        60
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 2,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "INT",
-          "type": "INT",
-          "links": [
-            98
-          ]
-        }
-      ],
-      "title": "Get_Width",
-      "properties": {
-        "ue_properties": {
-          "version": "7.8",
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {}
-        }
-      },
-      "widgets_values": [
-        "Width"
-      ],
-      "color": "#1b4669",
-      "bgcolor": "#29699c"
-    },
-    {
-      "id": 107,
-      "type": "GetNode",
-      "pos": [
-        -375.4273029176574,
-        765.89407518997
-      ],
-      "size": [
-        210,
-        60
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 3,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "VAE",
-          "type": "VAE",
-          "links": [
-            89
-          ]
-        }
-      ],
-      "title": "Get_Vae",
-      "properties": {
-        "ue_properties": {
-          "version": "7.8",
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {}
-        }
-      },
-      "widgets_values": [
-        "Vae"
-      ],
-      "color": "#322",
-      "bgcolor": "#533"
-    },
-    {
-      "id": 122,
-      "type": "GetNode",
-      "pos": [
-        681.2738568607946,
-        -92.76225510516058
-      ],
-      "size": [
-        210,
-        60
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 4,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "CLIP",
-          "type": "CLIP",
-          "links": [
-            102
-          ]
-        }
-      ],
-      "title": "Get_Clip",
-      "properties": {
-        "ue_properties": {
-          "version": "7.8",
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {}
-        }
-      },
-      "widgets_values": [
-        "Clip"
-      ],
-      "color": "#432",
-      "bgcolor": "#653"
-    },
-    {
-      "id": 116,
-      "type": "SetNode",
-      "pos": [
-        -362.6085391317958,
-        -214.3583888358334
-      ],
-      "size": [
-        210,
-        60
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 41,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "INT",
-          "type": "INT",
-          "link": 96
-        }
-      ],
-      "outputs": [
-        {
-          "name": "*",
-          "type": "*",
-          "links": null
-        }
-      ],
-      "title": "Set_Width",
-      "properties": {
-        "previousName": "Width",
-        "ue_properties": {
-          "version": "7.8",
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {}
-        }
-      },
-      "widgets_values": [
-        "Width"
-      ],
-      "color": "#1b4669",
-      "bgcolor": "#29699c"
-    },
-    {
       "id": "92:81",
       "type": "GetImageSize",
       "pos": [
@@ -391,14 +101,16 @@
           "name": "width",
           "type": "INT",
           "links": [
-            96
+            118,
+            120
           ]
         },
         {
           "name": "height",
           "type": "INT",
           "links": [
-            97
+            119,
+            121
           ]
         },
         {
@@ -420,141 +132,6 @@
       "widgets_values": []
     },
     {
-      "id": 106,
-      "type": "SetNode",
-      "pos": [
-        -394.1088153206235,
-        10.522711653835119
-      ],
-      "size": [
-        210,
-        58
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 25,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "MODEL",
-          "type": "MODEL",
-          "link": 86
-        }
-      ],
-      "outputs": [
-        {
-          "name": "*",
-          "type": "*",
-          "links": null
-        }
-      ],
-      "title": "Set_Model",
-      "properties": {
-        "previousName": "Model",
-        "ue_properties": {
-          "version": "7.8",
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {}
-        }
-      },
-      "widgets_values": [
-        "Model"
-      ],
-      "color": "#223",
-      "bgcolor": "#335"
-    },
-    {
-      "id": 105,
-      "type": "SetNode",
-      "pos": [
-        -428.1770571748895,
-        123.8875594864478
-      ],
-      "size": [
-        210,
-        58
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 27,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "CLIP",
-          "type": "CLIP",
-          "link": 87
-        }
-      ],
-      "outputs": [
-        {
-          "name": "*",
-          "type": "*",
-          "links": null
-        }
-      ],
-      "title": "Set_Clip",
-      "properties": {
-        "previousName": "Clip",
-        "ue_properties": {
-          "version": "7.8",
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {}
-        }
-      },
-      "widgets_values": [
-        "Clip"
-      ],
-      "color": "#432",
-      "bgcolor": "#653"
-    },
-    {
-      "id": 104,
-      "type": "SetNode",
-      "pos": [
-        -404.71006140567073,
-        272.55469951497884
-      ],
-      "size": [
-        210,
-        60
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 24,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "VAE",
-          "type": "VAE",
-          "link": 88
-        }
-      ],
-      "outputs": [
-        {
-          "name": "*",
-          "type": "*",
-          "links": null
-        }
-      ],
-      "title": "Set_Vae",
-      "properties": {
-        "previousName": "Vae",
-        "ue_properties": {
-          "version": "7.8",
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {}
-        }
-      },
-      "widgets_values": [
-        "Vae"
-      ],
-      "color": "#322",
-      "bgcolor": "#533"
-    },
-    {
       "id": "92:72",
       "type": "VAELoader",
       "pos": [
@@ -574,7 +151,9 @@
           "name": "VAE",
           "type": "VAE",
           "links": [
-            88
+            115,
+            116,
+            117
           ]
         }
       ],
@@ -615,7 +194,7 @@
           "name": "MODEL",
           "type": "MODEL",
           "links": [
-            86
+            113
           ]
         }
       ],
@@ -662,7 +241,7 @@
         {
           "name": "vae",
           "type": "VAE",
-          "link": 89
+          "link": 115
         }
       ],
       "outputs": [
@@ -867,7 +446,7 @@
         }
       },
       "widgets_values": [
-        "REFERENCE_1_SUBJECT.png",
+        "REFERENCE_1_SUBJECT.jpg",
         "image"
       ],
       "title": "REFERENCE 1 — SUBJECT / POSE / COMPOSITION"
@@ -897,7 +476,7 @@
         {
           "name": "vae",
           "type": "VAE",
-          "link": 90
+          "link": 116
         }
       ],
       "outputs": [
@@ -942,7 +521,7 @@
           "name": "CLIP",
           "type": "CLIP",
           "links": [
-            87
+            114
           ]
         }
       ],
@@ -1045,7 +624,7 @@
         {
           "name": "IMAGE",
           "type": "IMAGE",
-          "links": []
+          "links": null
         }
       ],
       "properties": {
@@ -1132,46 +711,6 @@
       ],
       "color": "#232",
       "bgcolor": "#353"
-    },
-    {
-      "id": 124,
-      "type": "GetNode",
-      "pos": [
-        3606.6151408205396,
-        271.1309058391761
-      ],
-      "size": [
-        210,
-        60
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 11,
-      "mode": 4,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": [
-            110
-          ]
-        }
-      ],
-      "title": "Get_Raw Gen",
-      "properties": {
-        "ue_properties": {
-          "version": "7.8",
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {}
-        }
-      },
-      "widgets_values": [
-        "Raw Gen"
-      ],
-      "color": "#2a363b",
-      "bgcolor": "#3f5159"
     },
     {
       "id": "92:64",
@@ -1265,7 +804,7 @@
           "widget": {
             "name": "width"
           },
-          "link": 100
+          "link": 120
         },
         {
           "name": "height",
@@ -1273,7 +812,7 @@
           "widget": {
             "name": "height"
           },
-          "link": 101
+          "link": 121
         }
       ],
       "outputs": [
@@ -1302,86 +841,6 @@
       ],
       "color": "#223",
       "bgcolor": "#335"
-    },
-    {
-      "id": 121,
-      "type": "GetNode",
-      "pos": [
-        2602.5234929076814,
-        84.53695895550207
-      ],
-      "size": [
-        210,
-        50
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 12,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "INT",
-          "type": "INT",
-          "links": [
-            101
-          ]
-        }
-      ],
-      "title": "Get_Height",
-      "properties": {
-        "ue_properties": {
-          "version": "7.8",
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {}
-        }
-      },
-      "widgets_values": [
-        "Height"
-      ],
-      "color": "#1b4669",
-      "bgcolor": "#29699c"
-    },
-    {
-      "id": 120,
-      "type": "GetNode",
-      "pos": [
-        2588.860917528741,
-        11.097723686673866
-      ],
-      "size": [
-        210,
-        50
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 13,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "INT",
-          "type": "INT",
-          "links": [
-            100
-          ]
-        }
-      ],
-      "title": "Get_Width",
-      "properties": {
-        "ue_properties": {
-          "version": "7.8",
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {}
-        }
-      },
-      "widgets_values": [
-        "Width"
-      ],
-      "color": "#1b4669",
-      "bgcolor": "#29699c"
     },
     {
       "id": "92:73",
@@ -1436,91 +895,6 @@
       "bgcolor": "#335"
     },
     {
-      "id": 123,
-      "type": "SetNode",
-      "pos": [
-        3173.7178697714207,
-        -136.12276965358743
-      ],
-      "size": [
-        210,
-        60
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 51,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "link": 103
-        }
-      ],
-      "outputs": [
-        {
-          "name": "*",
-          "type": "*",
-          "links": null
-        }
-      ],
-      "title": "Set_Raw Gen",
-      "properties": {
-        "previousName": "Raw Gen",
-        "ue_properties": {
-          "version": "7.8",
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {}
-        }
-      },
-      "widgets_values": [
-        "Raw Gen"
-      ],
-      "color": "#2a363b",
-      "bgcolor": "#3f5159"
-    },
-    {
-      "id": 110,
-      "type": "GetNode",
-      "pos": [
-        3076.118360118422,
-        -309.34757051850585
-      ],
-      "size": [
-        210,
-        58
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 14,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "VAE",
-          "type": "VAE",
-          "links": [
-            91
-          ]
-        }
-      ],
-      "title": "Get_Vae",
-      "properties": {
-        "ue_properties": {
-          "version": "7.8",
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {}
-        }
-      },
-      "widgets_values": [
-        "Vae"
-      ],
-      "color": "#322",
-      "bgcolor": "#533"
-    },
-    {
       "id": "92:65",
       "type": "VAEDecode",
       "pos": [
@@ -1543,7 +917,7 @@
         {
           "name": "vae",
           "type": "VAE",
-          "link": 91
+          "link": 117
         }
       ],
       "outputs": [
@@ -1552,8 +926,8 @@
           "type": "IMAGE",
           "links": [
             65,
-            103,
-            111
+            111,
+            122
           ]
         }
       ],
@@ -1853,46 +1227,6 @@
       "bgcolor": "#335"
     },
     {
-      "id": 112,
-      "type": "GetNode",
-      "pos": [
-        2112.426665392629,
-        -290.1004260416233
-      ],
-      "size": [
-        210,
-        60
-      ],
-      "flags": {
-        "collapsed": true
-      },
-      "order": 15,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "MODEL",
-          "type": "MODEL",
-          "links": [
-            92
-          ]
-        }
-      ],
-      "title": "Get_Model",
-      "properties": {
-        "ue_properties": {
-          "version": "7.8",
-          "widget_ue_connectable": {},
-          "input_ue_unconnectable": {}
-        }
-      },
-      "widgets_values": [
-        "Model"
-      ],
-      "color": "#223",
-      "bgcolor": "#335"
-    },
-    {
       "id": 115,
       "type": "XIS_INT_Slider",
       "pos": [
@@ -1999,7 +1333,7 @@
         {
           "name": "clip",
           "type": "CLIP",
-          "link": 102
+          "link": 114
         }
       ],
       "outputs": [
@@ -2024,7 +1358,7 @@
         }
       },
       "widgets_values": [
-        "Use Reference 1 as the subject, identity, pose, camera angle, body proportions, and composition. Use Reference 2 as the costume, clothing design, materials, colors, texture, styling, and visual treatment. Transform the subject naturally while preserving recognizable facial identity and anatomy. Make the transferred outfit fit the subject correctly with believable seams, folds, layering, shadows, and material response. Keep the scene coherent and production-ready. Do not copy the face or body identity from Reference 2. High detail, clean edges, natural lighting, cinematic depth, realistic texture, no extra limbs, no warped hands, no text, no watermark."
+        "A. IDENTITY PRESERVATION: Transform the real subject into a recognizable high-quality video-game character. Reference 1 dominates facial likeness, face proportions, hairstyle, skin tone, age, body proportions, pose, camera angle, framing, important personal features, and core outfit silhouette. Preserve the subject's identity; do not replace the person with a generic game face. B. GAME TRANSFORMATION: Use Reference 2 only for gaming style, costume materials, lighting language, and visual genre. Make the gaming transformation intentional and visible rather than merely beautifying, sharpening, or adding generic realism. STYLE MODE: AAA. C. COSTUME AND MATERIALS: Adapt the existing outfit silhouette into coherent game-character costume design with readable fabric, leather, metal, polymer, seams, folds, layering, and believable fit; keep the redesign conservative unless the selected style profile calls for stronger redesign. Do not copy the face, ethnicity, age, or body identity from Reference 2. D. LIGHTING AND RENDERING: cinematic game lighting, clean silhouette separation, controlled highlights, readable material response, detailed hair, natural skin texture, professional promotional character rendering. E. COMPOSITION: preserve the subject's pose, camera angle, scale, and composition from Reference 1 unless a deliberate game presentation is requested; keep the face unobstructed and hands anatomically correct. F. QUALITY CONTROLS: anatomically correct hands, five fingers when visible, no extra limbs, no warped face, no plastic or waxy skin, no muddy costume textures, no random armor that obscures identity, no unnecessary gender or ethnicity changes, no severe age change, no text, no watermark. INTENSITY PROFILE: BALANCED GAMING."
       ],
       "color": "#432",
       "bgcolor": "#653"
@@ -2065,7 +1399,7 @@
         }
       },
       "widgets_values": [
-        -1,
+        30701307,
         "",
         "",
         ""
@@ -2099,7 +1433,7 @@
         {
           "name": "image",
           "type": "IMAGE",
-          "link": 110
+          "link": 122
         }
       ],
       "outputs": [
@@ -2385,7 +1719,7 @@
         }
       },
       "widgets_values": [
-        "REFERENCE_2_COSTUME.png",
+        "REFERENCE_2_ZELDA_TWILIGHT.jpg",
         "image"
       ],
       "title": "REFERENCE 2 — COSTUME / STYLE / MATERIALS"
@@ -2408,7 +1742,7 @@
         {
           "name": "model",
           "type": "MODEL",
-          "link": 92
+          "link": 113
         },
         {
           "name": "positive",
@@ -2488,404 +1822,458 @@
     }
   ],
   "links": [
+    {
+      "value": [
+        34,
+        "92:73",
+        0,
+        "92:64",
+        0,
+        "NOISE"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        35,
+        "92:63",
+        0,
+        "92:64",
+        1,
+        "GUIDER"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        36,
+        "92:61",
+        0,
+        "92:64",
+        2,
+        "SAMPLER"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        37,
+        "92:62",
+        0,
+        "92:64",
+        3,
+        "SIGMAS"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        38,
+        "92:66",
+        0,
+        "92:64",
+        4,
+        "LATENT"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        39,
+        "92:64",
+        0,
+        "92:65",
+        0,
+        "LATENT"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        42,
+        "92:79:76",
+        0,
+        "92:84:76",
+        0,
+        "CONDITIONING"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        43,
+        "92:84:78",
+        0,
+        "92:84:76",
+        1,
+        "LATENT"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        44,
+        "92:85",
+        0,
+        "92:84:78",
+        0,
+        "IMAGE"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        46,
+        "92:79:77",
+        0,
+        "92:84:77",
+        0,
+        "CONDITIONING"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        47,
+        "92:84:78",
+        0,
+        "92:84:77",
+        1,
+        "LATENT"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        48,
+        "92:74",
+        0,
+        "92:86",
+        0,
+        "CONDITIONING"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        49,
+        "92:80",
+        0,
+        "92:81",
+        0,
+        "IMAGE"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        50,
+        "92:86",
+        0,
+        "92:79:76",
+        0,
+        "CONDITIONING"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        51,
+        "92:79:78",
+        0,
+        "92:79:76",
+        1,
+        "LATENT"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        52,
+        "92:80",
+        0,
+        "92:79:78",
+        0,
+        "IMAGE"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        54,
+        "92:74",
+        0,
+        "92:79:77",
+        0,
+        "CONDITIONING"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        55,
+        "92:79:78",
+        0,
+        "92:79:77",
+        1,
+        "LATENT"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        59,
+        "92:84:77",
+        0,
+        "92:63",
+        1,
+        "CONDITIONING"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        60,
+        "92:84:76",
+        0,
+        "92:63",
+        2,
+        "CONDITIONING"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        61,
+        81,
+        0,
+        "92:85",
+        0,
+        "IMAGE"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        62,
+        76,
+        0,
+        "92:80",
+        0,
+        "IMAGE"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        65,
+        "92:65",
+        0,
+        82,
+        0,
+        "IMAGE"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        76,
+        94,
+        0,
+        95,
+        0,
+        "TORCH_COMPILE_ARGS"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        78,
+        95,
+        0,
+        97,
+        1,
+        "SEEDVR2_DIT"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        79,
+        96,
+        0,
+        97,
+        2,
+        "SEEDVR2_VAE"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        80,
+        100,
+        0,
+        97,
+        3,
+        "FLOAT"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        81,
+        101,
+        0,
+        98,
+        0,
+        "UPSCALE_MODEL"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        85,
+        98,
+        0,
+        103,
+        1,
+        "IMAGE"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        93,
+        113,
+        0,
+        "92:73",
+        0,
+        "INT"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        95,
+        115,
+        0,
+        "92:62",
+        0,
+        "INT"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        107,
+        76,
+        0,
+        103,
+        0,
+        "IMAGE"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        108,
+        98,
+        0,
+        99,
+        0,
+        "IMAGE"
+      ],
+      "Count": 6
+    },
+    {
+      "value": [
+        111,
+        "92:65",
+        0,
+        126,
+        0,
+        "IMAGE"
+      ],
+      "Count": 6
+    },
     [
-      34,
-      "92:73",
-      0,
-      "92:64",
-      0,
-      "NOISE"
-    ],
-    [
-      35,
-      "92:63",
-      0,
-      "92:64",
-      1,
-      "GUIDER"
-    ],
-    [
-      36,
-      "92:61",
-      0,
-      "92:64",
-      2,
-      "SAMPLER"
-    ],
-    [
-      37,
-      "92:62",
-      0,
-      "92:64",
-      3,
-      "SIGMAS"
-    ],
-    [
-      38,
-      "92:66",
-      0,
-      "92:64",
-      4,
-      "LATENT"
-    ],
-    [
-      39,
-      "92:64",
-      0,
-      "92:65",
-      0,
-      "LATENT"
-    ],
-    [
-      42,
-      "92:79:76",
-      0,
-      "92:84:76",
-      0,
-      "CONDITIONING"
-    ],
-    [
-      43,
-      "92:84:78",
-      0,
-      "92:84:76",
-      1,
-      "LATENT"
-    ],
-    [
-      44,
-      "92:85",
-      0,
-      "92:84:78",
-      0,
-      "IMAGE"
-    ],
-    [
-      46,
-      "92:79:77",
-      0,
-      "92:84:77",
-      0,
-      "CONDITIONING"
-    ],
-    [
-      47,
-      "92:84:78",
-      0,
-      "92:84:77",
-      1,
-      "LATENT"
-    ],
-    [
-      48,
-      "92:74",
-      0,
-      "92:86",
-      0,
-      "CONDITIONING"
-    ],
-    [
-      49,
-      "92:80",
-      0,
-      "92:81",
-      0,
-      "IMAGE"
-    ],
-    [
-      50,
-      "92:86",
-      0,
-      "92:79:76",
-      0,
-      "CONDITIONING"
-    ],
-    [
-      51,
-      "92:79:78",
-      0,
-      "92:79:76",
-      1,
-      "LATENT"
-    ],
-    [
-      52,
-      "92:80",
-      0,
-      "92:79:78",
-      0,
-      "IMAGE"
-    ],
-    [
-      54,
-      "92:74",
-      0,
-      "92:79:77",
-      0,
-      "CONDITIONING"
-    ],
-    [
-      55,
-      "92:79:78",
-      0,
-      "92:79:77",
-      1,
-      "LATENT"
-    ],
-    [
-      59,
-      "92:84:77",
-      0,
-      "92:63",
-      1,
-      "CONDITIONING"
-    ],
-    [
-      60,
-      "92:84:76",
-      0,
-      "92:63",
-      2,
-      "CONDITIONING"
-    ],
-    [
-      61,
-      81,
-      0,
-      "92:85",
-      0,
-      "IMAGE"
-    ],
-    [
-      62,
-      76,
-      0,
-      "92:80",
-      0,
-      "IMAGE"
-    ],
-    [
-      65,
-      "92:65",
-      0,
-      82,
-      0,
-      "IMAGE"
-    ],
-    [
-      76,
-      94,
-      0,
-      95,
-      0,
-      "TORCH_COMPILE_ARGS"
-    ],
-    [
-      78,
-      95,
-      0,
-      97,
-      1,
-      "SEEDVR2_DIT"
-    ],
-    [
-      79,
-      96,
-      0,
-      97,
-      2,
-      "SEEDVR2_VAE"
-    ],
-    [
-      80,
-      100,
-      0,
-      97,
-      3,
-      "FLOAT"
-    ],
-    [
-      81,
-      101,
-      0,
-      98,
-      0,
-      "UPSCALE_MODEL"
-    ],
-    [
-      85,
-      98,
-      0,
-      103,
-      1,
-      "IMAGE"
-    ],
-    [
-      86,
+      113,
       "92:70",
-      0,
-      106,
-      0,
-      "*"
-    ],
-    [
-      87,
-      "92:71",
-      0,
-      105,
-      0,
-      "*"
-    ],
-    [
-      88,
-      "92:72",
-      0,
-      104,
-      0,
-      "*"
-    ],
-    [
-      89,
-      107,
-      0,
-      "92:84:78",
-      1,
-      "VAE"
-    ],
-    [
-      90,
-      108,
-      0,
-      "92:79:78",
-      1,
-      "VAE"
-    ],
-    [
-      91,
-      110,
-      0,
-      "92:65",
-      1,
-      "VAE"
-    ],
-    [
-      92,
-      112,
       0,
       "92:63",
       0,
       "MODEL"
     ],
     [
-      93,
-      113,
-      0,
-      "92:73",
-      0,
-      "INT"
-    ],
-    [
-      95,
-      115,
-      0,
-      "92:62",
-      0,
-      "INT"
-    ],
-    [
-      96,
-      "92:81",
-      0,
-      116,
-      0,
-      "*"
-    ],
-    [
-      97,
-      "92:81",
-      1,
-      117,
-      0,
-      "*"
-    ],
-    [
-      98,
-      118,
-      0,
-      "92:62",
-      1,
-      "INT"
-    ],
-    [
-      99,
-      119,
-      0,
-      "92:62",
-      2,
-      "INT"
-    ],
-    [
-      100,
-      120,
-      0,
-      "92:66",
-      0,
-      "INT"
-    ],
-    [
-      101,
-      121,
-      0,
-      "92:66",
-      1,
-      "INT"
-    ],
-    [
-      102,
-      122,
+      114,
+      "92:71",
       0,
       "92:74",
       0,
       "CLIP"
     ],
     [
-      103,
-      "92:65",
+      115,
+      "92:72",
       0,
-      123,
-      0,
-      "*"
-    ],
-    [
-      107,
-      76,
-      0,
-      103,
-      0,
-      "IMAGE"
-    ],
-    [
-      108,
-      98,
-      0,
-      99,
-      0,
-      "IMAGE"
-    ],
-    [
-      110,
-      124,
-      0,
-      98,
+      "92:84:78",
       1,
-      "IMAGE"
+      "VAE"
     ],
     [
-      111,
+      116,
+      "92:72",
+      0,
+      "92:79:78",
+      1,
+      "VAE"
+    ],
+    [
+      117,
+      "92:72",
+      0,
+      "92:65",
+      1,
+      "VAE"
+    ],
+    [
+      118,
+      "92:81",
+      0,
+      "92:62",
+      1,
+      "INT"
+    ],
+    [
+      119,
+      "92:81",
+      1,
+      "92:62",
+      2,
+      "INT"
+    ],
+    [
+      120,
+      "92:81",
+      0,
+      "92:66",
+      0,
+      "INT"
+    ],
+    [
+      121,
+      "92:81",
+      1,
+      "92:66",
+      1,
+      "INT"
+    ],
+    [
+      122,
       "92:65",
       0,
-      126,
-      0,
+      "98",
+      1,
       "IMAGE"
     ]
   ],
@@ -3001,17 +2389,52 @@
     "VHS_KeepIntermediate": true,
     "byrdhouse": {
       "workflow_name": "ByrdHouse Flux2 Klein Style Transfer + Upscale",
-      "workflow_version": "1.0.0",
       "prepared_for": "BYRD-GAMING RTX 3070 8GB",
       "reference_1_role": "subject / identity / pose / composition",
       "reference_2_role": "costume / style / materials",
       "default_steps": 28,
       "default_guidance": 0.9,
       "seedvr2_default": "bypassed",
-      "api_status": "Load in ComfyUI and Save (API Format) after dependencies are installed.",
+      "api_status": "Load in ComfyUI, run the raw branch once, then Save (API Format) after dependencies are installed.",
       "source_file": "Flux2 Klein Style Transfer & Upscale(1).json",
       "profile": "SAFE_FIRST_RUN",
-      "upscale_default": "bypassed"
+      "upscale_default": "bypassed",
+      "gaming_adaptation": "REAL_TO_GAME_CHARACTER",
+      "operator_controls": {
+        "subject_reference_node": "76",
+        "style_reference_node": "81",
+        "transformation_prompt_node": "92:74",
+        "seed_node": "113",
+        "steps_node": "115",
+        "guidance_node": "92:63",
+        "raw_save_node": "126",
+        "upscale_branch": "bypassed",
+        "seedvr2_branch": "bypassed"
+      },
+      "workflow_version": "2.1.0",
+      "compatibility_patch": "Removed unavailable legacy GetNode/SetNode storage helpers and rewired to native outputs.",
+      "composition_modes": {
+        "PRIMARY_HEAD_ONLY": "Main-subject identity is protected; other visible heads remain governed by the game scene or style reference.",
+        "ALL_HEADS": "Reserved multi-person mode; requires separate identity references or masks per person and is not enabled in SAFE_FIRST_RUN."
+      },
+      "style_modes": {
+        "AAA": "AAA semi-realistic game character: grounded anatomy, cinematic materials, premium promotional render, restrained stylization.",
+        "HERO": "Stylized hero character: iconic silhouette, confident readable shapes, polished hero presentation, controlled exaggeration.",
+        "FANTASY": "Fantasy RPG: believable leather, cloth, metal, and crafted fantasy materials; grounded fantasy costume language and adventure lighting.",
+        "SCIFI": "Sci-fi operative: tactical fabric, polymer, brushed metal, subtle emissive accents, functional equipment, cool cinematic lighting.",
+        "CEL_SHADED": "Cel-shaded game character: clean graphic planes, deliberate contour separation, simplified controlled shading, readable colors.",
+        "GRITTY": "Dark action-game character: gritty practical materials, restrained palette, hard directional light, atmospheric tension, realistic wear.",
+        "SPLASH_ART": "Promotional splash art: strong hero read, dynamic cinematic lighting, environmental atmosphere, polished marketing key-art finish."
+      },
+      "intensity_profiles": {
+        "IDENTITY_LOCK": "Maximum likeness preservation; subtle game conversion; conservative costume changes; preserve pose and silhouette.",
+        "BALANCED_GAMING": "Strong identity retention; obvious game-character conversion; moderate costume and material redesign.",
+        "FULL_CHARACTER_REDESIGN": "Identity remains recognizable; stronger costume transformation; stronger stylization; more dramatic game-world presentation."
+      },
+      "style_mode_default": "AAA",
+      "intensity_profile_default": "BALANCED_GAMING",
+      "face_mode_default": "PRIMARY_HEAD_ONLY",
+      "reference_library": "E:\\ByrdHouse\\profiles\\me\\references"
     }
   },
   "version": 0.4

@@ -1,0 +1,100 @@
+{
+  "_comment": "ByrdHouse one-job face swap: CPU mesh seed and semantic masks enter one ComfyUI latent chain. Pass 1 fills identity inside the approved face zone; pass 2 harmonizes only the CPU skin-match ring. The graph emits exactly one final crop.",
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" },
+    "_meta": { "title": "IDENTITY MESH SEED" }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" },
+    "_meta": { "title": "EDIT ZONE MASK" }
+  },
+  "3": {
+    "class_type": "ImageToMask",
+    "inputs": { "image": ["2", 0], "channel": "red" },
+    "_meta": { "title": "SEMANTIC FACE MASK" }
+  },
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "Meina V5.1 - Baked VAE.safetensors" },
+    "_meta": { "title": "COMPACT ANIME CHECKPOINT" }
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] },
+    "_meta": { "title": "POSITIVE PROMPT" }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] },
+    "_meta": { "title": "NEGATIVE PROMPT" }
+  },
+  "7": {
+    "class_type": "VAEEncode",
+    "inputs": { "pixels": ["1", 0], "vae": ["4", 2] },
+    "_meta": { "title": "ENCODE IDENTITY SEED" }
+  },
+  "8": {
+    "class_type": "SetLatentNoiseMask",
+    "inputs": { "samples": ["7", 0], "mask": ["3", 0] },
+    "_meta": { "title": "PASS 1 SEMANTIC FACE MASK" }
+  },
+  "9": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0,
+      "steps": 16,
+      "cfg": 4.5,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "denoise": 0.38,
+      "model": ["4", 0],
+      "positive": ["5", 0],
+      "negative": ["6", 0],
+      "latent_image": ["8", 0]
+    },
+    "_meta": { "title": "GPU PASS 1: IDENTITY FILL", "byrd_pass": "identity_fill" }
+  },
+  "10": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" },
+    "_meta": { "title": "EDGE HARMONIZE MASK" }
+  },
+  "11": {
+    "class_type": "ImageToMask",
+    "inputs": { "image": ["10", 0], "channel": "red" },
+    "_meta": { "title": "CPU SKIN-MATCH RING" }
+  },
+  "12": {
+    "class_type": "SetLatentNoiseMask",
+    "inputs": { "samples": ["9", 0], "mask": ["11", 0] },
+    "_meta": { "title": "PASS 2 EDGE MASK" }
+  },
+  "13": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 1,
+      "steps": 8,
+      "cfg": 3.5,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "denoise": 0.12,
+      "model": ["4", 0],
+      "positive": ["5", 0],
+      "negative": ["6", 0],
+      "latent_image": ["12", 0]
+    },
+    "_meta": { "title": "GPU PASS 2: EDGE HARMONIZE", "byrd_pass": "line_harmonize" }
+  },
+  "14": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["13", 0], "vae": ["4", 2] },
+    "_meta": { "title": "DECODE FINAL CLEAN FACE CROP" }
+  },
+  "15": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "byrdhouse_face_mesh_multipass", "images": ["14", 0] },
+    "_meta": { "title": "SAVE FINAL CLEAN FACE CROP" }
+  }
+}

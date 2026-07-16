@@ -1,0 +1,8 @@
+{
+  "prompt_id": "f5f61e59-ffba-4190-a023-5328315726e2",
+  "workflow": "Images\\Workflows\\byrdhouse_face_swap_social\\byrdhouse_social_main_head_reswapper256_aiupscale_api_v1.json",
+  "target": "E:\\ByrdHouse\\Images\\Targets\\examples\\example_1-Photo-1.jpg",
+  "source": "E:\\ByrdHouse\\profiles\\me\\references\\ai_identity_front_v1.png",
+  "face_index": "2",
+  "comfy_output": "E:\\ByrdHouse\\Generators\\ComfyUI\\output\\ByrdHouse\\FaceSwap\\carey_reswapper256_realesrgan_00001_.png"
+}

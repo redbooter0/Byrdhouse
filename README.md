@@ -27,6 +27,7 @@ For BYRD-MINI, same thing with `scripts\setup-mini.ps1` (roots at `D:\ByrdHouse`
 | `scripts/start-byrdhouse.ps1` | THE one command: LM Studio server + operator model + ComfyUI + status report |
 | `scripts/install-startup-task.ps1` | Registers start-byrdhouse as a logon scheduled task (run as admin, once) |
 | `scripts/byrdimage.py` / `.ps1` | Image submit layer: recipe → filled prompt → random seed → unique prefix → ComfyUI → archived PNG + metadata card (stdlib-only Python) |
+| `scripts/run-byrdhouse-face-workflow.py` | Lightweight local target-image face insertion: uploads target + face reference, runs a saved workflow, archives the PNG + sidecar |
 | `scripts/byrdjudge.py` | JUDGE loop: Qwen-VL (LM Studio) scores artifacts against their recipe's rubric — score, tags, caption onto the card |
 | `scripts/worker.py` | Worker daemon: pulls jobs from the router, runs the GPU mode ritual, executes image.generate/image.judge/report.daily, auto-enqueues judging |
 | `router/router.py` | The belt: Router API v1 (Blueprint v2 §6) + SQLite schema (§5) + serves the dashboard. Stdlib-only, port 8787 |
@@ -39,6 +40,10 @@ For BYRD-MINI, same thing with `scripts\setup-mini.ps1` (roots at `D:\ByrdHouse`
 | `docs/ROOM_MAP.md` | The 14 rooms, two lanes, MCP roster |
 | `docs/CLAUDE_CODE_TASKS.md` | Active work orders and anti-command-loop rules |
 | `recipes/` | Versioned image recipes: `yt_thumbnail` + the CareyRPG pack (tier list, build guide, shock reveal, vs matchup) |
+
+## Lightweight social face insertion
+
+For fast social or game-image posts on the RTX 3070, use the saved workflows in `Images/Workflows/byrdhouse_face_swap_social/`. They use ReActor face insertion rather than the 9B FLUX.2 Klein generator. Choose a target image, choose a face reference from `profiles/me/references/`, and run `scripts/run-byrdhouse-face-workflow.py`; results are archived in `Images/Library/` with a metadata sidecar.
 
 ## The operating rules (from the blueprints)
 

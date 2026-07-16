@@ -1,0 +1,69 @@
+{
+  "_comment": "ByrdHouse mesh-seeded face cleanup. CPU MediaPipe first warps a Carey anime reference through the target's 478-point grid. This graph retains that identity-bearing latent and uses a masked SD1.5 img2img pass only to harmonize linework and seams.",
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" },
+    "_meta": { "title": "IDENTITY MESH SEED" }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" },
+    "_meta": { "title": "EDIT ZONE MASK" }
+  },
+  "3": {
+    "class_type": "ImageToMask",
+    "inputs": { "image": ["2", 0], "channel": "red" },
+    "_meta": { "title": "SEMANTIC FACE MASK" }
+  },
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "Meina V5.1 - Baked VAE.safetensors" },
+    "_meta": { "title": "COMPACT ANIME CHECKPOINT" }
+  },
+  "5": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] },
+    "_meta": { "title": "POSITIVE PROMPT" }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] },
+    "_meta": { "title": "NEGATIVE PROMPT" }
+  },
+  "7": {
+    "class_type": "VAEEncode",
+    "inputs": { "pixels": ["1", 0], "vae": ["4", 2] },
+    "_meta": { "title": "ENCODE IDENTITY SEED" }
+  },
+  "8": {
+    "class_type": "SetLatentNoiseMask",
+    "inputs": { "samples": ["7", 0], "mask": ["3", 0] },
+    "_meta": { "title": "LIMIT CLEANUP TO FACE ZONE" }
+  },
+  "9": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0,
+      "steps": 22,
+      "cfg": 5.0,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "denoise": 0.38,
+      "model": ["4", 0],
+      "positive": ["5", 0],
+      "negative": ["6", 0],
+      "latent_image": ["8", 0]
+    },
+    "_meta": { "title": "MESH SEED CLEANUP SAMPLER" }
+  },
+  "10": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["9", 0], "vae": ["4", 2] },
+    "_meta": { "title": "DECODE CLEAN FACE CROP" }
+  },
+  "11": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "byrdhouse_face_mesh_seed", "images": ["10", 0] },
+    "_meta": { "title": "SAVE CLEAN FACE CROP" }
+  }
+}

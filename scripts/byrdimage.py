@@ -27,12 +27,15 @@ Usage (from any terminal with BYRDHOUSE_ROOT set):
 """
 
 import argparse
+import hashlib
 import json
+import math
 import os
 import random
 import re
 import secrets
 import string
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -45,6 +48,57 @@ def die(msg: str) -> None:
     # SystemExit with a string: CLI prints it to stderr and exits nonzero;
     # the worker daemon catches it and records the message on the dead job.
     raise SystemExit(f"[byrdimage] {msg}")
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _require_original_target(root: Path, target: Path) -> Path:
+    """Reject generated outputs as inputs to every target-edit retry.
+
+    A retry is allowed to reuse the immutable uploaded/original target, never a
+    ByrdHouse artifact or raw ComfyUI output from an earlier attempt.  That
+    prevents accidental edit-on-edit drift and makes each result comparable.
+    """
+    root = root.resolve()
+    target = target.resolve()
+    immutable_upload_root = (root / "artifacts" / "_sources").resolve()
+    forbidden_roots = (
+        root / "artifacts",
+        root / "Generators" / "ComfyUI" / "output",
+    )
+    for forbidden in forbidden_roots:
+        try:
+            target.relative_to(forbidden.resolve())
+        except ValueError:
+            continue
+        try:
+            target.relative_to(immutable_upload_root)
+        except ValueError:
+            pass
+        else:
+            continue
+        die(
+            "fresh-retry policy rejected a generated target: "
+            f"{target}. Start from the original upload/target instead."
+        )
+    sidecar = target.with_suffix(target.suffix + ".json")
+    if sidecar.is_file():
+        try:
+            metadata = load_json(sidecar)
+        except (OSError, json.JSONDecodeError):
+            metadata = {}
+        if metadata.get("artifact_id") or metadata.get("job_id"):
+            die(
+                "fresh-retry policy rejected an image with a generation card: "
+                f"{target}. Start from the original upload/target instead."
+            )
+    return target
 
 
 def load_json(path: Path):
@@ -182,24 +236,32 @@ def resolve_lora(root: Path, requested: str) -> str:
     return requested if requested.lower().endswith(".safetensors") else f"{requested}.safetensors"
 
 
-def insert_lora(graph: dict, lora_name: str, strength: float = 0.9) -> None:
-    """Splice a LoraLoader between the checkpoint and everything that consumes
-    its model/clip outputs. Pure graph surgery — works on any of our workflows."""
-    ckpt_id = next((nid for nid, n in graph.items()
-                    if n.get("class_type") == "CheckpointLoaderSimple"), None)
-    if not ckpt_id:
+def insert_lora(graph: dict, lora_name: str, strength: float = 0.9,
+                lora_id: str = "byrd_lora", source_id: str | None = None,
+                clip_strength: float | None = None) -> None:
+    """Splice a LoRA after a checkpoint or another LoRA.
+
+    The normal image lane calls this once. The compact anime lane calls it twice
+    when a quality identity LoRA and the optional LCM draft LoRA are both active,
+    so the second loader must follow the first instead of replacing it.
+    """
+    source_id = source_id or next((nid for nid, n in graph.items()
+                                   if n.get("class_type") == "CheckpointLoaderSimple"), None)
+    if not source_id:
         die("workflow has no CheckpointLoaderSimple — cannot attach a LoRA")
-    lora_id = "byrd_lora"
+    if lora_id in graph:
+        die(f"workflow already contains LoRA node '{lora_id}'")
     for nid, node in graph.items():
         if nid == lora_id:
             continue
         for key, ref in node.get("inputs", {}).items():
-            if isinstance(ref, list) and len(ref) == 2 and str(ref[0]) == str(ckpt_id) and ref[1] in (0, 1):
+            if isinstance(ref, list) and len(ref) == 2 and str(ref[0]) == str(source_id) and ref[1] in (0, 1):
                 node["inputs"][key] = [lora_id, ref[1]]
+    clip_weight = strength if clip_strength is None else float(clip_strength)
     graph[lora_id] = {"class_type": "LoraLoader",
                       "inputs": {"lora_name": lora_name,
-                                 "strength_model": strength, "strength_clip": strength,
-                                 "model": [ckpt_id, 0], "clip": [ckpt_id, 1]}}
+                                 "strength_model": strength, "strength_clip": clip_weight,
+                                 "model": [source_id, 0], "clip": [source_id, 1]}}
 
 
 def upload_image(comfy: str, path: Path) -> str:
@@ -229,7 +291,8 @@ def http_json(url: str, payload=None, timeout=30):
 def generate(root, recipe_name, slots, project, purpose,
              batch=None, checkpoint=None, dry_run=False, job_id=None,
              aspect=None, width=None, height=None, negative_extra=None,
-             lora=None, lora_strength=0.9, seed=None, reference=None,
+             lora=None, lora_strength=0.9, lora_clip_strength=None,
+             seed=None, reference=None,
              engine=None):
     """Run one image.generate: recipe -> ComfyUI -> archived PNGs + cards.
     Returns (job_id, [(png_path, card_dict), ...]). Raises SystemExit on
@@ -340,8 +403,14 @@ def generate(root, recipe_name, slots, project, purpose,
         die("workflow has no KSampler node")
 
     if lora:
-        insert_lora(graph, resolve_lora(root, lora), lora_strength)
-        print(f"[byrdimage] LoRA attached: {lora} @ {lora_strength}")
+        insert_lora(
+            graph,
+            resolve_lora(root, lora),
+            lora_strength,
+            clip_strength=lora_clip_strength,
+        )
+        clip_note = lora_strength if lora_clip_strength is None else lora_clip_strength
+        print(f"[byrdimage] LoRA attached: {lora} @ model {lora_strength}, CLIP {clip_note}")
 
     if reference and not dry_run:
         ref_name = upload_image(comfy, Path(reference))
@@ -372,7 +441,9 @@ def generate(root, recipe_name, slots, project, purpose,
         "cfg": float(engine.get("cfg") or img_cfg.get("cfg", 7.0)),
         "sampler": engine.get("sampler_name") or img_cfg.get("sampler", "dpmpp_2m"),
         "scheduler": engine.get("scheduler") or img_cfg.get("scheduler", "karras"),
-        **({"lora": lora} if lora else {}),
+        **({"lora": lora, "lora_model_strength": lora_strength,
+            "lora_clip_strength": (lora_strength if lora_clip_strength is None else lora_clip_strength)}
+           if lora else {}),
         **({"reference": str(reference)} if reference else {}),
         **({"subject_profile": recipe.get("subject_profile")} if recipe.get("subject_profile") else {}),
         **({"category": recipe.get("category")} if recipe.get("category") else {}),
@@ -380,6 +451,847 @@ def generate(root, recipe_name, slots, project, purpose,
            if not ckpt_matched else {}),
     }
     return job_id, run_graph(root, comfy, graph, job_id, project, card_base)
+
+
+def _named_node(graph: dict, class_type: str, title: str) -> tuple[str, dict]:
+    """Find one intentionally titled API node and fail rather than guess.
+
+    Target-edit graphs have two LoadImage inputs in the UI version over time, so
+    matching by class alone would eventually upload the target into the wrong
+    socket. The compact graph keeps titles as a stable adapter contract.
+    """
+    matches = [(node_id, node) for node_id, node in graph.items()
+               if node.get("class_type") == class_type
+               and str(node.get("_meta", {}).get("title", "")).strip() == title]
+    if len(matches) != 1:
+        die(f"expected one {class_type} titled '{title}', found {len(matches)}")
+    return matches[0]
+
+
+def _target_size(path: Path) -> tuple[int, int]:
+    """Read a target image's pixels for 8-pixel VAE-safe normalization.
+
+    Pillow is already a ByrdHouse dependency for thumbnail composition. Import
+    it here so the normal generate path remains stdlib-only at import time.
+    """
+    try:
+        from PIL import Image
+        with Image.open(path) as image:
+            return image.size
+    except Exception as exc:
+        die(f"could not read target image '{path}': {exc}")
+
+
+def _render_recipe_prompt(recipe: dict, slots: dict) -> tuple[str, dict]:
+    """Fill a recipe exactly as generate() does, including deterministic cards."""
+    slots = dict(slots or {})
+    vary_picks = {}
+    for key, options in recipe.get("vary", {}).items():
+        if not options:
+            die(f"recipe vary slot '{key}' has no options to pick from")
+        if not str(slots.get(key, "")).strip():
+            vary_picks[key] = random.choice(options)
+    slots.update(vary_picks)
+    template = recipe.get("template", "")
+    missing = [key for key in re.findall(r"\{(\w+)\}", template) if key not in slots]
+    if missing:
+        die(f"unfilled slots {missing} — pass the requested value before generating")
+    return re.sub(r"\s+", " ", template.format(**slots)).strip(), vary_picks
+
+
+def edit_target_identity(root, recipe_name, target_path, project, purpose,
+                         slots=None, checkpoint=None, identity_lora=None,
+                         identity_strength=None, target_preset=None,
+                         target_mask=None, subject_profile=None, seed=None,
+                         engine=None, job_id=None, allow_unconditioned=False):
+    """Run the compact SD1.5 anime target-edit lane.
+
+    This is deliberately not a raw face swap. It keeps the supplied target's
+    pose/outfit/background in latent space and samples only a feathered face
+    rectangle. A user-owned identity LoRA supplies likeness; without it, public
+    belt jobs fail loudly rather than silently returning a generic anime face.
+    """
+    root = Path(root).resolve()
+    target = _require_original_target(root, Path(target_path))
+    if not target.is_file():
+        die(f"target image not found: {target}")
+    cfg = load_json(root / "byrdhouse.config.json")
+    comfy = cfg["services"]["comfyui"].rstrip("/")
+    recipe = load_json(find_recipe(root, recipe_name))
+    if recipe.get("runner") != "target_identity_edit":
+        die(f"recipe '{recipe.get('id', recipe_name)}' is not a target identity-edit recipe")
+
+    identity = dict(recipe.get("identity") or {})
+    trigger = str(identity.get("trigger") or "").strip()
+    rendered_slots = dict(slots or {})
+    if trigger:
+        rendered_slots.setdefault("identity_token", trigger)
+    prompt, vary_picks = _render_recipe_prompt(recipe, rendered_slots)
+    negative = recipe.get("negative", "")
+
+    presets = recipe.get("target_presets") or {}
+    preset = dict(presets.get(target_preset) or {}) if target_preset else {}
+    if target_preset and not preset:
+        die(f"unknown target preset '{target_preset}' for recipe '{recipe.get('id')}'")
+    context = str(preset.get("prompt_context") or "").strip()
+    if context:
+        prompt = f"{prompt}, {context}"
+    mask_spec = dict(preset.get("mask") or recipe.get("mask") or {})
+    if target_mask:
+        mask_spec.update(target_mask)
+    for key in ("x", "y", "width", "height"):
+        if key not in mask_spec:
+            die(f"target identity-edit recipe needs mask.{key}")
+
+    engine = dict(engine or {})
+    defaults = dict(recipe.get("defaults") or {})
+    draft_cfg = dict(recipe.get("draft") or {})
+    draft = bool(engine.get("draft", False))
+    run_cfg = draft_cfg if draft else defaults
+    checkpoint_requested = (checkpoint or engine.get("checkpoint") or
+                            defaults.get("checkpoint") or die("no compact checkpoint configured"))
+    checkpoint_name, checkpoint_matched = resolve_checkpoint_info(root, checkpoint_requested, comfy=comfy)
+    if not checkpoint_matched:
+        die(f"compact anime lane requires '{checkpoint_requested}', not fallback '{checkpoint_name}'")
+
+    # ``None`` means use the recipe's deployed identity LoRA. An explicit empty
+    # string is reserved for a local, unconditioned smoke test of the graph.
+    selected_identity_lora = identity.get("lora") if identity_lora is None else identity_lora
+    if not selected_identity_lora and not allow_unconditioned:
+        die("identity LoRA is not installed/configured; refusing a generic face result")
+    if selected_identity_lora:
+        selected_identity_lora = resolve_lora(root, selected_identity_lora)
+    if draft:
+        speed_lora = resolve_lora(root, draft_cfg.get("lora") or die("draft LoRA is not configured"))
+    else:
+        speed_lora = None
+
+    graph = load_json(root / recipe.get("workflow", "workflows/sd15_anime_target_identity_api.json"))
+    graph.pop("_comment", None)
+    _, target_node = _named_node(graph, "LoadImage", "TARGET IMAGE")
+    _, scale_node = _named_node(graph, "ImageScale", "NORMALIZE TARGET")
+    _, canvas_mask = _named_node(graph, "SolidMask", "CANVAS MASK")
+    _, face_mask = _named_node(graph, "SolidMask", "FACE MASK")
+    _, feather_mask = _named_node(graph, "FeatherMask", "FEATHER FACE MASK")
+    _, composite_mask = _named_node(graph, "MaskComposite", "PLACE FACE MASK")
+
+    original_w, original_h = _target_size(target)
+    max_side = int(defaults.get("max_target_side", 768))
+    scale = min(1.0, max_side / max(original_w, original_h))
+    width = max(8, round(original_w * scale / 8) * 8)
+    height = max(8, round(original_h * scale / 8) * 8)
+    x_ratio, y_ratio = width / original_w, height / original_h
+    face_x = max(0, min(width - 1, round(float(mask_spec["x"]) * x_ratio)))
+    face_y = max(0, min(height - 1, round(float(mask_spec["y"]) * y_ratio)))
+    face_w = max(8, min(width - face_x, round(float(mask_spec["width"]) * x_ratio)))
+    face_h = max(8, min(height - face_y, round(float(mask_spec["height"]) * y_ratio)))
+    feather = max(0, int(round(float(mask_spec.get("feather", 24)) * min(x_ratio, y_ratio))))
+
+    target_node["inputs"]["image"] = upload_image(comfy, target)
+    scale_node["inputs"].update({"width": width, "height": height, "crop": "disabled"})
+    canvas_mask["inputs"].update({"width": width, "height": height})
+    face_mask["inputs"].update({"width": face_w, "height": face_h})
+    feather_mask["inputs"].update({"left": feather, "top": feather,
+                                   "right": feather, "bottom": feather})
+    composite_mask["inputs"].update({"x": face_x, "y": face_y})
+
+    steps = int(engine.get("steps") or run_cfg.get("steps", 18))
+    sample_cfg = float(engine.get("cfg") or run_cfg.get("cfg", 6.0))
+    sampler = engine.get("sampler_name") or run_cfg.get("sampler", "dpmpp_2m")
+    scheduler = engine.get("scheduler") or run_cfg.get("scheduler", "karras")
+    denoise = float(engine.get("denoise") or defaults.get("denoise", 0.48))
+    resolved_job_id = job_id or new_id("job")
+    run_seed = int(seed) if seed is not None else secrets.randbits(63)
+    for node in graph.values():
+        class_type, inputs = node.get("class_type"), node.get("inputs", {})
+        if class_type == "CheckpointLoaderSimple":
+            inputs["ckpt_name"] = checkpoint_name
+        elif class_type == "KSampler":
+            inputs.update({"seed": run_seed,
+                           "steps": steps, "cfg": sample_cfg, "sampler_name": sampler,
+                           "scheduler": scheduler, "denoise": denoise})
+        elif class_type == "SaveImage":
+            inputs["filename_prefix"] = f"{datetime.now():%Y%m%d}_{recipe['id']}_{resolved_job_id}"
+
+    injected = set()
+    for node in graph.values():
+        if node.get("class_type") != "KSampler":
+            continue
+        for socket, text in (("positive", prompt), ("negative", negative)):
+            ref = node["inputs"].get(socket)
+            target_text = graph.get(str(ref[0])) if isinstance(ref, list) and ref else None
+            if not target_text or target_text.get("class_type") != "CLIPTextEncode":
+                die(f"target-edit KSampler {socket} does not point to CLIPTextEncode")
+            target_text["inputs"]["text"] = text
+            injected.add(str(ref[0]))
+    clip_nodes = [node_id for node_id, node in graph.items()
+                  if node.get("class_type") == "CLIPTextEncode"]
+    if set(clip_nodes) != injected:
+        die("target-edit workflow has an unreachable CLIPTextEncode node")
+
+    lora_source = None
+    identity_clip_weight = None
+    if selected_identity_lora:
+        identity_weight = float(identity_strength or engine.get("identity_strength") or
+                                identity.get("strength", 0.8))
+        identity_clip_weight = float(engine.get("identity_clip_strength") or
+                                     identity.get("clip_strength") or identity_weight)
+        insert_lora(graph, selected_identity_lora, identity_weight,
+                    lora_id="byrd_identity_lora", clip_strength=identity_clip_weight)
+        lora_source = "byrd_identity_lora"
+    if speed_lora:
+        insert_lora(graph, speed_lora, float(draft_cfg.get("strength", 1.0)),
+                    lora_id="byrd_speed_lora", source_id=lora_source)
+
+    card_base = {
+        "recipe": f"{recipe['id']}@{recipe['version']}", "purpose": purpose,
+        "prompt": prompt, "negative": negative, "checkpoint": checkpoint_name,
+        "workflow": recipe.get("workflow", "workflows/sd15_anime_target_identity_api.json"),
+        "slots": dict(slots or {}), "vary_picks": vary_picks, "seed": run_seed,
+        "size": f"{width}x{height}", "steps": steps, "cfg": sample_cfg,
+        "sampler": sampler, "scheduler": scheduler, "denoise": denoise,
+        "target": str(target), "target_preset": target_preset,
+        "target_sha256": _file_sha256(target),
+        "retry_policy": "fresh-from-immutable-original; no generated parent",
+        "generated_parent": None,
+        "target_original_size": f"{original_w}x{original_h}",
+        "target_mask": {"x": face_x, "y": face_y, "width": face_w,
+                        "height": face_h, "feather": feather},
+        "engine": "anime_sd15_compact",
+        "identity_mode": "lora" if selected_identity_lora else "unconditioned_smoke",
+        **({"identity_model_strength": identity_weight,
+            "identity_clip_strength": identity_clip_weight}
+           if selected_identity_lora else {}),
+        **({"lora": selected_identity_lora} if selected_identity_lora else {}),
+        **({"speed_lora": speed_lora} if speed_lora else {}),
+        **({"subject_profile": subject_profile} if subject_profile else {}),
+    }
+    return resolved_job_id, run_graph(root, comfy, graph, resolved_job_id, project, card_base)
+
+
+def _resolve_face_zone_gpu_passes(engine: dict, defaults: dict, run_seed: int) -> dict[str, dict]:
+    """Resolve one to four named, masked GPU cleanup passes for a face zone."""
+    default_steps = int(engine.get("steps") or defaults.get("steps", 24))
+    default_cfg = float(engine.get("cfg") or defaults.get("cfg", 5.0))
+    default_sampler = engine.get("sampler_name") or defaults.get("sampler", "dpmpp_2m")
+    default_scheduler = engine.get("scheduler") or defaults.get("scheduler", "karras")
+    default_denoise = float(engine.get("denoise") or defaults.get("denoise", 0.38))
+    default_passes = defaults.get("gpu_passes")
+    requested = engine.get("gpu_passes")
+    if requested is None:
+        requested = default_passes
+    elif isinstance(requested, dict) and isinstance(default_passes, dict):
+        merged = {}
+        for default_pass_id, default_pass in default_passes.items():
+            override = requested.get(default_pass_id)
+            if override is None:
+                merged[default_pass_id] = dict(default_pass)
+            elif isinstance(default_pass, dict) and isinstance(override, dict):
+                merged[default_pass_id] = {**default_pass, **override}
+            else:
+                die(f"face-zone GPU pass '{default_pass_id}' override must be an object")
+        for pass_id, override in requested.items():
+            if pass_id not in merged:
+                merged[pass_id] = override
+        requested = merged
+    if requested is None:
+        requested = {"default": {}}
+    if isinstance(requested, list):
+        requested = {f"pass_{index + 1}": value for index, value in enumerate(requested)}
+    if not isinstance(requested, dict) or not 1 <= len(requested) <= 4:
+        die("face-zone gpu_passes must be a map of one to four named pass objects")
+
+    resolved = {}
+    for index, (raw_id, requested_pass) in enumerate(requested.items()):
+        pass_id = str(raw_id).strip()
+        if not pass_id or not isinstance(requested_pass, dict):
+            die("each face-zone GPU pass needs a non-empty name and an object value")
+        steps = int(requested_pass.get("steps", default_steps))
+        cfg = float(requested_pass.get("cfg", default_cfg))
+        denoise = float(requested_pass.get("denoise", default_denoise))
+        sampler = requested_pass.get("sampler_name") or requested_pass.get("sampler") or default_sampler
+        scheduler = requested_pass.get("scheduler") or default_scheduler
+        if not 2 <= steps <= 60:
+            die(f"face-zone GPU pass '{pass_id}' steps must be between 2 and 60")
+        if not 1.0 <= cfg <= 20.0:
+            die(f"face-zone GPU pass '{pass_id}' cfg must be between 1 and 20")
+        if not 0.0 < denoise <= 1.0:
+            die(f"face-zone GPU pass '{pass_id}' denoise must be in (0, 1]")
+        seed_offset = int(requested_pass.get("seed_offset", index))
+        resolved[pass_id] = {
+            "id": pass_id,
+            "seed": int(requested_pass.get("seed", run_seed + seed_offset)),
+            "steps": steps,
+            "cfg": cfg,
+            "sampler_name": str(sampler),
+            "scheduler": str(scheduler),
+            "denoise": denoise,
+        }
+    return resolved
+def _face_report(root, comfy_python, zone_script, target, min_confidence=0.35,
+                 thorough=True):
+    """Run the CPU examiner (byrdfacezone analyze) and gate on its verdict.
+    Returns the parsed report dict; dies with the examiner's own reasons when
+    the image has no operable face — the belt never guesses where to edit.
+    thorough is the founder default: real scrutiny (scale-stability, occlusion
+    truth, lane recommendation) is spent BEFORE any GPU effort."""
+    cmd = [str(comfy_python), str(zone_script), "--root", str(root), "analyze",
+           "--input", str(target), "--min-confidence", str(min_confidence)]
+    if thorough:
+        cmd.append("--thorough")
+    result = subprocess.run(
+        cmd,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    if result.returncode == 3:
+        try:
+            report = json.loads(result.stdout)
+            reason = report.get("reason") or "no operable face"
+            flags = [f for face in report.get("faces", []) for f in face.get("flags", [])]
+        except Exception:
+            reason, flags = "no operable face", []
+        die("face report: cannot operate on this image — " + reason
+            + (f" (flags: {'; '.join(flags)})" if flags else ""))
+    if result.returncode != 0:
+        die(f"face examiner failed: {(result.stderr or result.stdout).strip()[-500:]}")
+    try:
+        return json.loads(result.stdout)
+    except Exception:
+        die("face examiner returned unreadable output")
+
+
+def facezone_examine(root, target_path, project, purpose, min_confidence=0.35,
+                     thorough=True, job_id=None):
+    """Standalone examiner job (route 'examine'): run the CPU face report on an
+    upload and archive the clean overview + the JSON verdict as an artifact —
+    no editing, any GPU mode. This is how the founder sees where the belt can
+    and can't operate BEFORE spending anything."""
+    root = Path(root)
+    target = Path(target_path)
+    if not target.exists():
+        die(f"examine target not found: {target}")
+    comfy_python = root / "Generators" / "ComfyUI" / ".venv" / "Scripts" / "python.exe"
+    zone_script = root / "scripts" / "byrdfacezone.py"
+    job_id = job_id or new_id("job")
+    month_dir = root / "artifacts" / project / f"{datetime.now():%Y-%m}"
+    month_dir.mkdir(parents=True, exist_ok=True)
+    overview = month_dir / f"{datetime.now():%Y%m%d}_face_report_{job_id}.png"
+    report_path = overview.with_suffix(".json.txt")  # .png.json is the card's name
+    cmd = [str(comfy_python), str(zone_script), "--root", str(root), "analyze",
+           "--input", str(target), "--min-confidence", str(min_confidence),
+           "--report", str(report_path), "--overview", str(overview)]
+    if thorough:
+        cmd.append("--thorough")
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+    )
+    if result.returncode not in (0, 3):
+        die(f"face examiner failed: {(result.stderr or result.stdout).strip()[-500:]}")
+    try:
+        report = json.loads(result.stdout)
+    except Exception:
+        die("face examiner returned unreadable output")
+    card = {
+        "artifact_id": f"art.{job_id}.0", "job_id": job_id, "project": project,
+        "kind": "image", "recipe": "face_report@1", "purpose": purpose,
+        "prompt": "", "negative": "", "seed": None,
+        "workflow": "byrdfacezone analyze (CPU examiner)",
+        "slots": {}, "vary_picks": {},
+        "swap_target": str(target),
+        "face_report": report,
+        "report_file": str(report_path),
+        "score": None, "tags": ["face-report", report.get("verdict", "unknown")],
+        "caption": f"{report.get('operable_faces', 0)} operable face(s); "
+                   f"verdict {report.get('verdict')}",
+        "status": "draft", "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    overview.with_suffix(overview.suffix + ".json").write_text(
+        json.dumps(card, indent=2), encoding="utf-8")
+    print(f"[byrdimage] face report: {report.get('verdict')} "
+          f"({report.get('operable_faces', 0)} operable) -> {overview}")
+    return job_id, [(overview, card)]
+
+
+def edit_face_zone(root, recipe_name, target_path, project, purpose,
+                   slots=None, checkpoint=None, identity_lora=None,
+                   identity_strength=None, target_preset=None,
+                   subject_profile=None, seed=None, engine=None, job_id=None):
+    """CPU face outline -> 512px graded inpaint -> exact soft-zone composite.
+
+    This is the default architecture for uploaded face edits.  It keeps face
+    detection/mesh work on CPU, gives the GPU a face-sized crop, and restores
+    the uploaded source outside the saved skin-match ring pixel-for-pixel.
+    """
+    root = Path(root).resolve()
+    target = _require_original_target(root, Path(target_path))
+    if not target.is_file():
+        die(f"target image not found: {target}")
+    cfg = load_json(root / "byrdhouse.config.json")
+    comfy = cfg["services"]["comfyui"].rstrip("/")
+    recipe = load_json(find_recipe(root, recipe_name))
+    if recipe.get("runner") != "face_zone_identity_edit":
+        die(f"recipe '{recipe.get('id', recipe_name)}' is not a face-zone identity-edit recipe")
+
+    identity = dict(recipe.get("identity") or {})
+    selected_identity_lora = identity.get("lora") if identity_lora is None else identity_lora
+    if not selected_identity_lora:
+        die("face-zone edit requires an installed identity LoRA")
+    selected_identity_lora = resolve_lora(root, selected_identity_lora)
+
+    prompt, vary_picks = _render_recipe_prompt(recipe, dict(slots or {}))
+    preset_key = target_preset or "auto"
+    target_presets = dict(recipe.get("target_presets") or {})
+    if preset_key not in target_presets:
+        die(f"unknown face-zone target preset '{preset_key}'")
+    preset = dict(target_presets[preset_key] or {})
+    context = str(preset.get("prompt_context") or "").strip()
+    if context:
+        prompt = f"{prompt}, {context}"
+    negative = recipe.get("negative", "")
+    defaults = dict(recipe.get("defaults") or {})
+    engine = dict(engine or {})
+    resolved_job_id = job_id or new_id("job")
+    run_seed = int(seed) if seed is not None else secrets.randbits(63)
+    identity_reference = engine.get("identity_reference")
+    if not identity_reference:
+        identity_references = dict(recipe.get("identity_references") or {})
+        identity_reference = identity_references.get(preset_key) or identity_references.get("auto")
+    identity_reference_path = None
+    if identity_reference:
+        identity_reference_path = Path(identity_reference)
+        if not identity_reference_path.is_absolute():
+            identity_reference_path = root / identity_reference_path
+        if not identity_reference_path.is_file():
+            die(f"identity mesh reference not found: {identity_reference_path}")
+
+    # Founder rule: extra avenues ride as PARAMETERS, never as new defaults —
+    # a job may pick any staged face-zone graph (diffdiff, ipadapter, controlnet)
+    # while the recipe's proven default stays the recipe's default.
+    workflow_rel = (engine or {}).get("workflow") or recipe.get(
+        "workflow", "workflows/sd15_face_zone_inpaint_api.json")
+    if (engine or {}).get("workflow") and not (root / workflow_rel).is_file():
+        die(f"engine.workflow does not exist: {workflow_rel}")
+    if "mesh_seed" in workflow_rel and identity_reference_path is None:
+        die("face-zone mesh workflow requires a reviewed identity reference; refusing generic inpaint fallback")
+
+    # This command is deliberately separate from ComfyUI: face outlining uses
+    # CPU PyTorch even while the image server remains on the RTX 3070.
+    comfy_python = root / "Generators" / "ComfyUI" / ".venv" / "Scripts" / "python.exe"
+    zone_script = root / "scripts" / "byrdfacezone.py"
+
+    # Founder contract: FIRST understand where the belt can and can't operate
+    # on THIS image. The examiner reports every face, its verdict, risk flags
+    # (extreme expression, strong profile, too small) and the per-feature
+    # likeness plan; a refuse verdict stops the job before any zone/GPU work,
+    # and the report rides the card so every edit is explainable.
+    face_report = _face_report(root, comfy_python, zone_script, target,
+                               engine.get("min_face_confidence",
+                                          defaults.get("min_face_confidence", 0.35)),
+                               thorough=not engine.get("quick_report", False))
+
+    # Flow fix (founder, 2026-07-15): work at the face's native detail. The
+    # examiner already measured every face — pick the crop canvas from the
+    # operated face's size instead of forcing 512 (large faces were being
+    # downscaled into softness on the way in and stretched back on composite).
+    canvas = int(engine.get("crop_size", 0) or 0)
+    if canvas not in (512, 640, 768):
+        face_entries = {f.get("index"): f for f in face_report.get("faces", [])}
+        side_px = float(face_entries.get(int(engine.get("face_index", 0)), {}).get("side_px", 0))
+        canvas = 512 if side_px < 420 else 640 if side_px < 560 else 768
+
+    zone_cmd = [
+        str(comfy_python), str(zone_script), "--root", str(root), "prepare",
+        "--input", str(target), "--job-id", resolved_job_id,
+        "--min-confidence", str(engine.get("min_face_confidence", defaults.get("min_face_confidence", 0.35))),
+        "--crop-factor", str(engine.get("crop_factor", defaults.get("crop_factor", 1.65))),
+        "--face-index", str(int(engine.get("face_index", 0))),
+        "--zone-expand", str(engine.get("zone_expand", defaults.get("zone_expand", 1.10))),
+        "--canvas-size", str(canvas),
+    ]
+    if identity_reference_path is not None:
+        zone_cmd += ["--identity-reference", str(identity_reference_path)]
+        mesh_identity_strength = engine.get("mesh_identity_strength")
+        if mesh_identity_strength is None:
+            mesh_identity_strength = preset.get("mesh_identity_strength")
+        if mesh_identity_strength is not None:
+            zone_cmd += ["--mesh-identity-strength", str(mesh_identity_strength)]
+        eye_protection = engine.get("eye_protection")
+        if eye_protection is None:
+            eye_protection = preset.get("eye_protection")
+        if eye_protection is not None:
+            zone_cmd += ["--eye-protection", str(eye_protection)]
+        eye_source = engine.get("eye_source") or preset.get("eye_source")
+        if eye_source:
+            zone_cmd += ["--eye-source", str(eye_source)]
+    manual = engine.get("manual_face_box") or preset.get("manual_face_box")
+    if manual:
+        if isinstance(manual, dict):
+            manual = ",".join(str(manual[key]) for key in ("x", "y", "width", "height"))
+        zone_cmd += ["--manual-box", str(manual)]
+    for box in preset.get("exclude_boxes", []):
+        if isinstance(box, dict):
+            box = ",".join(str(box[key]) for key in ("x", "y", "width", "height"))
+        zone_cmd += ["--exclude-box", str(box)]
+    for accessory in preset.get("absent_accessories", []):
+        zone_cmd += ["--absent-accessory", str(accessory)]
+    prepared = subprocess.run(zone_cmd, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if prepared.returncode != 0:
+        die(f"CPU face outline failed: {(prepared.stderr or prepared.stdout).strip()[-800:]}")
+    try:
+        zone = json.loads(prepared.stdout)
+    except json.JSONDecodeError as exc:
+        die(f"CPU face outline returned invalid JSON: {exc}")
+
+    upload_analysis = dict(zone.get("upload_analysis") or {})
+    crop_preflight = dict(zone.get("crop_preflight") or {})
+    if identity_reference_path is not None and int(recipe.get("version", 1)) >= 2:
+        expected_upload_stages = [
+            "face-detection-and-478-point-mesh",
+            "neck-anchor",
+            "neck-left-to-top-to-right-to-neck-closed-loop",
+            "whole-face-head-and-ears",
+            "hair-headwear-accessory-and-clothing-classification",
+            "visible-eyes-mouth-and-identity-pose-map",
+            "target-theme-overlay-ready",
+        ]
+        actual_upload_stages = list(upload_analysis.get("ordered_pipeline") or [])
+        failed_upload_stages = [
+            str(stage.get("id") or "unknown")
+            for stage in upload_analysis.get("stages") or []
+            if not stage.get("passed")
+        ]
+        if (
+            upload_analysis.get("version") != 1
+            or actual_upload_stages != expected_upload_stages
+            or not upload_analysis.get("all_passed")
+            or failed_upload_stages
+        ):
+            detail = ", ".join(failed_upload_stages) or "missing or out-of-order analysis"
+            die(
+                "CPU upload analysis did not pass every ordered body-part stage "
+                f"({detail}); refusing GPU work"
+            )
+        if (
+            crop_preflight.get("passed") is False
+            or crop_preflight.get("expandable_contacts")
+        ):
+            contacts = ", ".join(crop_preflight.get("expandable_contacts") or []) or "unknown"
+            die(
+                "CPU crop preflight did not contain the full head/neck before GPU work "
+                f"({contacts}); refusing GPU work"
+            )
+
+    requested_minimum_coverage = engine.get("min_mesh_coverage")
+    if requested_minimum_coverage is None:
+        requested_minimum_coverage = defaults.get("min_mesh_coverage", 0.0)
+    try:
+        minimum_mesh_coverage = float(requested_minimum_coverage)
+    except (TypeError, ValueError):
+        die("min_mesh_coverage must be a number between 0 and 1")
+    if not 0.0 <= minimum_mesh_coverage <= 1.0:
+        die("min_mesh_coverage must be a number between 0 and 1")
+    mesh_coverage = None
+    whole_zone_mesh_coverage = None
+    if identity_reference_path is not None:
+        identity_mesh = zone.get("identity_mesh") or {}
+        try:
+            whole_zone_mesh_coverage = float(identity_mesh["coverage_ratio"])
+            mesh_coverage = float(identity_mesh.get("core_coverage_ratio", whole_zone_mesh_coverage))
+        except (KeyError, TypeError, ValueError):
+            die("CPU face outline returned no valid identity-mesh coverage; refusing GPU cleanup")
+        if not math.isfinite(mesh_coverage):
+            die("CPU face outline returned non-finite identity-mesh coverage; refusing GPU cleanup")
+        if minimum_mesh_coverage > 0.0 and mesh_coverage < minimum_mesh_coverage:
+            die(
+                f"identity mesh coverage {mesh_coverage:.1%} is below the "
+                f"required {minimum_mesh_coverage:.1%}; refusing GPU cleanup"
+            )
+
+    checkpoint_requested = checkpoint or engine.get("checkpoint") or defaults.get("checkpoint")
+    checkpoint_name, checkpoint_matched = resolve_checkpoint_info(root, checkpoint_requested, comfy=comfy)
+    if not checkpoint_matched:
+        die(f"face-zone lane requires '{checkpoint_requested}', not fallback '{checkpoint_name}'")
+    graph = load_json(root / workflow_rel)
+    graph.pop("_comment", None)
+    crop_title = "IDENTITY MESH SEED" if identity_reference_path is not None else "FACE CROP"
+    _, crop_node = _named_node(graph, "LoadImage", crop_title)
+    _, mask_node = _named_node(graph, "LoadImage", "EDIT ZONE MASK")
+    crop_artifact = (
+        zone["artifacts"]["identity_mesh_seed"]
+        if identity_reference_path is not None
+        else zone["artifacts"]["face_crop"]
+    )
+    crop_node["inputs"]["image"] = upload_image(comfy, Path(crop_artifact))
+    mask_node["inputs"]["image"] = upload_image(comfy, Path(zone["artifacts"]["graded_mask"]))
+    edge_mask_node = next(
+        (
+            node for node in graph.values()
+            if node.get("class_type") == "LoadImage"
+            and node.get("_meta", {}).get("title") == "EDGE HARMONIZE MASK"
+        ),
+        None,
+    )
+    if edge_mask_node is not None:
+        edge_mask_artifact = zone["artifacts"].get("skin_match_ring")
+        if not edge_mask_artifact:
+            die("face-zone workflow requires a saved skin-match ring")
+        edge_mask_node["inputs"]["image"] = upload_image(comfy, Path(edge_mask_artifact))
+    identity_photo_node = next(
+        (
+            node for node in graph.values()
+            if node.get("class_type") == "LoadImage"
+            and node.get("_meta", {}).get("title") == "IDENTITY PHOTO"
+        ),
+        None,
+    )
+    if identity_photo_node is not None:
+        # the IP-Adapter avenue anchors identity to a REAL photo embedding —
+        # prefer an explicit engine.identity_photo, fall back to the reviewed
+        # identity reference; never run the avenue without an anchor image
+        identity_photo = engine.get("identity_photo") or (
+            str(identity_reference_path) if identity_reference_path else None)
+        if not identity_photo or not Path(identity_photo).is_file():
+            die("this face-zone workflow needs an identity photo: pass "
+                "engine.identity_photo (a real photo of the founder) or use a "
+                "preset with a reviewed identity reference")
+        identity_photo_node["inputs"]["image"] = upload_image(comfy, Path(identity_photo))
+
+    identity_model_weight = float(
+        identity_strength or engine.get("identity_strength") or identity.get("strength", 1.0)
+    )
+    identity_clip_weight = float(
+        engine.get("identity_clip_strength") or identity.get("clip_strength") or identity_model_weight
+    )
+    gpu_passes = _resolve_face_zone_gpu_passes(engine, defaults, run_seed)
+    skip_gpu_cleanup = bool(
+        engine.get("skip_gpu_cleanup")
+        if "skip_gpu_cleanup" in engine
+        else defaults.get("skip_gpu_cleanup", False)
+    )
+    if skip_gpu_cleanup:
+        zone_dir = Path(zone["zone_file"]).parent
+        generated_crop = Path(zone["artifacts"]["identity_mesh_seed"])
+        month_dir = root / "artifacts" / project / f"{datetime.now():%Y-%m}"
+        month_dir.mkdir(parents=True, exist_ok=True)
+        final = month_dir / f"{datetime.now():%Y%m%d}_{recipe['id']}_{resolved_job_id}_00001_.png"
+        composited = subprocess.run(
+            [str(comfy_python), str(zone_script), "--root", str(root), "composite",
+             "--zone", zone["zone_file"], "--generated-crop", str(generated_crop),
+             "--output", str(final)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+        if composited.returncode != 0 or not final.is_file():
+            die(f"CPU face-zone composite failed: {(composited.stderr or composited.stdout).strip()[-800:]}")
+        zone_record = load_json(Path(zone["zone_file"]))
+        zone_record["status"] = "CPU identity mesh seed used without GPU cleanup"
+        zone_record["generated_crop"] = str(generated_crop)
+        zone_record["final"] = str(final)
+        Path(zone["zone_file"]).write_text(json.dumps(zone_record, indent=2) + "\n", encoding="utf-8")
+        card = {
+            "artifact_id": f"art.{resolved_job_id}.0",
+            "job_id": resolved_job_id,
+            "project": project,
+            "kind": "image",
+            "recipe": f"{recipe['id']}@{recipe['version']}",
+            "purpose": purpose,
+            "prompt": prompt,
+            "negative": negative,
+            "checkpoint": checkpoint_name,
+            "workflow": workflow_rel,
+            "seed": run_seed,
+            "size": f"{_target_size(target)[0]}x{_target_size(target)[1]}",
+            "steps": 0,
+            "cfg": 0,
+            "sampler": "cpu-only",
+            "scheduler": "cpu-only",
+            "denoise": 0,
+            "target": str(target),
+            "target_sha256": _file_sha256(target),
+            "retry_policy": "fresh-from-immutable-original; no generated parent",
+            "generated_parent": None,
+            "target_preset": target_preset or "auto",
+            "engine": "cpu_face_zone_sd15_seed_only",
+            "gpu_passes": [],
+            "identity_mode": "lora",
+            "identity_model_strength": identity_model_weight,
+            "identity_clip_strength": identity_clip_weight,
+            "lora": selected_identity_lora,
+            "face_zone": zone_record,
+            "upload_analysis": upload_analysis,
+        "face_report": face_report,
+            "face_report": face_report,
+            "crop_preflight": crop_preflight,
+            **({"identity_reference": str(identity_reference_path)} if identity_reference_path else {}),
+            **({"face_swap_preflight": {
+                "identity_mesh_coverage": mesh_coverage,
+                "facial_core_mesh_coverage": mesh_coverage,
+                "whole_zone_mesh_coverage": whole_zone_mesh_coverage,
+                "minimum_mesh_coverage": minimum_mesh_coverage,
+                "passed": True,
+            }} if identity_reference_path is not None else {}),
+            "skin_match": "generated mean preserved; target contrast harmonized 35%; soft boundary ring composite",
+            **({"subject_profile": subject_profile} if subject_profile else {}),
+            "score": None,
+            "tags": ["cpu-face-outline", "graded-mask", "skin-match", "cpu-only-seed"],
+            "caption": "",
+            "status": "draft",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        final.with_suffix(final.suffix + ".json").write_text(
+            json.dumps(card, indent=2) + "\n", encoding="utf-8"
+        )
+        print(f"[byrdimage] CPU face outline: {zone['artifacts']['outline_preview']}")
+        print(f"[byrdimage] skin-match zone: {zone['artifacts']['skin_match_ring']}")
+        print(f"[byrdimage] archived {final} (+card)")
+        return resolved_job_id, [(final, card)]
+    sampler_nodes = []
+    for node in graph.values():
+        class_type, inputs = node.get("class_type"), node.get("inputs", {})
+        if class_type == "CheckpointLoaderSimple":
+            inputs["ckpt_name"] = checkpoint_name
+        elif class_type == "KSampler":
+            sampler_nodes.append(node)
+        elif class_type == "CLIPTextEncode":
+            inputs["text"] = prompt if "POSITIVE" in node.get("_meta", {}).get("title", "") else negative
+        elif class_type == "RepeatLatentBatch":
+            # candidates per submit: encode once, sample N — clamp for the 8GB card
+            inputs["amount"] = max(1, min(4, int(engine.get("batch", defaults.get("batch", 1)))))
+        elif class_type == "SaveImage":
+            inputs["filename_prefix"] = f"{datetime.now():%Y%m%d}_{recipe['id']}_{resolved_job_id}_crop"
+    if len(sampler_nodes) != len(gpu_passes):
+        die(
+            f"face-zone workflow has {len(sampler_nodes)} KSampler nodes but "
+            f"the recipe resolved {len(gpu_passes)} GPU passes"
+        )
+    assigned_passes = set()
+    for sampler_node in sampler_nodes:
+        pass_id = str(sampler_node.get("_meta", {}).get("byrd_pass", "")).strip()
+        if not pass_id and len(sampler_nodes) == len(gpu_passes) == 1:
+            pass_id = next(iter(gpu_passes))
+        pass_config = gpu_passes.get(pass_id)
+        if pass_config is None or pass_id in assigned_passes:
+            die(f"face-zone workflow has an unconfigured or duplicate GPU pass '{pass_id}'")
+        sampler_node["inputs"].update(pass_config)
+        sampler_node["inputs"].pop("id", None)
+        assigned_passes.add(pass_id)
+    if assigned_passes != set(gpu_passes):
+        die("face-zone workflow did not assign every configured GPU pass")
+    pass_plan = list(gpu_passes.values())
+    steps = sum(pass_config["steps"] for pass_config in pass_plan)
+    sample_cfg = pass_plan[0]["cfg"]
+    sampler = pass_plan[0]["sampler_name"]
+    scheduler = pass_plan[0]["scheduler"]
+    denoise = pass_plan[0]["denoise"]
+
+    identity_model_weight = float(
+        identity_strength or engine.get("identity_strength") or identity.get("strength", 1.0)
+    )
+    identity_clip_weight = float(
+        engine.get("identity_clip_strength") or identity.get("clip_strength") or identity_model_weight
+    )
+    insert_lora(graph, selected_identity_lora, identity_model_weight,
+                lora_id="byrd_identity_lora", clip_strength=identity_clip_weight)
+
+    outputs = submit_and_wait(comfy, graph, resolved_job_id)
+    zone_dir = Path(zone["zone_file"]).parent
+    crop_images = [image for node_output in outputs.values()
+                   for image in node_output.get("images", [])]
+    if not crop_images:
+        die("face-zone workflow returned no generated crop")
+
+    month_dir = root / "artifacts" / project / f"{datetime.now():%Y-%m}"
+    month_dir.mkdir(parents=True, exist_ok=True)
+    zone_record = load_json(Path(zone["zone_file"]))
+    zone_record["status"] = "GPU edit executed and skin-match composite completed"
+    zone_record["candidates"] = len(crop_images)
+    saved_candidates = []
+    for crop_index, image in enumerate(crop_images):
+        query = urllib.parse.urlencode({
+            "filename": image["filename"],
+            "subfolder": image.get("subfolder", ""),
+            "type": image.get("type", "output"),
+        })
+        generated_crop = zone_dir / f"generated_face_crop_{crop_index:02d}.png"
+        with urllib.request.urlopen(f"{comfy}/view?{query}", timeout=60) as response:
+            generated_crop.write_bytes(response.read())
+        final = month_dir / (f"{datetime.now():%Y%m%d}_{recipe['id']}_"
+                             f"{resolved_job_id}_{crop_index + 1:05d}_.png")
+        composited = subprocess.run(
+            [str(comfy_python), str(zone_script), "--root", str(root), "composite",
+             "--zone", zone["zone_file"], "--generated-crop", str(generated_crop),
+             "--output", str(final)],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+        )
+        if composited.returncode != 0 or not final.is_file():
+            die(f"CPU face-zone composite failed: {(composited.stderr or composited.stdout).strip()[-800:]}")
+        saved_candidates.append((generated_crop, final))
+    zone_record["generated_crops"] = [str(c) for c, _ in saved_candidates]
+    zone_record["finals"] = [str(f) for _, f in saved_candidates]
+    Path(zone["zone_file"]).write_text(json.dumps(zone_record, indent=2) + "\n", encoding="utf-8")
+
+    saved = []
+    for crop_index, (generated_crop, final) in enumerate(saved_candidates):
+        card = {
+        "artifact_id": f"art.{resolved_job_id}.{crop_index}",
+        "job_id": resolved_job_id,
+        "project": project,
+        "kind": "image",
+        "recipe": f"{recipe['id']}@{recipe['version']}",
+        "purpose": purpose,
+        "prompt": prompt,
+        "negative": negative,
+        "checkpoint": checkpoint_name,
+        "workflow": workflow_rel,
+        "seed": run_seed,
+        "size": f"{_target_size(target)[0]}x{_target_size(target)[1]}",
+        "steps": steps,
+        "cfg": sample_cfg,
+        "sampler": sampler,
+        "scheduler": scheduler,
+        "denoise": denoise,
+        "target": str(target),
+        "target_sha256": _file_sha256(target),
+        "retry_policy": "fresh-from-immutable-original; no generated parent",
+        "generated_parent": None,
+        "target_preset": target_preset or "auto",
+        "engine": "cpu_face_zone_sd15_multipass" if len(gpu_passes) > 1 else "cpu_face_zone_sd15",
+        "gpu_passes": list(gpu_passes.values()),
+        "identity_mode": "lora",
+        "identity_model_strength": identity_model_weight,
+        "identity_clip_strength": identity_clip_weight,
+        "lora": selected_identity_lora,
+        "face_zone": zone_record,
+        "upload_analysis": upload_analysis,
+        "crop_preflight": crop_preflight,
+        **({"identity_reference": str(identity_reference_path)} if identity_reference_path else {}),
+        **({"face_swap_preflight": {
+            "identity_mesh_coverage": mesh_coverage,
+            "facial_core_mesh_coverage": mesh_coverage,
+            "whole_zone_mesh_coverage": whole_zone_mesh_coverage,
+            "minimum_mesh_coverage": minimum_mesh_coverage,
+            "passed": True,
+        }} if identity_reference_path is not None else {}),
+        "skin_match": "generated mean preserved; target contrast harmonized 35%; soft boundary ring composite",
+        **({"subject_profile": subject_profile} if subject_profile else {}),
+        "score": None,
+        "tags": ["cpu-face-outline", "graded-mask", "skin-match"]
+        + (["multi-pass-gpu-cleanup"] if len(gpu_passes) > 1 else []),
+        "caption": "",
+        "status": "draft",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+        card["candidate"] = crop_index + 1
+        card["candidates"] = len(saved_candidates)
+        card["canvas"] = canvas
+        final.with_suffix(final.suffix + ".json").write_text(
+            json.dumps(card, indent=2) + "\n", encoding="utf-8"
+        )
+        print(f"[byrdimage] archived {final} (+card)")
+        saved.append((final, card))
+    print(f"[byrdimage] CPU face outline: {zone['artifacts']['outline_preview']}")
+    print(f"[byrdimage] skin-match zone: {zone['artifacts']['skin_match_ring']}")
+    print(f"[byrdimage] face-zone candidates: {len(saved)} at canvas {canvas}px")
+    return resolved_job_id, saved
 
 
 def submit_and_wait(comfy: str, graph: dict, job_id: str) -> dict:
@@ -838,6 +1750,67 @@ def facezone_auto(root, target_path, project, purpose,
     return job_id, run_graph(root, comfy, graph, job_id, project, card_base)
 
 
+def facezone_preview(root, target_path, project, purpose,
+                     detector=None, threshold=None, job_id=None, dry_run=False):
+    """The CPU pre-step, inspectable (Codex's rule: the GPU must not decide the
+    mask). Runs ONLY detection on the target — no checkpoint, no diffusion —
+    and archives TWO artifacts: a diagnostic overlay (the zone glowing on the
+    character) and the soft mask itself. The founder approves the zone, then
+    the swap runs with exactly that mask (image.faceswap mask_artifact).
+    Returns (job_id, [(png_path, card_dict), ...])."""
+    root = Path(root)
+    cfg = load_json(root / "byrdhouse.config.json")
+    comfy = cfg["services"]["comfyui"].rstrip("/")
+    img_cfg = cfg.get("image", {})
+
+    target = Path(target_path)
+    if not target.exists():
+        die(f"zone preview target not found: {target}")
+
+    workflow_rel = img_cfg.get("faceswap_preview_workflow",
+                               "workflows/facezone_preview_api.json")
+    graph = load_json(root / workflow_rel)
+    graph.pop("_comment", None)
+    if "target" not in graph or not any(
+            n.get("class_type") == "BboxDetectorSEGS" for n in graph.values()):
+        die(f"{workflow_rel} must have a 'target' LoadImage node and a "
+            "BboxDetectorSEGS node")
+
+    job_id = job_id or new_id("job")
+    prefix = f"{datetime.now():%Y%m%d}_zone_{job_id}"
+    detector = detector or img_cfg.get("faceswap_detector", "bbox/face_yolov8m.pt")
+    threshold = float(threshold or 0.5)
+
+    for nid, node in graph.items():
+        ct, inputs = node.get("class_type"), node.get("inputs", {})
+        if ct == "UltralyticsDetectorProvider":
+            inputs["model_name"] = detector
+        elif ct == "BboxDetectorSEGS":
+            inputs["threshold"] = threshold
+        elif ct == "SaveImage":
+            # keep the two outputs tellable apart in the archive: _overlay/_mask
+            tag = "mask" if "mask" in str(nid) else "overlay"
+            inputs["filename_prefix"] = f"{prefix}_{tag}"
+
+    print(f"[byrdimage] zone-preview {job_id}  target {target.name}  "
+          f"detector {detector}  threshold {threshold}  (CPU only, no diffusion)")
+    if dry_run:
+        print(json.dumps(graph, indent=2))
+        print("[byrdimage] dry run — nothing submitted")
+        return job_id, []
+
+    graph["target"]["inputs"]["image"] = upload_image(comfy, target)
+
+    card_base = {
+        "recipe": "facezone_preview@1", "purpose": purpose,
+        "prompt": "", "negative": "", "seed": None,
+        "workflow": workflow_rel, "slots": {}, "vary_picks": {},
+        "swap_target": str(target), "detector": detector,
+        "threshold": threshold,
+    }
+    return job_id, run_graph(root, comfy, graph, job_id, project, card_base)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--recipe")
@@ -853,6 +1826,21 @@ def main() -> None:
     ap.add_argument("--auto", action="store_true",
                     help="auto route: detector finds the face, masks and redraws it "
                          "as you (--lora + --prompt) — no mask, no face photo")
+    ap.add_argument("--preview", action="store_true",
+                    help="CPU zone preview: detection only — saves the zone overlay "
+                         "+ mask for approval, no checkpoint, no diffusion")
+    ap.add_argument("--edit-face-zone", metavar="TARGET_IMAGE",
+                    help="QUALITY lane by hand: examiner gate -> CPU mesh seed -> "
+                         "cleanup -> composite (recipe anime_face_zone_edit)")
+    ap.add_argument("--face-preset", default="auto",
+                    help="quality lane preset: auto|gojo|vegeta|luffy_close|luffy_full")
+    ap.add_argument("--face-index", type=int, default=0,
+                    help="which face when the examiner reports several (0 = largest)")
+    ap.add_argument("--face-recipe", default="anime_face_zone_edit",
+                    help="quality-lane recipe (pin a version with name@N)")
+    ap.add_argument("--workflow",
+                    help="quality-lane avenue override: a workflows/ path or a "
+                         "shorthand — controlnet | diffdiff | ipadapter")
     ap.add_argument("--denoise", type=float, help="zone edit denoise (default 0.7)")
     ap.add_argument("--blend", type=float, default=0.0,
                     help="face swap style blend 0-0.65 (0.3-0.45 for anime targets)")
@@ -865,7 +1853,25 @@ def main() -> None:
     if not root:
         die("BYRDHOUSE_ROOT not set — run the setup script first")
 
+    if args.edit_face_zone:
+        engine = {"face_index": args.face_index}
+        shorthand = {
+            "controlnet": "workflows/sd15_face_zone_controlnet_api.json",
+            "diffdiff": "workflows/sd15_face_zone_diffdiff_api.json",
+            "ipadapter": "workflows/sd15_face_zone_ipadapter_api.json",
+        }
+        if args.workflow:
+            engine["workflow"] = shorthand.get(args.workflow, args.workflow)
+        edit_face_zone(root, args.face_recipe, args.edit_face_zone,
+                       args.project, args.purpose,
+                       identity_lora=args.lora, target_preset=args.face_preset,
+                       engine=engine)
+        return
     if args.swap_target:
+        if args.preview:
+            facezone_preview(root, args.swap_target, args.project, args.purpose,
+                             dry_run=args.dry_run)
+            return
         if args.auto:
             facezone_auto(root, args.swap_target, args.project, args.purpose,
                           prompt=args.prompt, denoise=args.denoise,
@@ -900,3 +1906,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+

@@ -6,8 +6,22 @@
 
   "references": {
     "_setup": "Place 5-7 clear photos in profiles/me/references/ on your machine. Name them descriptively (front.jpg, left_angle.jpg, etc). The worker picks from default_set when a 'me' recipe runs.",
-    "default_set": ["front.jpg"],
-    "available": []
+    "default_set": [
+      "ai_identity_front_v1.png",
+      "ai_identity_threequarter_left_v1.png",
+      "ai_identity_threequarter_right_v1.png",
+      "me_photo_04.jpg"
+    ],
+    "available": [
+      "ai_identity_front_v1.png",
+      "ai_identity_threequarter_left_v1.png",
+      "ai_identity_threequarter_right_v1.png",
+      "ai_identity_profile_left_v1.png",
+      "ai_identity_smile_front_teeth_v1.png",
+      "ai_identity_smile_threequarter_left_teeth_v1.png",
+      "me_photo_04.jpg",
+      "me_photo_06.jpg"
+    ]
   },
 
   "identity_notes": {

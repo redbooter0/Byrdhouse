@@ -142,6 +142,15 @@ def main():
         fd_info, det_info = {}, {}
     if fd_info.get("FaceDetailer") and det_info.get("UltralyticsDetectorProvider"):
         ok("Impact Pack installed (FaceDetailer + UltralyticsDetectorProvider)")
+        try:
+            seg_info = get_json(f"{comfy}/object_info/BboxDetectorSEGS")
+        except Exception:
+            seg_info = {}
+        if seg_info.get("BboxDetectorSEGS"):
+            ok("zone preview nodes available (BboxDetectorSEGS)")
+        else:
+            problem("BboxDetectorSEGS missing — the CPU zone-preview route needs it",
+                    "it ships with Impact Pack; update the pack via ComfyUI Manager")
         det_live = node_inputs(det_info["UltralyticsDetectorProvider"])
         det_models = det_live.get("model_name") if isinstance(det_live.get("model_name"), list) else []
         det_want = img_cfg.get("faceswap_detector", "bbox/face_yolov8m.pt")
@@ -156,6 +165,49 @@ def main():
         problem("Impact Pack nodes missing — the AUTO route (one-step 'redraw as me') needs them",
                 "ComfyUI Manager -> install 'ComfyUI Impact Pack' AND 'ComfyUI Impact Subpack', "
                 "restart ComfyUI (the face_yolov8m.pt detector installs with the Subpack)")
+
+    # ── 3c. quality lane v2: ControlNet-guided cleanup (the GPU that earns
+    #        its keep — canny edges hold identity while denoise 0.55 redraws
+    #        the full zone). Core nodes; only the model file is a download. ──
+    try:
+        cn_info = get_json(f"{comfy}/object_info/ControlNetLoader")
+    except Exception:
+        cn_info = {}
+    if cn_info.get("ControlNetLoader"):
+        cn_live = node_inputs(cn_info["ControlNetLoader"])
+        cn_models = cn_live.get("control_net_name") if isinstance(cn_live.get("control_net_name"), list) else []
+        if any("control_v11p_sd15_canny" in str(m) for m in cn_models):
+            ok("ControlNet canny model available (guided face-zone cleanup v2)")
+        else:
+            problem("control_v11p_sd15_canny.safetensors not in models\\controlnet — "
+                    "the v3 guided cleanup (anime_face_zone_edit@3) needs it",
+                    "download from huggingface.co/lllyasviel/ControlNet-v1-1 "
+                    "(control_v11p_sd15_canny.safetensors, openrail/commercial-OK) into "
+                    "ComfyUI\\models\\controlnet — see docs/MODELS.md")
+
+    # ── 3d. avenue checks: diff-diffusion (core) + IP-Adapter PLUS FACE ──────
+    try:
+        dd_info = get_json(f"{comfy}/object_info/DifferentialDiffusion")
+    except Exception:
+        dd_info = {}
+    if dd_info.get("DifferentialDiffusion"):
+        ok("DifferentialDiffusion available (avenue A: seam-killer variant)")
+    else:
+        problem("DifferentialDiffusion node missing — avenue A needs it",
+                "it is a CORE ComfyUI node — update ComfyUI itself (git pull / "
+                "update_comfyui.bat), no pack or model required")
+    try:
+        ipa_info = get_json(f"{comfy}/object_info/IPAdapterUnifiedLoader")
+    except Exception:
+        ipa_info = {}
+    if ipa_info.get("IPAdapterUnifiedLoader"):
+        ok("IPAdapter nodes available (avenue B: real-photo identity anchor)")
+    else:
+        problem("ComfyUI_IPAdapter_plus missing — avenue B (IP-Adapter PLUS FACE) needs it",
+                "ComfyUI Manager -> install 'ComfyUI_IPAdapter_plus' (cubiq), restart; "
+                "models: ip-adapter-plus-face_sd15.safetensors -> models\\ipadapter and "
+                "the SD1.5 CLIP-ViT-H image encoder -> models\\clip_vision "
+                "(h94/IP-Adapter, Apache-2.0 — docs/MODELS.md)")
 
     # ── 4. face photo ─────────────────────────────────────────────────────────
     refs = root / "profiles" / "me" / "references"

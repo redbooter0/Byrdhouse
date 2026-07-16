@@ -1,0 +1,49 @@
+{
+  "_comment": "Fixed 512 px SD1.5 identity gate. This deliberately removes target-image masking so a Carey LoRA must prove it learned a recognizable face before the four anime integration targets consume GPU time.",
+  "1": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "Meina V5.1 - Baked VAE.safetensors" },
+    "_meta": { "title": "COMPACT ANIME CHECKPOINT" }
+  },
+  "2": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["1", 1] },
+    "_meta": { "title": "POSITIVE PROMPT" }
+  },
+  "3": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["1", 1] },
+    "_meta": { "title": "NEGATIVE PROMPT" }
+  },
+  "4": {
+    "class_type": "EmptyLatentImage",
+    "inputs": { "width": 512, "height": 512, "batch_size": 1 },
+    "_meta": { "title": "IDENTITY GATE LATENT" }
+  },
+  "5": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0,
+      "steps": 24,
+      "cfg": 6.0,
+      "sampler_name": "dpmpp_2m",
+      "scheduler": "karras",
+      "denoise": 1.0,
+      "model": ["1", 0],
+      "positive": ["2", 0],
+      "negative": ["3", 0],
+      "latent_image": ["4", 0]
+    },
+    "_meta": { "title": "FIXED IDENTITY GATE" }
+  },
+  "6": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["5", 0], "vae": ["1", 2] },
+    "_meta": { "title": "DECODE" }
+  },
+  "7": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "byrdhouse_carey_identity_gate", "images": ["6", 0] },
+    "_meta": { "title": "SAVE IDENTITY GATE" }
+  }
+}

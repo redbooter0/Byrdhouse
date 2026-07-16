@@ -1,8 +1,23 @@
 # FACE LAB — local face swap + identity LoRA (the belt's face engine)
 
 *ByrdHouse can now IMAGINE an image (recipes → ComfyUI) and SWAP a face onto any
-image (ReActor → ComfyUI) — 100% local on BYRD-GAMING. MINI/router/dashboard are
-optional for all of this; the function itself runs straight against ComfyUI.*
+image — 100% local on BYRD-GAMING. MINI/router/dashboard are optional for all of
+this; the functions run straight against ComfyUI.*
+
+## The reconciled lane map (2026-07-15 — both agents' work, one belt)
+
+| Tier | Lane | Job / recipe | Docs |
+|---|---|---|---|
+| **Quality (funded/public)** | CPU-first mesh seed: 478-pt mesh + semantic zone + reference warp + optional low-denoise cleanup, SD1.5 Meina + owner LoRA (`careybh person`) | recipe `anime_face_zone_edit@1` (runner `face_zone_identity_edit`) | `docs/FACE_ZONE_EDIT_WORKFLOW.md`, state in `docs/IMAGE_GENERATION_STATE.md` |
+| **Step 0 — Examine** | CPU face report: every face, operable-or-not + why, risk flags, per-feature likeness plan; also the automatic gate inside the quality lane | `image.faceswap` route `examine` (dashboard "Examine first") | `docs/IMAGE_GENERATION_STATE.md` |
+| **Fast daily** | Preview (CPU mask, approvable) → Zone (mask-bounded edit) → Auto (FaceDetailer detect+redraw) | `image.faceswap` routes `preview`/mask/`auto` | this file |
+| **Private experiments only** | ReActor direct swap/blend, IP-Adapter FaceID (`me_as_character`) — InsightFace research license, excluded from the funded lane | `image.faceswap` swap route | policy in `AGENTS.md` + `docs/MODELS.md` |
+
+Read `docs/IMAGE_GENERATION_STATE.md` before touching the quality lane — it is
+the live handoff (current verdict: architecture proven, no LoRA candidate
+approved yet; CPU-only seed finish preferred on hard targets).
+
+**Operating the system by hand (founder or Codex): see `docs/FACE_OPS.md` — one entry point `scripts\facelab.ps1`, the lane ladder (main + 5 backups), every model download, every command.**
 
 ## The one test that matters (run on the GAMING PC)
 
@@ -54,9 +69,12 @@ python scripts\facelab_preflight.py --run E:\path\to\link.png   --route auto --l
 # 3a. comparison — ReActor direct swap + anime blend
 python scripts\facelab_preflight.py --run E:\path\to\gojo.png --blend 0.35
 
-# 3b. zone route (the founder lane): GPU edits ONLY inside the mask; identity
-#     from the trained LoRA + notes. Mask from byrdfacezone.py or hand-drawn
-#     (white = change zone).
+# 3b. CPU zone preview (inspect the mask BEFORE any GPU): saves _overlay + _mask
+python scripts\byrdimage.py --swap-target E:\path\to\link.png --preview --purpose "link zone preview"
+
+# 3c. zone route (the founder lane): GPU edits ONLY inside the mask; identity
+#     from the trained LoRA + notes. Mask from the preview above, byrdfacezone.py,
+#     or hand-drawn (white = change zone).
 python scripts\byrdimage.py --swap-target E:\path\to\gojo.png --swap-mask E:\path\to\gojo_mask.png --lora carey_face --prompt "Gojo Satoru, cel shading, Jujutsu Kaisen style" --purpose "gojo zone edit"
 ```
 
@@ -91,7 +109,15 @@ the dashboard's **Face Swap** panel (Create tab) with auto-judge + approval queu
   that is `workflows/reactor_faceswap_blend_api.json`, driven by
   `payload.style_blend`. Attach your identity LoRA to the blend pass so the
   face stays YOU through the diffusion.
-- **Four routes, all in the belt now** (all `image.faceswap` except the last):
+- **The CPU pre-step, formalized** (Codex's rule: *the GPU must not decide the
+  mask*): the **Preview route** (`route:"preview"`, CLI `--preview`) runs ONLY
+  detection — seconds, no checkpoint, works in any GPU mode — and archives two
+  artifacts: the **zone overlay** (the mask glowing on the character, failures
+  inspectable before the GPU spends a step) and the **soft mask** itself. Approve
+  the mask in the gallery, then paste its artifact id into the Face Swap panel's
+  "zone from a preview" box (or `mask_artifact` in the payload) and the GPU edits
+  exactly that zone. Original, overlay, mask, result, sidecar card — all kept.
+- **Four execution routes, all in the belt now** (all `image.faceswap` except the last):
   - **AUTO (the daily driver, dashboard default)**: detector finds the
     character's face → masks it → redraws it as YOU (identity LoRA + notes) in
     the picture's own art style → composites back. One upload, one step.

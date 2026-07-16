@@ -64,12 +64,17 @@ class Comfy(BaseHTTPRequestHandler):
             if batch is None:  # img2img graph: batch comes from RepeatLatentBatch
                 batch = next((n["inputs"]["amount"] for n in graph.values()
                               if n.get("class_type") == "RepeatLatentBatch"), 1)
-            prefix = next(n["inputs"]["filename_prefix"] for n in graph.values()
-                          if n.get("class_type") == "SaveImage")
-            images = [{"filename": f"{prefix}_{i:05d}_.png", "subfolder": "", "type": "output"}
-                      for i in range(batch)]
+            # one output entry per SaveImage node (zone previews save two:
+            # overlay + mask), each honoring its own filename_prefix
+            outputs = {}
+            for i, node in enumerate(n for n in graph.values()
+                                     if n.get("class_type") == "SaveImage"):
+                prefix = node["inputs"]["filename_prefix"]
+                outputs[str(9 + i)] = {"images": [
+                    {"filename": f"{prefix}_{j:05d}_.png", "subfolder": "", "type": "output"}
+                    for j in range(batch)]}
             return self._json({pid: {"status": {"status_str": "success"},
-                                     "outputs": {"9": {"images": images}}}})
+                                     "outputs": outputs}})
         if self.path.startswith("/view"):
             self.send_response(200)
             self.send_header("Content-Type", "image/png")

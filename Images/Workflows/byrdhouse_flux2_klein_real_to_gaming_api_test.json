@@ -1,0 +1,340 @@
+{
+  "92:62": {
+    "class_type": "Flux2Scheduler",
+    "inputs": {
+      "steps": [
+        "115",
+        0
+      ],
+      "width": [
+        "92:81",
+        0
+      ],
+      "height": [
+        "92:81",
+        1
+      ]
+    }
+  },
+  "92:81": {
+    "class_type": "GetImageSize",
+    "inputs": {
+      "image": [
+        "92:80",
+        0
+      ]
+    }
+  },
+  "92:72": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "flux2-vae.safetensors"
+    },
+    "_meta": {
+      "title": "VAE — FLUX 2"
+    }
+  },
+  "92:70": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "flux-2-klein-9b-fp8.safetensors",
+      "weight_dtype": "default"
+    },
+    "_meta": {
+      "title": "MODEL — FLUX 2 KLEIN 9B FP8"
+    }
+  },
+  "92:84:78": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "92:85",
+        0
+      ],
+      "vae": [
+        "92:72",
+        0
+      ]
+    }
+  },
+  "92:61": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "euler"
+    }
+  },
+  "92:79:76": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "92:86",
+        0
+      ],
+      "latent": [
+        "92:79:78",
+        0
+      ]
+    }
+  },
+  "92:80": {
+    "class_type": "ImageScaleToTotalPixels",
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "megapixels": 2,
+      "resolution_steps": 4,
+      "image": [
+        "76",
+        0
+      ]
+    }
+  },
+  "76": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "REFERENCE_1_SUBJECT.jpg"
+    },
+    "_meta": {
+      "title": "REFERENCE 1 — SUBJECT / POSE / COMPOSITION"
+    }
+  },
+  "92:79:78": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": [
+        "92:80",
+        0
+      ],
+      "vae": [
+        "92:72",
+        0
+      ]
+    }
+  },
+  "92:71": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "qwen_3_8b_fp8mixed.safetensors",
+      "type": "flux2",
+      "device": "default"
+    },
+    "_meta": {
+      "title": "TEXT ENCODER — QWEN 3 8B FP8"
+    }
+  },
+  "92:64": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": [
+        "92:73",
+        0
+      ],
+      "guider": [
+        "92:63",
+        0
+      ],
+      "sampler": [
+        "92:61",
+        0
+      ],
+      "sigmas": [
+        "92:62",
+        0
+      ],
+      "latent_image": [
+        "92:66",
+        0
+      ]
+    }
+  },
+  "92:66": {
+    "class_type": "EmptyFlux2LatentImage",
+    "inputs": {
+      "batch_size": 1,
+      "width": [
+        "92:81",
+        0
+      ],
+      "height": [
+        "92:81",
+        1
+      ]
+    }
+  },
+  "92:73": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": 30701307
+    }
+  },
+  "92:65": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "92:64",
+        0
+      ],
+      "vae": [
+        "92:72",
+        0
+      ]
+    }
+  },
+  "103": {
+    "class_type": "Image Comparer (rgthree)",
+    "inputs": {
+      "image_a": [
+        "76",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "COMPARE — ORIGINAL vs UPSCALED"
+    }
+  },
+  "82": {
+    "class_type": "PreviewImage",
+    "inputs": {
+      "images": [
+        "92:65",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "RESULT — RAW GENERATION"
+    }
+  },
+  "92:84:77": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "92:79:77",
+        0
+      ],
+      "latent": [
+        "92:84:78",
+        0
+      ]
+    }
+  },
+  "92:86": {
+    "class_type": "ConditioningZeroOut",
+    "inputs": {
+      "conditioning": [
+        "92:74",
+        0
+      ]
+    }
+  },
+  "92:84:76": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "92:79:76",
+        0
+      ],
+      "latent": [
+        "92:84:78",
+        0
+      ]
+    }
+  },
+  "92:79:77": {
+    "class_type": "ReferenceLatent",
+    "inputs": {
+      "conditioning": [
+        "92:74",
+        0
+      ],
+      "latent": [
+        "92:79:78",
+        0
+      ]
+    }
+  },
+  "115": {
+    "class_type": "XIS_INT_Slider",
+    "inputs": {
+      "value": 28
+    },
+    "_meta": {
+      "title": "STEPS — 28 DEFAULT"
+    }
+  },
+  "92:85": {
+    "class_type": "ImageScaleToTotalPixels",
+    "inputs": {
+      "upscale_method": "nearest-exact",
+      "megapixels": 4,
+      "resolution_steps": 6,
+      "image": [
+        "81",
+        0
+      ]
+    }
+  },
+  "92:74": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "A. IDENTITY PRESERVATION: Transform the real subject into a recognizable high-quality video-game character. Reference 1 dominates facial likeness, face proportions, hairstyle, skin tone, age, body proportions, pose, camera angle, framing, important personal features, and core outfit silhouette. Preserve the subject's identity; do not replace the person with a generic game face. B. GAME TRANSFORMATION: Use Reference 2 only for gaming style, costume materials, lighting language, and visual genre. Make the gaming transformation intentional and visible rather than merely beautifying, sharpening, or adding generic realism. STYLE MODE: AAA. C. COSTUME AND MATERIALS: Adapt the existing outfit silhouette into coherent game-character costume design with readable fabric, leather, metal, polymer, seams, folds, layering, and believable fit; keep the redesign conservative unless the selected style profile calls for stronger redesign. Do not copy the face, ethnicity, age, or body identity from Reference 2. D. LIGHTING AND RENDERING: cinematic game lighting, clean silhouette separation, controlled highlights, readable material response, detailed hair, natural skin texture, professional promotional character rendering. E. COMPOSITION: preserve the subject's pose, camera angle, scale, and composition from Reference 1 unless a deliberate game presentation is requested; keep the face unobstructed and hands anatomically correct. F. QUALITY CONTROLS: anatomically correct hands, five fingers when visible, no extra limbs, no warped face, no plastic or waxy skin, no muddy costume textures, no random armor that obscures identity, no unnecessary gender or ethnicity changes, no severe age change, no text, no watermark. INTENSITY PROFILE: BALANCED GAMING. STYLE MODE: AAA semi-realistic game character: grounded anatomy, cinematic materials, premium promotional render, restrained stylization. INTENSITY PROFILE: Strong identity retention; obvious game-character conversion; moderate costume and material redesign.",
+      "clip": [
+        "92:71",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "BYRDHOUSE TRANSFORMATION PROMPT"
+    }
+  },
+  "113": {
+    "class_type": "Seed (rgthree)",
+    "inputs": {
+      "seed": 30701307
+    },
+    "_meta": {
+      "title": "SEED — RANDOM BY DEFAULT"
+    }
+  },
+  "81": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "REFERENCE_2_COSTUME.png"
+    },
+    "_meta": {
+      "title": "REFERENCE 2 — COSTUME / STYLE / MATERIALS"
+    }
+  },
+  "92:63": {
+    "class_type": "CFGGuider",
+    "inputs": {
+      "cfg": 0.9,
+      "positive": [
+        "92:84:77",
+        0
+      ],
+      "negative": [
+        "92:84:76",
+        0
+      ],
+      "model": [
+        "92:70",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "GUIDANCE — 0.9 DEFAULT"
+    }
+  },
+  "126": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "ByrdHouse/Flux2Klein/raw/ByrdHouse_Flux2Klein_RAW",
+      "images": [
+        "92:65",
+        0
+      ]
+    },
+    "_meta": {
+      "title": "SAVE — BYRDHOUSE RAW OUTPUT"
+    }
+  }
+}
