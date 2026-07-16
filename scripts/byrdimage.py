@@ -1013,6 +1013,11 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
             identity_reference_path = root / identity_reference_path
         if not identity_reference_path.is_file():
             die(f"identity mesh reference not found: {identity_reference_path}")
+    # FINISH mode (2026-07-16): polish an ALREADY-good composite — no mesh
+    # re-seeding, identity comes from the existing pixels; the GPU pass only
+    # removes speckle/seams at low denoise with the eye/hair guards intact.
+    if engine.get("no_identity_mesh"):
+        identity_reference_path = None
 
     # Founder rule: extra avenues ride as PARAMETERS, never as new defaults —
     # a job may pick any staged face-zone graph (diffdiff, ipadapter, controlnet)
@@ -1036,6 +1041,9 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         if photo_anchored:
             selected_identity_lora = None
             lora_status = "none — photo-anchored identity (IP-Adapter plus-face, license-clean)"
+        elif engine.get("no_identity_mesh"):
+            selected_identity_lora = None
+            lora_status = "none — finish pass (identity from the existing pixels)"
         else:
             die(str(exc))
 

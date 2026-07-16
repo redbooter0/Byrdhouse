@@ -69,6 +69,28 @@ switch ($Command.ToLower()) {
         & $comfyPython @args2
         exit $LASTEXITCODE
     }
+    "run" {
+        # The conductor: ONE command from image to result. Examines, picks the
+        # lane itself (free photo-anchored first), falls back automatically,
+        # ends with a result or the exact reason + next command.
+        Need-Image
+        $args2 = @((Join-Path $root "scripts\byrdswap.py"), "--image", $Image, "--root", $root)
+        if ($Lora) { $args2 += @("--lora", $Lora) }
+        if ($Preset -ne "auto") { $args2 += @("--preset", $Preset) }
+        if ($Quick) { $args2 += "--plan" }
+        & $comfyPython @args2
+        exit $LASTEXITCODE
+    }
+    "finish" {
+        # Complete an ALREADY-good composite (the almost-perfect Vegeta case):
+        # one low-denoise pass removes speckle/patchiness/seams — identity and
+        # target eyes untouched, guards + .verify.json included.
+        Need-Image
+        $args2 = @((Join-Path $root "scripts\byrdswap.py"), "--image", $Image, "--root", $root, "--finish")
+        if ($Lora) { $args2 += @("--lora", $Lora) }
+        & $comfyPython @args2
+        exit $LASTEXITCODE
+    }
     "quality" {
         Need-Image
         # Workflow aliases (repair 2026-07-16): 'diffdiff' is the TRUE

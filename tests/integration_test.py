@@ -1254,6 +1254,48 @@ def main():
               any(n.get("_meta", {}).get("title") == "IDENTITY PHOTO"
                   for n in ipad_graph.values() if isinstance(n, dict)))
 
+        # The conductor (byrdswap.py): the bot's lane decisions, zero GPU.
+        import byrdswap
+        stable_rep = {"faces": [{"index": 0, "flags": [],
+                                 "checks": {"geometry_stability": 0.9}}]}
+        unstable_rep = {"faces": [{"index": 0, "flags": ["strong_profile"],
+                                   "checks": {"geometry_stability": 0.0,
+                                              "geometry_warning": "landmarks disagree across scales"}}]}
+        p = byrdswap.plan_ladder(unstable_rep, lora="x", identity_photo="p.jpg")
+        check("conductor stops on unstable geometry with manual next steps",
+              p["lanes"] == [] and "geometry gate" in p["stop_reason"]
+              and any("zone" in s for s in p["manual_next"]))
+        p = byrdswap.plan_ladder(stable_rep, lora=None, identity_photo="p.jpg")
+        check("conductor picks the free photo-anchored lane first, no LoRA",
+              p["lanes"][0]["lane"] == "quality_photo_anchored"
+              and any(s["lane"] == "quality_lora_mesh" for s in p["skipped"]))
+        p = byrdswap.plan_ladder(stable_rep, lora="preview_r32", identity_photo=None)
+        check("conductor uses explicit LoRA lanes when photo is unavailable",
+              [l["lane"] for l in p["lanes"]] == ["quality_lora_mesh", "auto_facedetailer"]
+              and any(s["lane"] == "quality_photo_anchored" for s in p["skipped"]))
+        p = byrdswap.plan_ladder(stable_rep, lora=None, identity_photo=None)
+        check("conductor says plainly when nothing is runnable",
+              p["lanes"] == [] and "stop_reason" in p)
+        check("facelab run command wires the conductor",
+              '"run"' in (ROOT / "scripts" / "facelab.ps1").read_text(encoding="utf-8-sig")
+              and "byrdswap.py" in (ROOT / "scripts" / "facelab.ps1").read_text(encoding="utf-8-sig"))
+
+        # The founder-verified gojo avenue (d0.28 / mesh 0.40) + finish pass
+        check("gojo avenue codified: identity_fill d0.28, mesh 0.40, eyes protected, cleanup ON",
+              byrdswap.GOJO_AVENUE_ENGINE["gpu_passes"]["identity_fill"]["denoise"] == 0.28
+              and byrdswap.GOJO_AVENUE_ENGINE["mesh_identity_strength"] == 0.40
+              and byrdswap.GOJO_AVENUE_ENGINE["eye_source"] == "target"
+              and byrdswap.GOJO_AVENUE_ENGINE["skip_gpu_cleanup"] is False)
+        p = byrdswap.plan_ladder(stable_rep, lora="preview", identity_photo=None)
+        check("conductor's LoRA lane rides the gojo avenue",
+              p["lanes"][0]["engine"].get("mesh_identity_strength") == 0.40)
+        check("finish pass exists: no re-seed, low denoise, guards intact",
+              byrdswap.FINISH_ENGINE["no_identity_mesh"] is True
+              and byrdswap.FINISH_ENGINE["gpu_passes"]["finish"]["denoise"] <= 0.2
+              and "no_identity_mesh" in bi_source
+              and "finish pass (identity from the existing pixels)" in bi_source
+              and '"finish"' in (ROOT / "scripts" / "facelab.ps1").read_text(encoding="utf-8-sig"))
+
         print("== stats + report + dashboard")
         st = api("/stats")
         check("stats counts artifacts", st["artifacts_total"] >= 4, str(st))

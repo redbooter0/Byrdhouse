@@ -339,3 +339,24 @@ PhotoMaker V1 private test:
 - Rank-16 split-strength diagnostics added separate `strength_model` / `strength_clip` support to `scripts/byrdimage.py`; this is an experimental calibration control, not evidence of approval.
 
 
+
+## 2026-07-16 — The gojo avenue is the direction (founder-verified visually)
+
+The founder confirmed two outputs as the right direction: the
+`..._fullidentity_fill_d28_m40...` Gojo crops (identity clear, headwear
+kept) and a near-perfect Vegeta composite that only needs FINISHING
+(cheek/jaw speckle, patchy beard region, faint seam remnants).
+**Winning parameters: identity_fill denoise 0.28 + mesh strength 0.40** —
+NOT the recipe-locked d0.38 this doc already flagged for eye distortion.
+
+Codified in `scripts/byrdswap.py` (the conductor):
+- `GOJO_AVENUE_ENGINE` — the LoRA lane now runs d0.28/m0.40, eyes hard-
+  protected, GPU cleanup ON so the repair guards finish the result.
+- `facelab.ps1 run -Image <target> -Lora <preview>` — one command, auto
+  lane pick + fallback, honest report in logs\byrdswap\.
+- `facelab.ps1 finish -Image <almost_perfect.png>` — completes an existing
+  composite: one low-denoise (0.14) pass over the face zone, no re-seed,
+  identity/eyes untouched, `.verify.json` proof included. This is the
+  command for the Vegeta.
+
+Hardware-unverified until the PC runs it; record results here.
