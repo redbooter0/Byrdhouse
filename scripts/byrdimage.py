@@ -1765,6 +1765,32 @@ def faceswap(root, target_path, face_path, project, purpose,
     if not face.exists():
         die(f"faceswap face photo not found: {face}")
 
+    # hard_anime routing (2026-07-16, advisor-confirmed diagnosis): ReActor
+    # pastes realistic gradient skin into a box mask — on hard-anime targets
+    # (strong profile / extreme expression / unstable geometry, the Vegeta
+    # class) the box boundary and style mismatch ALWAYS show. Those targets
+    # are refused here and routed to the redraw path (zone inpaint + identity
+    # conditioning) where the face is GENERATED in the target's style.
+    try:
+        comfy_python = root / "Generators" / "ComfyUI" / ".venv" / "Scripts" / "python.exe"
+        if comfy_python.is_file():
+            hard_report = _face_report(root, comfy_python,
+                                       root / "scripts" / "byrdfacezone.py",
+                                       target, thorough=True)
+            hard_gate = geometry_gate(hard_report)
+            hard_flags = " ".join(hard_gate.get("flags") or [])
+            if (not hard_gate["stable"]) or "strong_profile" in hard_flags \
+                    or "extreme_expression" in hard_flags:
+                die("hard_anime target: ReActor paste is disabled for this class "
+                    f"({'; '.join(hard_gate['reasons']) or hard_flags}). Redraw it "
+                    "instead: facelab.ps1 run -Image <target> (zone inpaint + "
+                    "identity conditioning generates the face in the target's "
+                    "own style rather than pasting).")
+    except SystemExit:
+        raise
+    except Exception:
+        pass  # examiner unavailable off-GAMING — direct swap keeps old behavior
+
     blend = max(0.0, min(0.65, float(style_blend or 0)))
     if blend > 0:
         workflow_rel = img_cfg.get("faceswap_blend_workflow",

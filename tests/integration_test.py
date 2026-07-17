@@ -1376,7 +1376,15 @@ def main():
         check("edit_delta confirms a real zone edit",
               fzc.edit_delta(same, changed_img)["edited"] is True
               and fzc.edit_delta(same, changed_img, mask)["edited"] is True)
+        # Bounded advisor fixes (2026-07-16): restyle after swap + hard_anime routing
+        bcs_cfg_now = json.loads((ROOT / "configs" / "byrdcast_swap_v0.json").read_text(encoding="utf-8-sig"))
+        check("swap restyle pass: FaceDetailer denoise 0.40 with 14px feather",
+              bcs_cfg_now["refine"]["facedetailer_denoise"] == 0.4
+              and bcs_cfg_now["refine"]["facedetailer_feather_px"] == 14)
         bi_source_now = (ROOT / "scripts" / "byrdimage.py").read_text(encoding="utf-8-sig")
+        check("hard_anime targets are refused by ReActor and routed to the redraw path",
+              "hard_anime target: ReActor paste is disabled" in bi_source_now
+              and "extreme_expression" in bi_source_now)
         check("no-op outputs are rejected on every lane (run_graph + zone paths)",
               bi_source_now.count("untouched copy") >= 3
               and "images_effectively_identical" in bi_source_now
