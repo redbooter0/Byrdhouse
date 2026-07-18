@@ -1,10 +1,45 @@
-# Image Generation State — read before changing the GAMING image lane
+﻿# Image Generation State — read before changing the GAMING image lane
 
-**Last updated:** 2026-07-15 (EDT, CPU crop reroute + adapter crop-preflight gate verified on the hard Vegeta target; integration suite green)  
+**Last updated:** 2026-07-18 08:51 EDT (Vegeta full-lobe outline fixed and live-proven; locked v21 remains the review keeper; inner feature lattice is the remaining hard-anime blocker)
 **Owner:** BYRD-GAMING (`E:\ByrdHouse`)  
 **Rule:** Read this file before changing an image model, graph, training set, or route. Update it after every real local test.
 
 ## Current verdict
+
+### 2026-07-17 23:10 EDT — v3 ControlNet + dial-in pass (Gojo WIN, Vegeta/Luffy partial)
+
+The v3 ControlNet CANNY avenue is now proven on Gojo with the full belt:
+- CPU 478-point mesh warp + 854 triangles + semantic zone + nose softening
+- GPU cleanup at denoise 0.48 with ControlNet CANNY guidance from the softened seed
+- Skip post-GPU complexion attack and skin harmonization (they were destroying the anime cel-shading)
+- Seam fix (hair blur 6.0 + Gaussian LAB neighborhood blend at boundaries)
+
+**Gojo result**: Native anime face with Carey's identity, brown eye, dark lips, preserved scar/nose/lip line, flat anime nose (not sculpted ridge), no double border. `artifacts/sandbox/2026-07/20260717_anime_face_zone_edit_job_19f732c273d3q6gc5_00001_.png`. Founder-reviewed as "a real image".
+
+**Dialed-in v3 recipe** (`anime_face_zone_edit.v3.json`):
+- `identity.strength`: 0.45 (was 0.65)
+- `identity.clip_strength`: 0.70 (was 0.80)
+- `defaults.denoise`: 0.48 (was 0.55)
+- `gojo.eye_source`: identity (was target) — prevents the blue-eye leak
+- `gojo.prompt_context`: now includes "one visible brown eye"
+
+**Permanent belt fixes** (`byrdfacezone.py`):
+- `_soften_identity_seed_nose()` — bilateral filter (d=11, sigmaColor=85) on the nose region of the identity seed (51 landmarks from MediaPipe indices 1, 2, 4-6, 168-197). Canny reads a soft anime nose line instead of Carey's photoreal ridge.
+- `_fix_face_zone_seam()` — Gaussian LAB neighborhood blend (sigma=2.5) within 12px corridors of the soft-zone and hair-boundary edges. Dissolves ~5,000 contrast-line pixels per job.
+- Hair mask blur: 1.5 → 6.0
+- `skip_post_gpu_skin` flag — auto-set for v3, skips the post-GPU complexion attack and skin harmonization (designed for v1 photoreal output, destroys anime cel-shading)
+
+**Vegeta result (anime_game_4.jpg)**: FAILED on both v3 ControlNet and CPU-only paths. The 478-point MediaPipe mesh fits poorly on Vegeta's extreme stylization (large angular forehead, V-shaped hairline, sharp jaw). `raw_jaw_ratio: 1.345` (mesh 34% smaller than semantic face), `coverage_ratio: 0.32`, neither eye warp applied. Face is melted, no eyes, no nose line. This is a known gate from IMAGE_GENERATION_STATE: Vegeta needs a different mesh fit or a different identity reference. Do not promote v3 to default until Vegeta passes.
+
+**Luffy close result (anime_game_2.jpg)**: Crop preflight failed initially (face fills 95% of the image). Fixed with 200px blue-sky padding around the image. With padding, the v3 ControlNet path completed but produced **white spherical artifacts** over Carey's brown eyes — the `target_feature_lock` at `eye_source: target` preserved Luffy's anime eye whites literally. Fixed: `eye_source: identity` for `luffy_close` and `luffy_full` in v3 recipe. Re-test: brown eyes, brown skin, beard line, grin, straw hat, red jacket, red sash all preserved. `artifacts/sandbox/2026-07/20260717_anime_face_zone_edit_job_19f7337a9e8217nqe_00001_.png` (close) and `20260717_anime_face_zone_edit_job_19f7338052c9vidrw_00001_.png` (full). Luffy full: face is small but Carey identity visible.
+
+**Vegeta fix**: extreme anime stylization (V-shaped hairline, large angular forehead, sharp jaw) defeats the 478-point mesh warp. Both v3 ControlNet and CPU-only paths produced melted faces. Solution: `preserve_target_features_complexion_only` path for Vegeta — runs v3 GPU (gives anime geometry) then transfers Carey's skin color while keeping all anime features (eyes, nose, mouth, V-hairline, armor) exactly. `artifacts/sandbox/2026-07/20260717_anime_face_zone_edit_job_19f733e90110slrjk_00001_.png` shows recognizable Carey-on-Vegeta with brown skin, dark anime eyes, preserved V-hairline, preserved armor. Some texture noise from v3 GPU pass remains. Also bumped mesh fit scale cap from 1.35 to 1.85 in `_fit_target_mesh_jaw_to_semantic_outline` for extreme anime forehead coverage.
+
+### 2026-07-16 GAMING-local direct face-swap proof
+
+The private-evaluation direct swap lane is operational without BYRD-MINI. `scripts/facelab.ps1 swap` now treats missing AUTO/ControlNet/IP-Adapter enhancements as optional warnings instead of blocking the installed ReActor lane. Live ComfyUI verified `ReActorFaceSwap`, `inswapper_128.onnx`, `GFPGANv1.4.pth`, and both versioned workflow schemas. A measured RTX 3070 run used Carey source `profiles/me/references/me_photo_32.jpg` and target `Images/Targets/anime_games/anime_game_3.jpg`, completed as job `job_19f6b469470tldw7r`, archived `artifacts/sandbox/2026-07/20260716_swap_job_19f6b469470tldw7r_00001_.png` plus its sidecar card, and observed a peak of **2,723 MiB GPU memory** while polling `nvidia-smi`. The full integration suite passed afterward. This proves execution and archival; it does not promote ReActor/InsightFace to the funded/public lane, and final visual taste remains a human review gate.
+
+The InsightFace-free Avenue B route is installed on GAMING: official `ComfyUI_IPAdapter_plus` pinned at commit `a0f451a5113cf9becb0847b92884cb10cbdec0ef`, `ip-adapter-plus-face_sd15`, the SD1.5 CLIP-ViT-H encoder, and fp16 ControlNet CANNY. Live ComfyUI validation confirmed `IPAdapterUnifiedLoader`, `IPAdapterAdvanced`, preset `PLUS FACE (portraits)`, and the ControlNet filename. A real run peaked at **5,060 MiB** on the RTX 3070. Founder visual review selected the smoother v1 complexion and closed-lip result over the more textured v3 result. The reproducible accepted calibration is `anime_face_zone_edit@1`, seed `7131`, IP-Adapter workflow, real-photo anchor `ai_identity_front_v1.png`, and reviewed anime mesh source `002_naruto.png`. Final proof job `job_19f71ad4d7b14t9rl` is archived at `artifacts/careyrpg/2026-07/20260717_anime_face_zone_edit_job_19f71ad4d7b14t9rl_00001_.png` with its card. The compositor no longer lets the geometric neck corridor cross the cheek; it restores leaked white headwrap material only in the upper band, protects semantic ear linework, rebuilds the exterior ear gap from adjacent background, preserves shaded neck skin, and removes only dark warp fragments outside the protected lip/nose core. Metrics: 1,161 seam pixels corrected, 1,630 headwrap pixels restored, 1,023 mouth-edge pixels cleaned, 96.6437% of eligible pixels closer to the identity seed, and zero changes outside final authority. This remains **private local evaluation** end-to-end because Meina, ParseNet, and the identity LoRA are not commercially cleared even though IP-Adapter/CLIP avoids InsightFace.
 
 The compact local target-edit belt now performs semantic masking and CPU identity mesh seeding, but **no Carey LoRA candidate or finished face-edit lane is approved**. LoRA-only semantic edits still produce a generic light/tan face or text-like facial artifacts. Warping a reviewed Carey anime reference into the target's 478-point mesh is a real improvement: the Naruto-seeded Gojo run transfers Carey identity/color before GPU cleanup. It nevertheless fails the visual gate because of a distorted visible eye, piercing-like facial artifacts, a pale retained target ear, and a hard jaw/ear skin seam.
 
@@ -291,4 +326,66 @@ PhotoMaker V1 private test:
 - A candidate must visibly read as Carey in normal target renders; a high-influence artifact is diagnostic evidence only, never a pass.
 - Rank-16 split-strength diagnostics added separate `strength_model` / `strength_clip` support to `scripts/byrdimage.py`; this is an experimental calibration control, not evidence of approval.
 
+## 2026-07-17 Vegeta locked-baseline complexion finish
 
+- The historical near-pass is the immutable geometry/identity baseline: `artifacts/image_lab/2026-07/20260714_anime_face_zone_edit_face_mesh_vegeta_fullface_d68_m90_00001_.png`.
+- Exact inherited settings remain `anime_face_zone_edit@1`, seed `7125`, 30 steps, CFG `5.5`, DPM++ 2M/Karras, denoise `0.68`, Meina V5.1, model strength `0.90`, CLIP strength `1.00`, rank-32 hybrid preview LoRA, preset `vegeta`, mesh reference `013_yu-yu-hakusho.png`.
+- Do not regenerate or resize this approved face to finish complexion. `scripts/finish_locked_complexion.py` follows the measured target skin hue family in LAB/HSV space, retains only pigment connected to confirmed face skin, and recolors those pixels from the existing Carey-brown palette. Eyes, brows, nose/mouth ink, lips, ear detail, beard/jaw edge, hair, armor, and background are locked.
+- Current review artifact: `artifacts/careyrpg/2026-07/20260718_vegeta_locked_baseline_carey_complexion_v5.png` with sidecar. It recovered 5,058 pixels outside the historical hard mask, recognized 13,876 connected pigment pixels, and corrected 6,158 light-skin pixels. Status remains `needs_review` until founder approval.
+- The reusable zone builder now uses the same connected-color principle: measured skin-pigment components attached to confirmed skin survive parser hair/background mistakes; morphological closing is used only for connectivity and recovery intersects the original pigment pixels so anime linework is never painted over.
+- 2026-07-18 live retry: `anime_face_zone_edit@3` Vegeta preserve-target-features run completed as `artifacts/careyrpg/2026-07/20260718_anime_face_zone_edit_job_19f73762f03ek94pv_00001_.png` (seed `7125`, ControlNet, preserved target features, 32,251 skin pixels recolored, 6,152 color-recovered pixels). Visual result is structurally valid but worse than the locked historical baseline because it keeps hard forehead wedges and over-darkens the right face plane. Do not make this v3 result the preferred Vegeta candidate unless founder explicitly selects it.
+
+
+
+
+## 2026-07-18 Vegeta outline-first hard-anime advancement
+
+The CPU mask is no longer the Vegeta blocker. The final audited discovery zone is `artifacts/face_zones/2026-07/vegeta_full_lobe_outline_v11_20260718/face_zone.json`:
+
+- The square crop expands and translates upward to `x=212,y=7,w=288,h=288` (`vertical_translation_px=-35`) without removing the visible neck.
+- The hard editable mold is 124,745 pixels with crop-space bbox `x=13,y=17,w=386,h=460`. It reaches the true forehead tip, follows the entire upper-left pale forehead lobe, preserves the interior black V-shaped hair wedge, keeps the ear, and stops above armor/clothing.
+- The previous live mask began at `x=55` and omitted 6,768 target-flesh pixels in the upper-left lobe. The corrected mask adds 8,497 pixels net while removing only two pixels.
+- Target-skin recovery now searches a full head-height above the 478-point landmark oval and farther toward the turned side. It may bridge narrow hair/ink only for component discovery; the original color-matched pixels are retained and the independently traced hair outline is subtracted afterward.
+- The head gate now honors the discovered lobe instead of clipping it back to a normal-ear allowance. Preflight owns crop-boundary safety, while the neck/shoulder gate remains separate.
+- Degenerate 1-pixel mesh triangles are rejected before `cv2.warpAffine`; the Vegeta prepare pass applies 836 triangles, skips 18 unsafe triangles, and completes in about 15 seconds instead of hanging a CPU core.
+
+The adapter also had a reproducibility defect: a face preset's `gpu_defaults`, model weight, and CLIP weight were not reaching the final KSampler/LoRA insertion. A supposed locked Vegeta run therefore used 26 steps / CFG 4.5 / denoise 0.28 / 0.40 / 0.65. The resolver now applies preset calibration once and the card-proven values are again 30 / 5.5 / 0.68 / 0.90 / 1.00 at seed 7125. `anime_face_zone_edit@1` Vegeta now records `mesh_geometry_fit=target-landmarks`, so target features own the inner skeleton and the semantic outline owns full-head complexion authority. Differential Diffusion now receives `edit_mask_soft.png`; its prior binary `graded_mask` silently defeated the strength ramp.
+
+Live hardware trials completed without OOM:
+
+| Job | Route | Result |
+|---|---|---|
+| `job_19f7533c7c7n548jl` | v1 before preset fix | Rejected: wrong 26/4.5/0.28 calibration and lower-center Carey island. |
+| `job_19f753c4e34grdvat` | v1, verified settings, semantic-outline mesh stretch | Rejected: full brown coverage but doubled/distorted inner features. |
+| `job_19f753ecb4fsqiy54` | v1, verified settings, target-landmark skeleton | Rejected: target geometry improved, but the inaccurate low landmark lattice still damaged eyes/mouth. |
+| `job_19f753fd8c6zokon1` | target crop + real Carey photo + IP-Adapter Plus Face + LoRA | Rejected: identity stayed a lower-center island. The previously measured IP-Adapter peak remains 5,060 MiB on the 8 GB RTX 3070. |
+| `job_19f754537bcbwgcsi` | target crop + target Canny + true soft-mask Differential Diffusion + LoRA | Rejected: soft-mask routing is now honest, but it does not fix the landmark/identity geometry. |
+
+The review keeper is `artifacts/careyrpg/2026-07/20260718_vegeta_full_lobe_outline_locked_v21.png` with its sidecar. Its pixels are identical to v20, but the sidecar points at the corrected v11 outline. It has zero residual pale skin components, zero protected-feature drift, zero outside-authority drift, and 98.8345% locked-baseline edge recall. It preserves the historical face size/placement, Carey beard/lips, Vegeta eyes/hair/armor, and the connected neck. Status remains `needs_review`; the working Gojo artifact and calibration were not modified.
+
+2026-07-18 11:12 EDT target retry: Gojo was rerun from the immutable one-panel source with `anime_face_zone_edit@1`, seed `7131`, 26 steps, CFG `4.5`, denoise `0.28`, model `0.40`, CLIP `0.65`, and archived as `artifacts/careyrpg/2026-07/20260718_anime_face_zone_edit_job_19f75c7d3cbpb0due_00001_.png`. The render completed through CPU outline -> GPU cleanup -> CPU composite, but the final reference/target recheck raised `FINAL_EDIT_OUTSIDE_AUTHORITY_MASK` (`157,815` pixels), so this artifact is review-only and should not replace the prior working Gojo keeper until that authority-mask warning is resolved or judged acceptable. Vegeta was retried without regenerating the face: `scripts/finish_locked_complexion.py --variant outline-approved-palette` used the v11 full-lobe outline, the historical `fullface_d68_m90` baseline, and the 2026-07-17 Gojo proof as the approved palette reference. Output: `artifacts/careyrpg/2026-07/20260718_vegeta_full_lobe_outline_gojo_palette_v22.png`. Metrics: `6,867` pale pixels repaired, `17,773` approved-palette pixels mapped, zero residual pale components, zero protected-feature drift, zero outside-authority drift, edge recall `0.956135`. Treat v22 as a visual-review variant; v21 remains the safer keeper because it preserves more of the locked baseline edge structure.
+
+Remaining hard-anime blocker: the selected 478-point target lattice is a lower-face hypothesis. Its identity warp covers only 39,051 pixels (`x=70..337,y=263..458`), about 32% of the corrected mold and none of the forehead. Do not stretch that lattice to the top of the head. The next geometry implementation is final-crop and 2x-crop candidate detection, semantic eye/nose/mouth scoring across short/full detector variants, then a bounded piecewise/Laplacian fit for inner features with hair/neck fixed. The full semantic outline continues to own complexion authority. ParseNet, Meina, and the identity LoRA remain private-local previews pending their recorded deployment/license gates.
+
+Validation after these changes: `python tests/integration_test.py` -> `ALL CHECKS PASSED`; post-run GPU state was 3,817/8,192 MiB, 0% utilization, 36 C.
+
+## 2026-07-16 face-swap fallback guardrail
+
+Live recovery proof after MINI came back online produced `image.faceswap` job `job_19f6dadbb3enflv00` using target `Images/Targets/anime_games/anime_game_3.jpg` and source upload `src_19f6dadb987unaksd`. The job requested `animagine-xl-4.0`, silently fell back to `Juggernaut-XL_v9_RunDiffusionPhoto_v2.safetensors`, ran about 102 seconds, and archived `artifacts/sandbox/2026-07/20260716_swap_job_19f6dadbb3enflv00_00001_.png` / `art.job_19f6dadbb3enflv00.0`. The judge scored it 1.0 and the artifact was rejected by the founder as distorted/abstract.
+
+Resulting rule: direct swap with `style_blend=0` remains the safe baseline. Any blend, approved-zone inpaint, or auto face-zone route must use its requested/configured checkpoint exactly; if the checkpoint is missing, the route fails loudly before ComfyUI work instead of falling back. Dashboard cards now display a visible MODEL FALLBACK warning for older or generic-generation cards that still carry fallback metadata.
+
+Repo proof after the guardrail: `tests/integration_test.py` passes end to end and now covers the configured private Meina blend lane plus a missing-checkpoint dry-run failure. `tests/dashboard_draft_test.js` also passes after the dashboard default changed to direct swap + no blend.
+
+2026-07-17 � Anime v2 retry job_19f6f579c17vlty7j reached Comfy after narrowing the generated-output guard; artifact is needs_review at E:\\ByrdHouse\\artifacts\\careyrpg\\2026-07\\20260717_anime_face_zone_edit_job_19f6f579c17vlty7j_00001_.png.
+
+2026-07-17 � Restored the prior-quality Gojo calibration from its exact historical card: anime_face_zone_edit@1, seed 7131, 26 steps, CFG 4.5, denoise 0.28, model 0.40, CLIP 0.65, identity-eye warp, rank-32 hybrid LoRA. Live belt job job_19f6f67d098jxwg4t completed CPU mesh -> GPU masked cleanup -> CPU composite and reproduced the historical benchmark at mean absolute pixel difference 0.58/255 (PSNR 37.7 dB). The submitted Vegeta benchmark was matched to fullface_d68_m90 and its preset calibration was restored: 30 steps, CFG 5.5, denoise 0.68, model 0.90, CLIP 1.00, identity eyes. CPU-only completion is forbidden for the calibrated engine recipe.
+
+2026-07-17 — Neck/chin regression fix is now part of the exported-image pass, not an optional manual cleanup. Validation target must be a single target image; `Outputs/ByrdCastSwap/detector_test/gojo_compare.jpg` is a 3-panel comparison and must not be used as the live target. The extracted one-panel target `artifacts/_sources/gojo_single_source_from_compare.png` produced proof run `job_19f7116dbee0x65z0` at `artifacts/careyrpg/2026-07/20260717_anime_face_zone_edit_job_19f7116dbee0x65z0_00001_.png`. The final CPU guard recolors parser-missed bright neck pixels from the generated Carey-toned face, runs only a narrow jaw-seam cleanup, and disables broad lower-jaw identity repaint. Card metrics for the proof: `final_chin_neck_touchup_bright_neck_pixels=3773`, `final_chin_neck_touchup_jaw_seam_pixels=2253`, neck residual target-complexion pixels `0`. Remaining tiny residual target-complexion count outside the neck was `3`, so the lane is closer but not declared universal approval yet. `python tests/integration_test.py` passed after the change.
+2026-07-17 � Added a post-export reference/target recheck to the face-zone compositor. The verifier compares the final crop against the immutable target and the same Carey identity mesh seed, checks locked target-feature drift, and checks for changes outside a recorded final authority mask. It emits reference_target_recheck.png and card metrics/warnings; the Gojo proof measured 36,797 eligible complexion pixels, 99.505% closer to the Carey seed, 112 target-like pixels (0.304%), and zero undeclared outside-mask changes after the neck authority mask was recorded. Integration and dashboard tests passed.
+
+
+2026-07-18 founder acceptance-base retry: the founder identified the supplied 588x330 near-correct Vegeta image as the required head mold and rejected the four GPU redraws shown in the ComfyUI gallery (`job_19f7533c7c7n548jl`, `job_19f753c4e34grdvat`, `job_19f753ecb4fsqiy54`, and `job_19f754537bcbwgcsi`). The new review candidate `artifacts/careyrpg/2026-07/20260718_vegeta_accepted_mold_connected_skin_v23.png` starts from that accepted mold and runs only the audited connected-skin palette finisher against the v11 full-lobe authority mask. It repaired `6,903` pale pixels in `22` connected components, mapped `17,782` pixels through the approved Carey/Gojo palette, left zero residual pale components, changed zero protected-feature pixels, and changed zero pixels outside authority. This is the only new Vegeta candidate to review; do not use the rejected high-denoise redraws as keepers.
+
+2026-07-18 controlled acceptance-mold variants: three non-generative finishes were run from the founder-approved 588x330 Vegeta mold. `v24` (`outline-local-fill`) was rejected automatically because 104 pale pixels remained across 8 components. `v25` (`outline-seam-clean`) repaired 6,903 pale pixels, cleaned 906 unsupported seam-corridor pixels, left zero pale components, zero protected/outside drift, and retained 98.7905% baseline-edge recall; it is the current lead. `v26` adds bounded lifting of 1,296 dark skin-shadow pixels with zero pale/protected/outside failures and 98.7814% edge recall. `v27` is maximum-fidelity coverage only: zero pale/protected/outside failures and 98.7814% edge recall. Review paths: `artifacts/careyrpg/2026-07/20260718_vegeta_accepted_mold_seam_clean_v25.png`, `...shadow_seam_v26.png`, and `...max_fidelity_v27.png`.
+2026-07-18 - Universal auto route update: `facezone_auto` is now an audited wrapper over `edit_face_zone`. Dry-run verification routed Gojo (`anime_game_3.jpg`) to `anime_face_zone_edit@1/gojo`, Luffy sheet (`anime_game_2.jpg`) to `anime_face_zone_edit@3/luffy_close` face index 2, and Vegeta (`anime_game_4.jpg`) to `anime_face_zone_edit@3/vegeta` with preserve-target-features + target-crop-seed. The Vegeta-only split-authority experiment now lives at `anime_face_zone_hard_edit@1` so it cannot shadow the broader recipe. New mold-library tests prove 336 bounded non-RGB variants from seven reviewed targets.

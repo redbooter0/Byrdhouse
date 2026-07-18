@@ -232,7 +232,7 @@
   "21": {
     "class_type": "IPAdapterUnifiedLoader",
     "inputs": {
-      "preset": "PLUS FACE (portrait)",
+      "preset": "PLUS FACE (portraits)",
       "model": [
         "4",
         0

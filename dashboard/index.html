@@ -310,6 +310,9 @@ function artCard(a, opts) {
   opts = opts || {};
   const meta = JSON.parse(a.meta || '{}');
   let jn = {}; try { jn = JSON.parse(a.judge_notes || '{}') || {}; } catch (e) {}
+  const fallbackWarning = meta.checkpoint_fallback ? `MODEL FALLBACK: requested ${meta.checkpoint_requested || 'configured checkpoint'}, ran ${meta.checkpoint || 'another model'}` : '';
+  const faceAudit = (meta.face_zone && meta.face_zone.final_reference_target_recheck) || {};
+  const faceAuditWarning = faceAudit.review_required ? `FACE AUDIT: ${(faceAudit.warnings || []).map(w => w.code).join(", ") || "review required"} - inspect the target/reference recheck before approving.` : "";
   const img = a.kind === 'image' || a.kind === 'thumbnail'
     ? `<img src="/artifacts/${a.id}/file" loading="lazy" onclick="zoom(this.src)" onerror="this.style.display='none'">` : '';
   const when = (a.job_finished_at || a.created_at || '').slice(5, 16).replace('T', ' ');
@@ -321,6 +324,8 @@ function artCard(a, opts) {
     <b>${esc(meta.recipe || a.kind)}</b> · ${esc(a.project_id)}<br>
     ${a.score != null ? 'score <b>'+a.score+'</b> · ' : (jn.unjudged ? '<span style="color:var(--yellow)">waiting for judge</span> · ' : '')}<span class="pill">${esc(a.status)}</span>
     ${a.gen_seconds != null ? ' · ' + fmtDur(a.gen_seconds) : ''}<br>
+    ${fallbackWarning ? `<span style="color:var(--yellow);font-weight:600">${esc(fallbackWarning)} - review before approving.</span><br>` : ''}
+    ${faceAuditWarning ? `<span style="color:var(--yellow);font-weight:600">${esc(faceAuditWarning)}</span><br>` : ''}
     ${(meta.out_size || meta.size) ? '<span class="muted">' + esc(meta.out_size || meta.size) + '</span><br>' : ''}
     ${esc(meta.purpose || meta.title || '')}
     <div class="row">
@@ -448,24 +453,33 @@ V.create = async () => {
       </details>
     </div>
 
-    <div class="panel"><h2>Face Swap ${qtip('Put your face (from your profile photos in profiles/me/references) onto any picture — 100% local through ComfyUI. For anime characters use a blend so the face melts into the art style.')}</h2>
+    <div class="panel"><h2>Face Swap ${qtip('Put your face (from your profile photos in profiles/me/references) onto any picture - 100% local through ComfyUI. Anime characters use the audited face-zone identity edit; direct swap is photo/legacy only.')}</h2>
       <label>Picture to swap onto</label>
       <input id="swapFile" type="file" accept="image/*" onchange="uploadSwapTarget(this)">
       <div id="swapPreview" class="muted" style="margin-top:6px"></div>
-      <label>Route ${qtip('Auto: the detector finds the character’s face, masks it and redraws it as you in the picture’s own art style — one step, use with your identity LoRA. Direct swap: ReActor puts your photo’s face on (use blend for anime). A zone mask below overrides both.')}</label>
+      <label>Route ${qtip('Anime identity edit: CPU mesh + semantic face/head zone + Carey anime reference + masked cleanup/composite. Direct swap: ReActor photo paste, useful for realistic photos but weak for anime identity/skin tone.')}</label>
       <select id="swapRoute">
-        <option value="auto" selected>Auto — find the face, redraw as me</option>
-        <option value="examine">Examine first — where can it operate? (CPU report)</option>
-        <option value="preview">Preview zone first (CPU only — see the mask)</option>
-        <option value="swap">Direct swap (photo face + blend)</option>
+        <option value="anime" selected>Anime identity edit (mesh zone, v2)</option>
+        <option value="swap">Direct swap (photo/legacy)</option>
+        <option value="auto">Legacy auto zone redraw</option>
+        <option value="examine">Examine first - where can it operate? (CPU report)</option>
+        <option value="preview">Preview zone first (CPU only - see the mask)</option>
+      </select>
+      <label>Anime target preset ${qtip('Pick the closest tested target family. This selects the reviewed Carey anime reference and protection rules for hair/headwear/clothes.')}</label>
+      <select id="swapPreset">
+        <option value="gojo" selected>Gojo close portrait</option>
+        <option value="vegeta">Vegeta close portrait</option>
+        <option value="luffy_close">Luffy close portrait</option>
+        <option value="luffy_full">Luffy full body</option>
+        <option value="auto">Auto</option>
       </select>
       <label>Art blend (direct swap only) ${qtip('0 = photo target (plain swap). Anime/stylized characters (Gojo, Vegeta, Luffy) want 0.35 so the swapped face adopts the art style. 0.45 melts harder but drifts more.')}</label>
       <select id="swapBlend">
-        <option value="0">Photo — no blend</option>
-        <option value="0.35" selected>Anime character — 0.35</option>
-        <option value="0.45">Strong style melt — 0.45</option>
+        <option value="0" selected>Photo - no blend</option>
+        <option value="0.35">Anime character - 0.35</option>
+        <option value="0.45">Strong style melt - 0.45</option>
       </select>
-      <label>Character notes (optional) ${qtip('Steers the blend pass only — describe the character/style, e.g. "Gojo Satoru, white hair, black blindfold, Jujutsu Kaisen anime style".')}</label>
+      <label>Character notes (optional) ${qtip('For anime identity edit this adds context only; the recipe already says Black man, deep dark brown skin, Carey identity, sparse jawline beard/goatee, and negative-prompt blocks pale/light skin.')}</label>
       <input id="swapPrompt" placeholder="e.g. Gojo Satoru, white hair, black blindfold">
       <label>Identity LoRA (optional) ${qtip('A trained LoRA of your face (train-lora.ps1) keeps the blend pass looking like YOU. Loose name match, e.g. carey_face_v2.')}</label>
       <input id="swapLora" placeholder="e.g. carey_face_v2">
@@ -585,7 +599,7 @@ async function submitSwap() {
   const t = window._swapTarget;
   if (!t) return swapSay('upload a picture to swap onto first');
   const project = ($('project') ? $('project').value.trim() : '') || 'careyrpg';
-  const route = $('swapRoute') ? $('swapRoute').value : 'auto';
+  const route = $('swapRoute') ? $('swapRoute').value : 'anime';
   const payload = {
     target_artifact: t.id, subject_profile: 'me',
     style_blend: parseFloat($('swapBlend').value || '0') || 0,
@@ -596,6 +610,26 @@ async function submitSwap() {
   const lora = $('swapLora').value.trim();
   if (lora) payload.lora = lora;
   const maskId = $('swapMaskId') ? $('swapMaskId').value.trim() : '';
+  if (route === 'anime') {
+    try {
+      const preset = $('swapPreset') ? $('swapPreset').value : 'gojo';
+      const purpose = $('swapPurpose').value.trim() || `anime identity edit onto ${t.name}`;
+      const animePayload = {
+        recipe: 'anime_face_zone_edit@2', project, target_artifact: t.id,
+        target_preset: preset, subject_profile: 'me', purpose,
+      };
+      if (lora) animePayload.identity_lora = lora;
+      if (notes) animePayload.slots = { notes };
+      await jpost('/jobs', { type: 'image.generate', project,
+        recipe: 'anime_face_zone_edit@2', required_mode: 'IMAGE',
+        required_caps: ['comfyui'], payload: animePayload });
+      swapSay('anime identity edit queued - mesh/zone route, not plain face paste');
+      window._swapTarget = null; window._swapMask = null;
+      if ($('swapFile')) $('swapFile').value = '';
+      if ($('swapPreview')) $('swapPreview').innerHTML = '';
+    } catch (e) { swapSay('queue error: ' + e.message); }
+    return;
+  }
   if (route === 'examine') payload.route = 'examine';   // CPU report: verdict + plan
   else if (route === 'preview') payload.route = 'preview';   // CPU only: overlay + mask
   else if (window._swapMask) payload.mask_artifact = window._swapMask.id;

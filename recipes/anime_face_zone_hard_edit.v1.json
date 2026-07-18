@@ -1,0 +1,59 @@
+{
+    "id":  "anime_face_zone_hard_edit",
+    "version":  1,
+    "kind":  "image.generate",
+    "runner":  "face_zone_identity_edit",
+    "subject_profile":  "me",
+    "category":  "Hard-anime split-authority face edit",
+    "_note":  "Vegeta hard-anime route: validated identity mesh owns only the inner face GPU mask; the semantic head/ear/neck outline owns CPU complexion finishing. Forehead, hairline, skull, ear outline, neck outline, armor, and background are never generatively redrawn.",
+    "workflow":  "workflows/sd15_face_mesh_seed_refine_api.json",
+    "template":  "masterpiece, best quality, close-up face of (careybh person:1.35), 1boy, adult Black man, (deep dark brown skin:1.45), recognizable Carey identity, sparse jawline beard and short goatee, preserve the target head angle and expression, native hand-drawn 2D shonen anime, bold clean outlines, flat cel shading, coherent with the supplied artwork",
+    "negative":  "pale skin, light skin, beige skin, tan skin, orange skin, different person, generic replacement face, thick full beard, dense beard, photorealistic skin, individual beard hairs, stubble texture, realistic eyelashes, detailed iris, glossy skin highlights, tears, tear streaks, face gems, cheek gems, eye makeup, white face marks, glowing facial spots, facial tattoo, face piercing, facial jewelry, nose ring, lip ring, eyebrow ring, stray earring, letters on face, writing on skin, pasted face, face cutout, mask seam, duplicate eye, warped eyes, asymmetrical pupils, distorted mouth, blurry, text, watermark",
+    "identity":  {
+                     "trigger":  "careybh person",
+                     "lora":  "carey_meina_sd15_expanded_hybrid_r32_20260714_125628-step00001200_hybrid_r32_1200_preview.safetensors",
+                     "strength":  0.4,
+                     "clip_strength":  0.65
+                 },
+    "identity_references":  {
+                                "vegeta":  "profiles/me/references/generated_anime_cartoon/013_yu-yu-hakusho.png"
+                            },
+    "defaults":  {
+                     "checkpoint":  "Meina V5.1 - Baked VAE.safetensors",
+                     "steps":  24,
+                     "cfg":  4.2,
+                     "sampler":  "dpmpp_2m",
+                     "scheduler":  "karras",
+                     "denoise":  0.26,
+                     "crop_factor":  1.65,
+                     "zone_expand":  1.1,
+                     "min_face_confidence":  0.35,
+                     "batch":  1,
+                     "require_gpu_cleanup":  true,
+                     "skip_gpu_cleanup":  false,
+                     "min_mesh_coverage":  0.7
+                 },
+    "target_presets":  {
+                           "vegeta":  {
+                                          "label":  "Vegeta close portrait",
+                                          "mesh_identity_strength":  1,
+                                          "mesh_geometry_fit":  "target-landmarks-core",
+                                          "eye_source":  "target",
+                                          "eye_protection":  1,
+                                          "prompt_context":  "stern three-quarter Vegeta head; preserve the exact widow peak, skull silhouette, black hair, eye placement, ear outline, jaw, neck, blue armor, background, and 1990s cel-animation ink; redraw only the bounded inner identity core as Carey with natural closed lips and sparse jawline beard",
+                                          "identity_strength":  0.52,
+                                          "identity_clip_strength":  0.72,
+                                          "gpu_defaults":  {
+                                                               "steps":  24,
+                                                               "cfg":  4.2,
+                                                               "denoise":  0.26
+                                                           },
+                                          "gpu_mask_key":  "identity_mesh_warp_mask"
+                                      }
+                       },
+    "rubric":  {
+                   "identity":  "1-5 - does the edited zone read as Carey?",
+                   "integration":  "1-5 - does the face share the target linework and cel shading with no seam?",
+                   "preservation":  "1-5 - are all pixels outside the saved soft zone unchanged?"
+               }
+}

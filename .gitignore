@@ -1,4 +1,4 @@
-﻿# Secrets
+# Secrets
 .env
 .env.*
 *.key
@@ -90,6 +90,7 @@ profiles/*/lora_dataset/*/*/
 # A dedicated trainer lives beside ComfyUI on BYRD-GAMING, but is an installed
 # local runtime rather than source controlled application code.
 Generators/sd-scripts/
+Generators/sam2/
 
 # Backups
 *.bak

@@ -1,5 +1,5 @@
 """
-ByrdHouse belt integration test — runs the ENTIRE pipeline with zero GPU:
+ByrdHouse belt integration test â€” runs the ENTIRE pipeline with zero GPU:
 mock ComfyUI + mock LM Studio, real router, real worker.
 
     python tests/integration_test.py
@@ -30,7 +30,7 @@ FAILURES = []
 
 
 def check(name, cond, detail=""):
-    print(f"  [{'PASS' if cond else 'FAIL'}] {name}" + (f" — {detail}" if detail and not cond else ""))
+    print(f"  [{'PASS' if cond else 'FAIL'}] {name}" + (f" â€” {detail}" if detail and not cond else ""))
     if not cond:
         FAILURES.append(name)
 
@@ -52,14 +52,14 @@ def run_worker():
 
 
 def main():
-    # ── build an isolated root ────────────────────────────────────────────────
+    # â”€â”€ build an isolated root â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     shutil.rmtree(ROOT, ignore_errors=True)
     ROOT.mkdir(parents=True)
     for d in ("recipes", "workflows", "scripts", "router", "dashboard", "profiles", "configs", "docs"):
         shutil.copytree(REPO / d, ROOT / d)
     # Give the root a minimal .git so router/worker build_sha resolves exactly as
     # it does on the machines (both run from a git checkout). Only HEAD + refs are
-    # needed — repo_build() never touches objects/.
+    # needed â€” repo_build() never touches objects/.
     gsrc, gdst = REPO / ".git", ROOT / ".git"
     if gsrc.is_dir():
         gdst.mkdir(exist_ok=True)
@@ -237,7 +237,7 @@ def main():
         except urllib.error.HTTPError as e:
             check("chat rejects empty messages", e.code == 400)
 
-        # Recipe slots are deduped — game-anchored templates repeat {game}
+        # Recipe slots are deduped â€” game-anchored templates repeat {game}
         # in the prompt but the form needs exactly one input for it
         bg3 = [r for r in api("/recipes") if r["file"] == "build_guide.v3.json"][0]
         check("recipe slots deduped for the form",
@@ -290,6 +290,38 @@ def main():
               face_recipe.get("runner") == "face_zone_identity_edit",
               str(face_recipe.get("runner")))
 
+        hard_anime_recipe_path = ROOT / "recipes" / "anime_face_zone_hard_edit.v1.json"
+        check("hard-anime split-authority recipe exists",
+              hard_anime_recipe_path.is_file(), str(hard_anime_recipe_path))
+        hard_anime_recipe = (
+            json.loads(hard_anime_recipe_path.read_text(encoding="utf-8-sig"))
+            if hard_anime_recipe_path.is_file() else {}
+        )
+        hard_anime_vegeta = (
+            (hard_anime_recipe.get("target_presets") or {}).get("vegeta") or {}
+        )
+        check("Vegeta hard-anime recipe splits inner identity from full-head complexion authority",
+              hard_anime_recipe.get("id") == "anime_face_zone_hard_edit"
+              and hard_anime_recipe.get("runner") == "face_zone_identity_edit"
+              and hard_anime_recipe.get("version") == 1
+              and hard_anime_vegeta.get("gpu_mask_key") == "identity_mesh_warp_mask"
+              and hard_anime_vegeta.get("mesh_geometry_fit") == "target-landmarks-core"
+              and hard_anime_recipe.get("defaults", {}).get("min_mesh_coverage") == 0.70
+              and hard_anime_vegeta.get("gpu_defaults", {}).get("denoise") == 0.26
+              and hard_anime_vegeta.get("identity_strength") == 0.52
+              and hard_anime_vegeta.get("identity_clip_strength") == 0.72,
+              str(hard_anime_vegeta))
+        hard_core_compositor_path = ROOT / "scripts" / "compose_hard_anime_core.py"
+        hard_core_source = (
+            hard_core_compositor_path.read_text(encoding="utf-8-sig")
+            if hard_core_compositor_path.is_file() else ""
+        )
+        check("hard-anime bounded core compositor locks exterior and complexion",
+              "identity_mesh_warp_mask" in hard_core_source
+              and "outside_core_drift_pixels" in hard_core_source
+              and "protected_feature_drift_pixels" in hard_core_source
+              and "residual_pale_skin_pixels" in hard_core_source
+              and "locked_baseline_edge_recall" in hard_core_source)
         face_workflow_rel = face_recipe.get("workflow", "")
         check("CPU face-zone recipe selects the mesh-seed cleanup graph",
               face_workflow_rel == "workflows/sd15_face_mesh_seed_refine_api.json",
@@ -343,15 +375,36 @@ def main():
         check("CPU identity seed uses the 478-point triangle warp plus tone transfer",
               "def _build_identity_mesh_seed(" in facezone_source
               and '"method": "cpu-mediapipe-478-triangle-warp-plus-semantic-tone-transfer"' in facezone_source
-              and '"identity_mesh_seed"' in facezone_source)
+              and '"identity_mesh_seed"' in facezone_source
+              and ('mesh_geometry_fit_mode == "target-landmarks"' in facezone_source
+                   or 'mesh_geometry_fit_mode in {"target-landmarks", "target-landmarks-core"}' in facezone_source))
         check("byrdimage exposes the face-zone adapter",
               "def edit_face_zone(" in byrdimage_source
               and 'recipe.get("runner") != "face_zone_identity_edit"' in byrdimage_source
               and 'zone_script = root / "scripts" / "byrdfacezone.py"' in byrdimage_source)
+        check("face-zone adapter applies target calibration before GPU resolution",
+              "defaults.update(dict(preset_gpu_defaults))" in byrdimage_source
+              and "def _resolve_face_zone_identity_weights(" in byrdimage_source
+              and "identity, preset, engine, identity_strength" in byrdimage_source
+              and 'zone_cmd += ["--mesh-geometry-fit", str(mesh_geometry_fit)]' in byrdimage_source)
+        check("face-zone adapter supports validated identity-core GPU authority",
+              '"identity_mesh_warp_mask"' in byrdimage_source
+              and 'configured_gpu_mask_key' in byrdimage_source
+              and 'full head reserved for CPU complexion' in byrdimage_source)
         check("face-zone composite restores protected target material after GPU cleanup",
               "restore_protected_material(" in facezone_source)
         check("face-zone composite pastes the GPU result into the final image",
               "original.paste(generated, (left, top), soft)" in facezone_source)
+        check("face-zone final pass owns visible chin and neck handoff",
+              '"final_chin_neck_touchup"' in facezone_source
+              and '"last exported-image pass recolors neck without broad lower-jaw repaint"' in facezone_source
+              and '"identity-detail-lock-only-no-broad-final-jaw-repaint"' in facezone_source
+              and '"carey-tone-fill-sampled-from-generated-face"' in facezone_source)
+        check("face-zone final reference/target audit is exported and warns on drift",
+              "def _final_reference_target_recheck(" in facezone_source
+              and "final_export_authority_mask" in facezone_source
+              and "FINAL_REFERENCE_IDENTITY_RECHECK_LOW" in facezone_source
+              and "reference_target_recheck.png" in facezone_source)
         check("identity-eye mode releases target feature locks",
               'eye_source_mode == "target" and eye_protection_strength > 0.0' in facezone_source)
         from PIL import Image
@@ -397,12 +450,12 @@ def main():
 
         production_identity = face_recipe.get("identity") or {}
         check("face-zone production LoRA is explicit",
-              production_identity.get("lora") == "carey_meina_sd15_v1.safetensors"
+              production_identity.get("lora") == "carey_meina_sd15_expanded_hybrid_r32_20260714_125628-step00001200_hybrid_r32_1200_preview.safetensors"
               and isinstance(production_identity.get("strength"), (int, float))
               and isinstance(production_identity.get("clip_strength"), (int, float)),
               str(production_identity))
-        # ── The examiner (founder contract): before ANY edit the system must
-        #    understand where it can and can't operate on THIS image ──
+        # â”€â”€ The examiner (founder contract): before ANY edit the system must
+        #    understand where it can and can't operate on THIS image â”€â”€
         check("examiner gates the quality lane before any zone/GPU work",
               "def _face_report(" in byrdimage_source
               and "face_report = _face_report(" in byrdimage_source
@@ -451,6 +504,10 @@ def main():
               and json.loads((ROOT / "workflows" / "sd15_face_zone_ipadapter_api.json")
                              .read_text(encoding="utf-8-sig"))["21"]["class_type"] == "IPAdapterUnifiedLoader"
               and '"IDENTITY PHOTO"' in byrdimage_source)
+        check("Differential Diffusion receives the true soft outline ramp",
+              'gpu_mask_key = "soft_mask" if uses_differential_diffusion else "graded_mask"'
+              in byrdimage_source
+              and '"differential_diffusion": uses_differential_diffusion' in byrdimage_source)
         check("quality lane is drivable by hand (facelab.ps1 + --edit-face-zone CLI)",
               "--edit-face-zone" in byrdimage_source
               and (ROOT / "scripts" / "facelab.ps1").is_file()
@@ -491,11 +548,11 @@ def main():
               and 'crop_preflight.get("passed") is False' in byrdimage_source
               and 'CPU crop preflight did not contain the full head/neck before GPU work' in byrdimage_source
               and '"crop_preflight": crop_preflight' in byrdimage_source)
-        check("face-zone v2 defaults can stop at the better CPU seed",
-              '"skip_gpu_cleanup": true' in v2_recipe_path.read_text(encoding="utf-8-sig")
-              and 'skip_gpu_cleanup = bool(' in byrdimage_source
-              and 'CPU identity mesh seed used without GPU cleanup' in byrdimage_source
-              and 'cpu_face_zone_sd15_seed_only' in byrdimage_source)
+        check("face-zone production recipe requires GPU cleanup",
+              v2_recipe.get("defaults", {}).get("require_gpu_cleanup") is True
+              and v2_recipe.get("defaults", {}).get("skip_gpu_cleanup") is False
+              and "require_gpu_cleanup and skip_gpu_cleanup" in byrdimage_source
+              and "CPU-only completion is forbidden" in byrdimage_source)
         v2_graph_path = ROOT / v2_recipe.get("workflow", "")
         v2_graph = (json.loads(v2_graph_path.read_text(encoding="utf-8-sig"))
                     if v2_graph_path.is_file() else {})
@@ -521,6 +578,23 @@ def main():
         sys.path.insert(0, str(ROOT / "scripts"))
         import byrdimage
         check("aspect preset resolves SDXL dims", byrdimage.pick_dims("9:16") == (768, 1344))
+        v1_vegeta = (face_recipe.get("target_presets") or {}).get("vegeta") or {}
+        v1_vegeta_defaults = dict(face_recipe.get("defaults") or {})
+        v1_vegeta_defaults.update(dict(v1_vegeta.get("gpu_defaults") or {}))
+        v1_vegeta_plan = byrdimage._resolve_face_zone_gpu_passes(
+            {}, v1_vegeta_defaults, 7125
+        )
+        v1_identity_weights = byrdimage._resolve_face_zone_identity_weights(
+            face_recipe.get("identity") or {}, v1_vegeta, {}, None
+        )
+        check("Vegeta v1 preset resolves the locked successful GPU calibration",
+              list(v1_vegeta_plan) == ["default"]
+              and v1_vegeta_plan["default"]["steps"] == 30
+              and v1_vegeta_plan["default"]["cfg"] == 5.5
+              and v1_vegeta_plan["default"]["denoise"] == 0.68
+              and v1_identity_weights == (0.9, 1.0)
+              and v1_vegeta.get("mesh_geometry_fit") == "target-landmarks",
+              str({"plan": v1_vegeta_plan, "identity": v1_identity_weights}))
         v2_plan = byrdimage._resolve_face_zone_gpu_passes({}, v2_recipe["defaults"], 7132)
         check("v2 adapter resolves the two local GPU passes deterministically",
               list(v2_plan) == ["identity_fill", "line_harmonize"]
@@ -581,9 +655,10 @@ def main():
         ckpt_dir = ROOT / "Generators" / "ComfyUI" / "models" / "checkpoints"
         ckpt_dir.mkdir(parents=True, exist_ok=True)
         (ckpt_dir / "onlyInstalled_v1.safetensors").write_bytes(b"stub")
+        (ckpt_dir / "Meina V5.1 - Baked VAE.safetensors").write_bytes(b"stub")
         resolved, matched = byrdimage.resolve_checkpoint_info(ROOT, "does-not-exist")
         check("unmatched checkpoint falls back AND flags it",
-              resolved == "onlyInstalled_v1.safetensors" and matched is False)
+              resolved == "Meina V5.1 - Baked VAE.safetensors" and matched is False)
         _, matched2 = byrdimage.resolve_checkpoint_info(ROOT, "only installed")
         check("matched checkpoint resolves by loose name, no fallback flag", matched2 is True)
         check("recipe version pin honored",
@@ -591,7 +666,7 @@ def main():
         check("bare recipe name resolves to highest version",
               byrdimage.find_recipe(ROOT, "rpg_tier_list").name == "rpg_tier_list.v2.json")
 
-        # ── Regression: the dashboard→recipe slot contract (yt_thumbnail v4) ──
+        # â”€â”€ Regression: the dashboardâ†’recipe slot contract (yt_thumbnail v4) â”€â”€
         # job_19f525b23183s9na6 & siblings died twice with
         # "unfilled slots ['emotion']": the form let a required, non-vary slot
         # through empty. Lock every side of the contract with the EXACT recipe.
@@ -601,7 +676,7 @@ def main():
         # (1) /recipes exposes emotion as a required slot the form must render
         check("yt_thumbnail.v4 exposes emotion as a required (non-vary) slot",
               "emotion" in yt_required and "emotion" not in yt_vary)
-        # (2) byrdimage rejects a generate that is missing a required slot —
+        # (2) byrdimage rejects a generate that is missing a required slot â€”
         #     the exact failure the three dead jobs hit
         try:
             byrdimage.generate(ROOT, "yt_thumbnail@4",
@@ -641,9 +716,9 @@ def main():
             check("provided-image final is 1280x720",
                   Image.open(byo[0]["path"]).size == (1280, 720))
 
-        # ── Uploaded source image: saved on the router, recorded at top grade,
+        # â”€â”€ Uploaded source image: saved on the router, recorded at top grade,
         #    then composited onto by the worker (which fetches it back). This is
-        #    the endpoint the operator model will call once its tools unlock. ──
+        #    the endpoint the operator model will call once its tools unlock. â”€â”€
         import io
         buf = io.BytesIO()
         Image.new("RGB", (800, 450), (120, 40, 160)).save(buf, "PNG")
@@ -679,7 +754,7 @@ def main():
             check("uploaded-source final is 1280x720",
                   Image.open(composed[0]["path"]).size == (1280, 720))
 
-        # ── Belt-as-MCP: the bot's audited hands on the belt (byrd_belt_mcp) ──
+        # â”€â”€ Belt-as-MCP: the bot's audited hands on the belt (byrd_belt_mcp) â”€â”€
         # Same 2-machine setup, one shared tool surface: any MCP client drives
         # the belt through the router, never ComfyUI/GPU directly.
         os.environ["BYRDHOUSE_ROOT"] = str(ROOT)
@@ -704,7 +779,7 @@ def main():
         check("belt-MCP queue_image creates a real audited job",
               qr["result"]["isError"] is False
               and len(api("/jobs?limit=200")) == before + 1)
-        # autonomy ladder is literally a permission filter — no separate build
+        # autonomy ladder is literally a permission filter â€” no separate build
         belt.READONLY = True
         ro = {t["name"] for t in belt.handle(
             {"jsonrpc": "2.0", "id": 5, "method": "tools/list"})["result"]["tools"]}
@@ -715,15 +790,15 @@ def main():
               and blocked["result"]["isError"] is True)
         belt.READONLY = False
 
-        # web_search: the in-app chat's research tool — config-driven, graceful
+        # web_search: the in-app chat's research tool â€” config-driven, graceful
         sys.path.insert(0, str(ROOT / "router"))
         import router as router_mod
         ws = router_mod.run_chat_tool("web_search", {"query": "viral palworld thumbnail"}, "test")
         check("web_search reports clearly when unconfigured",
               isinstance(ws, dict) and "not configured" in ws.get("error", ""))
 
-        # ── IP-Adapter: reference-driven generation (the 'make it look like THIS
-        #    game' engine). Reuse the uploaded source (src_id) as the reference. ──
+        # â”€â”€ IP-Adapter: reference-driven generation (the 'make it look like THIS
+        #    game' engine). Reuse the uploaded source (src_id) as the reference. â”€â”€
         api("/jobs", {"type": "image.generate", "project": "careyrpg",
                       "required_mode": "IMAGE", "required_caps": ["comfyui"],
                       "payload": {"recipe": "game_ref", "reference_artifact": src_id,
@@ -739,13 +814,15 @@ def main():
             check("reference generation ran through the IP-Adapter workflow",
                   "ipadapter" in json.loads(refgen[0]["meta"]).get("workflow", ""))
 
-        # ── image.faceswap: ReActor face swap through the belt (Face Lab).
+        # â”€â”€ image.faceswap: ReActor face swap through the belt (Face Lab).
         #    The face auto-resolves from profiles/me/references exactly like the
-        #    me-recipes; the target is an uploaded artifact fetched back. ──
+        #    me-recipes; the target is an uploaded artifact fetched back. â”€â”€
         print("== image.faceswap (direct swap + anime style blend)")
         face_dir = ROOT / "profiles" / "me" / "references"
         face_dir.mkdir(parents=True, exist_ok=True)
         Image.new("RGB", (256, 256), (200, 170, 150)).save(face_dir / "front.jpg")
+        blend_target = ROOT / "artifacts" / "_sources" / "faceswap_blend_target.png"
+        Image.new("RGB", (512, 512), (120, 100, 180)).save(blend_target)
         api("/jobs", {"type": "image.faceswap", "project": "careyrpg",
                       "required_mode": "IMAGE", "required_caps": ["comfyui"],
                       "payload": {"target_artifact": src_id, "subject_profile": "me",
@@ -758,7 +835,7 @@ def main():
         if swaps:
             meta = json.loads(swaps[0]["meta"])
             check("swap card records face source + target + reactor workflow",
-                  meta.get("face_source", "").endswith("front.jpg")
+                  "front" in Path(meta.get("face_source", "")).stem.lower()
                   and meta.get("swap_target")
                   and "reactor_faceswap_api" in meta.get("workflow", ""), str(meta))
             check("direct swap card is honest: no seed, no checkpoint",
@@ -781,6 +858,15 @@ def main():
                   "Gojo" in bm.get("prompt", "") and bm.get("seed") is not None
                   and bm.get("checkpoint")
                   and "blend" in bm.get("workflow", ""), str(bm))
+        try:
+            byrdimage.faceswap(ROOT, str(blend_target),
+                               str(face_dir / "front.jpg"), "careyrpg", "blend miss",
+                               style_blend=0.35, checkpoint="does-not-exist", dry_run=True)
+            check("faceswap blend rejects a missing checkpoint loudly", False)
+        except SystemExit as e:
+            check("faceswap blend rejects a missing checkpoint loudly",
+                  "requires its requested checkpoint" in str(e))
+
         # graph surgery is validated up front: a swapped/missing node pair must
         # die loudly, never quietly swap the wrong direction
         try:
@@ -791,7 +877,7 @@ def main():
             check("faceswap rejects a missing target loudly", "not found" in str(e))
 
         # zone route (the founder lane): a mask means the GPU edits ONLY inside
-        # the approved zone — VAEEncodeForInpaint graph, identity from LoRA+prompt
+        # the approved zone â€” VAEEncodeForInpaint graph, identity from LoRA+prompt
         mbuf = io.BytesIO()
         Image.new("RGB", (800, 450), (255, 255, 255)).save(mbuf, "PNG")
         rqm = urllib.request.Request(
@@ -817,7 +903,7 @@ def main():
                   and zm.get("checkpoint"), str(zm))
 
         # AUTO route (the daily driver): detector finds the face, masks it,
-        # redraws it as the founder — no hand mask, no face photo in payload
+        # redraws it as the founder â€” no hand mask, no face photo in payload
         api("/jobs", {"type": "image.faceswap", "project": "careyrpg",
                       "required_mode": "IMAGE", "required_caps": ["comfyui"],
                       "payload": {"target_artifact": src_id, "route": "auto",
@@ -825,19 +911,19 @@ def main():
                                   "project": "careyrpg", "purpose": "auto route test"}})
         run_worker()
         autos = [a for a in api("/artifacts?limit=250") if a["kind"] == "image"
-                 and json.loads(a["meta"] or "{}").get("recipe") == "facezone_auto@1"]
-        check("auto route archived through the FaceDetailer workflow", len(autos) == 1,
+                 and json.loads(a["meta"] or "{}").get("recipe") in {"anime_face_zone_edit@1", "anime_face_zone_edit@3"}]
+        check("auto route archived through the audited face-zone workflow", len(autos) == 1,
               str(len(autos)))
         if autos:
             am = json.loads(autos[0]["meta"])
             check("auto card records detector + corridor denoise + prompt",
                   am.get("detector", "").startswith("bbox/")
                   and am.get("denoise") == 0.7
-                  and "facezone_auto" in am.get("workflow", "")
+                  and "face_zone" in am
                   and "Vegeta" in am.get("prompt", ""), str(am))
 
         # PREVIEW route (the CPU pre-step): detection only, archives the zone
-        # overlay + the soft mask for approval — the GPU never decides the mask
+        # overlay + the soft mask for approval â€” the GPU never decides the mask
         api("/jobs", {"type": "image.faceswap", "project": "careyrpg",
                       "required_mode": "ANY", "required_caps": ["comfyui"],
                       "payload": {"target_artifact": src_id, "route": "preview",
@@ -856,7 +942,7 @@ def main():
             check("preview card records detector + threshold, no seed",
                   pm.get("detector", "").startswith("bbox/")
                   and pm.get("threshold") == 0.5 and pm.get("seed") is None, str(pm))
-            # the approved mask feeds the zone route by artifact id — the full
+            # the approved mask feeds the zone route by artifact id â€” the full
             # founder loop: preview -> approve -> GPU edits only that zone
             mask_art = next(a for a in previews if "_mask" in a["path"])
             api("/jobs", {"type": "image.faceswap", "project": "careyrpg",
@@ -882,7 +968,7 @@ def main():
         check("facelab preflight detects missing ReActor and exits 2",
               pf.returncode == 2 and "ReActor" in pf.stdout, pf.stdout[:200])
 
-        # A retried job re-registers its artifacts — must upsert, not duplicate
+        # A retried job re-registers its artifacts â€” must upsert, not duplicate
         dupe_card = {"artifact_id": "art.dupetest.0", "job_id": "job_dupetest",
                      "kind": "image", "path": "/tmp/dupetest.png", "status": "draft"}
         api("/jobs/job_dupetest/artifacts", {"artifacts": [dupe_card]})
@@ -914,15 +1000,15 @@ def main():
                 f"http://127.0.0.1:{RP}/references/palworld/fave.png/file", timeout=15) as r:
             check("reference file served", r.read() == ref_png)
 
-        # PowerShell 5.1 writes status.json with a UTF-8 BOM — /status must tolerate it
+        # PowerShell 5.1 writes status.json with a UTF-8 BOM â€” /status must tolerate it
         (ROOT / "status.json").write_bytes(
             b"\xef\xbb\xbf" + json.dumps({"host": "TEST", "overall": "green", "checks": []}).encode())
         st = api("/status")
         check("/status reads BOM'd status.json", st["machine"].get("host") == "TEST")
 
-        # ── 2-PC coordination: the belt spans MINI (router) and GAMING (worker).
+        # â”€â”€ 2-PC coordination: the belt spans MINI (router) and GAMING (worker).
         #    These lock the machine-to-machine contract so a silent version split,
-        #    a duplicate-work requeue, or an invisible upscale can't regress. ──
+        #    a duplicate-work requeue, or an invisible upscale can't regress. â”€â”€
         print("== 2-PC coordination (version drift, requeue fencing, refine res)")
         h = api("/health")
         check("/health carries api_version + real build_sha",
@@ -977,7 +1063,7 @@ def main():
               rref and all(k in json.loads(rref[0]["meta"]) for k in ("in_size", "out_size", "steps")),
               str(json.loads(rref[0]["meta"]) if rref else {}))
 
-        # ── ByrdCast Swap V0: self-contained target-image-first face swap ──
+        # â”€â”€ ByrdCast Swap V0: self-contained target-image-first face swap â”€â”€
         #    Structural contract: script exists, compiles, config/workflow/docs
         #    present, and a dry-run produces every required acceptance file.
         print("== ByrdCast Swap V0 (contract)")

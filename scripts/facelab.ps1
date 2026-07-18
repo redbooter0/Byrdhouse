@@ -28,6 +28,12 @@ param(
     [string]$Mask,
     [string]$Preset = "auto",
     [string]$Workflow,
+    [string]$Recipe,
+    [long]$Seed = 0,
+    [string]$IdentityPhoto,
+    [string]$IdentityReference,
+    [switch]$TargetCropSeed,
+    [switch]$PreserveTargetFeatures,
     [int]$FaceIndex = 0,
     [string]$Lora,
     [string]$Prompt,
@@ -74,6 +80,12 @@ switch ($Command.ToLower()) {
         $args2 = @($byrdimage, "--edit-face-zone", $Image, "--face-preset", $Preset,
                    "--face-index", "$FaceIndex", "--project", $Project, "--purpose", $Purpose)
         if ($Workflow) { $args2 += @("--workflow", $Workflow) }
+        if ($Recipe) { $args2 += @("--face-recipe", $Recipe) }
+        if ($Seed -gt 0) { $args2 += @("--face-seed", "$Seed") }
+        if ($IdentityPhoto) { $args2 += @("--identity-photo", $IdentityPhoto) }
+        if ($IdentityReference) { $args2 += @("--identity-reference", $IdentityReference) }
+        if ($TargetCropSeed) { $args2 += "--target-crop-seed" }
+        if ($PreserveTargetFeatures) { $args2 += "--preserve-target-features" }
         if ($Lora) { $args2 += @("--lora", $Lora) }
         & $sysPython @args2
         exit $LASTEXITCODE

@@ -5,15 +5,15 @@
   "runner": "face_zone_identity_edit",
   "subject_profile": "me",
   "category": "CPU outlined anime face edit",
-  "_note": "v2 \u2014 the local two-pass mesh route the PC calibration settled on: pass 1 identity_fill (0.38) rebuilds the zone from the mesh seed, pass 2 line_harmonize (0.12) melts linework, both inside one masked latent chain. defaults.skip_gpu_cleanup=true because the CPU-only seed/composite finish currently beats GPU cleanup on hard targets (DECISIONS 2026-07-15); flip it per-job via engine.skip_gpu_cleanup=false. Presets carry accessory truth: absent_accessories are removed from the zone before masking, expected_preserved_materials must survive the composite.",
+  "_note": "v2 — the local two-pass mesh route the PC calibration settled on: pass 1 identity_fill (0.38) rebuilds the zone from the mesh seed, pass 2 line_harmonize (0.12) melts linework, both inside one masked latent chain. defaults.skip_gpu_cleanup=true because the CPU-only seed/composite finish currently beats GPU cleanup on hard targets (DECISIONS 2026-07-15); flip it per-job via engine.skip_gpu_cleanup=false. Presets carry accessory truth: absent_accessories are removed from the zone before masking, expected_preserved_materials must survive the composite.",
   "workflow": "workflows/sd15_face_mesh_seed_multipass_api.json",
   "template": "masterpiece, best quality, close-up face of (careybh person:1.35), 1boy, adult Black man, (deep dark brown skin:1.45), recognizable Carey identity, sparse jawline beard and short goatee, preserve the target head angle and expression, native hand-drawn 2D shonen anime, bold clean outlines, flat cel shading, coherent with the supplied artwork",
   "negative": "pale skin, light skin, beige skin, tan skin, orange skin, different person, generic replacement face, thick full beard, dense beard, photorealistic skin, individual beard hairs, stubble texture, realistic eyelashes, detailed iris, glossy skin highlights, tears, tear streaks, face gems, cheek gems, eye makeup, white face marks, glowing facial spots, facial tattoo, face piercing, facial jewelry, nose ring, lip ring, eyebrow ring, stray earring, letters on face, writing on skin, pasted face, face cutout, mask seam, duplicate eye, warped eyes, asymmetrical pupils, distorted mouth, blurry, text, watermark",
   "identity": {
     "trigger": "careybh person",
-    "lora": "carey_meina_sd15_v1.safetensors",
-    "strength": 0.65,
-    "clip_strength": 0.8
+    "lora": "carey_meina_sd15_identity_20260714_044058_gate_anime_m75_c115_preview.safetensors",
+    "strength": 0.75,
+    "clip_strength": 1.15
   },
   "identity_references": {
     "gojo": "profiles/me/references/generated_anime_cartoon/002_naruto.png",
@@ -34,7 +34,8 @@
     "min_face_confidence": 0.35,
     "batch": 1,
     "min_mesh_coverage": 0.55,
-    "skip_gpu_cleanup": true,
+    "require_gpu_cleanup": true,
+    "skip_gpu_cleanup": false,
     "gpu_passes": {
       "identity_fill": {
         "steps": 16,

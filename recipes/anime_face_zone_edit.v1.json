@@ -1,72 +1,88 @@
 {
-  "id": "anime_face_zone_edit",
-  "version": 1,
-  "kind": "image.generate",
-  "runner": "face_zone_identity_edit",
-  "subject_profile": "me",
-  "category": "CPU outlined anime face edit",
-  "_note": "Upload a target. ByrdHouse detects the neck-connected head and 478-point face mesh on CPU, subtracts hair/headwear, warps the matching Carey anime reference through the target grid, runs a light GPU cleanup, and composites only the soft face zone back into the untouched original.",
-  "workflow": "workflows/sd15_face_mesh_seed_refine_api.json",
-  "template": "masterpiece, best quality, close-up face of (careybh person:1.35), 1boy, adult Black man, (deep dark brown skin:1.45), recognizable Carey identity, sparse jawline beard and short goatee, preserve the target head angle and expression, native hand-drawn 2D shonen anime, bold clean outlines, flat cel shading, coherent with the supplied artwork",
-  "negative": "pale skin, light skin, beige skin, tan skin, orange skin, different person, generic replacement face, thick full beard, dense beard, photorealistic skin, individual beard hairs, stubble texture, realistic eyelashes, detailed iris, glossy skin highlights, tears, tear streaks, face gems, cheek gems, eye makeup, white face marks, glowing facial spots, facial tattoo, face piercing, facial jewelry, nose ring, lip ring, eyebrow ring, stray earring, letters on face, writing on skin, pasted face, face cutout, mask seam, duplicate eye, warped eyes, asymmetrical pupils, distorted mouth, blurry, text, watermark",
-  "identity": {
-    "trigger": "careybh person",
-    "lora": "carey_meina_sd15_v1.safetensors",
-    "strength": 0.65,
-    "clip_strength": 0.8
-  },
-  "identity_references": {
-    "gojo": "profiles/me/references/generated_anime_cartoon/002_naruto.png",
-    "vegeta": "profiles/me/references/generated_anime_cartoon/013_yu-yu-hakusho.png",
-    "luffy_close": "profiles/me/references/generated_anime_cartoon/003_one-piece.png",
-    "luffy_full": "profiles/me/references/generated_anime_cartoon/003_one-piece.png"
-  },
-  "defaults": {
-    "checkpoint": "Meina V5.1 - Baked VAE.safetensors",
-    "steps": 22,
-    "cfg": 5.0,
-    "sampler": "dpmpp_2m",
-    "scheduler": "karras",
-    "denoise": 0.38,
-    "crop_factor": 1.65,
-    "zone_expand": 1.1,
-    "min_face_confidence": 0.35,
-    "batch": 1
-  },
-  "target_presets": {
-    "auto": {
-      "label": "Automatic CPU face outline",
-      "prompt_context": "preserve target hair, headwear, clothing, pose, background, and composition"
-    },
-    "gojo": {
-      "label": "Gojo close portrait",
-      "eye_source": "target",
-      "eye_protection": 1.0,
-      "prompt_context": "one visible eye, preserve the white blindfold, white hair, dark high collar, and calm three-quarter head angle"
-    },
-    "vegeta": {
-      "label": "Vegeta close portrait",
-      "mesh_identity_strength": 0.85,
-      "eye_source": "target",
-      "eye_protection": 1.0,
-      "prompt_context": "stern expression and three-quarter head angle, 1990s Dragon Ball Z cel-animation material, thick angular black ink contours, flat two-tone cel shading; preserve sharp black hair and blue armor"
-    },
-    "luffy_close": {
-      "label": "Luffy grin close portrait",
-      "eye_source": "target",
-      "eye_protection": 1.0,
-      "prompt_context": "broad grin and front head angle; preserve straw hat and red jacket"
-    },
-    "luffy_full": {
-      "label": "Luffy full body",
-      "eye_source": "target",
-      "eye_protection": 1.0,
-      "prompt_context": "small front-facing smiling face; preserve straw hat, red jacket, yellow sash, body, and background"
-    }
-  },
-  "rubric": {
-    "identity": "1-5 - does the edited zone read as Carey?",
-    "integration": "1-5 - does the face share the target linework and cel shading with no seam?",
-    "preservation": "1-5 - are all pixels outside the saved soft zone unchanged?"
-  }
+    "id":  "anime_face_zone_edit",
+    "version":  1,
+    "kind":  "image.generate",
+    "runner":  "face_zone_identity_edit",
+    "subject_profile":  "me",
+    "category":  "CPU outlined anime face edit",
+    "_note":  "Upload a target. ByrdHouse detects the neck-connected head and 478-point face mesh on CPU, subtracts hair/headwear, warps the matching Carey anime reference through the target grid, runs a light GPU cleanup, and composites only the soft face zone back into the untouched original.",
+    "workflow":  "workflows/sd15_face_mesh_seed_refine_api.json",
+    "template":  "masterpiece, best quality, close-up face of (careybh person:1.35), 1boy, adult Black man, (deep dark brown skin:1.45), recognizable Carey identity, sparse jawline beard and short goatee, preserve the target head angle and expression, native hand-drawn 2D shonen anime, bold clean outlines, flat cel shading, coherent with the supplied artwork",
+    "negative":  "pale skin, light skin, beige skin, tan skin, orange skin, different person, generic replacement face, thick full beard, dense beard, photorealistic skin, individual beard hairs, stubble texture, realistic eyelashes, detailed iris, glossy skin highlights, tears, tear streaks, face gems, cheek gems, eye makeup, white face marks, glowing facial spots, facial tattoo, face piercing, facial jewelry, nose ring, lip ring, eyebrow ring, stray earring, letters on face, writing on skin, pasted face, face cutout, mask seam, duplicate eye, warped eyes, asymmetrical pupils, distorted mouth, blurry, text, watermark",
+    "identity":  {
+                     "trigger":  "careybh person",
+                     "lora":  "carey_meina_sd15_expanded_hybrid_r32_20260714_125628-step00001200_hybrid_r32_1200_preview.safetensors",
+                     "strength":  0.4,
+                     "clip_strength":  0.65
+                 },
+    "identity_references":  {
+                                "gojo":  "profiles/me/references/generated_anime_cartoon/002_naruto.png",
+                                "vegeta":  "profiles/me/references/generated_anime_cartoon/013_yu-yu-hakusho.png",
+                                "luffy_close":  "profiles/me/references/generated_anime_cartoon/003_one-piece.png",
+                                "luffy_full":  "profiles/me/references/generated_anime_cartoon/003_one-piece.png"
+                            },
+    "defaults":  {
+                     "checkpoint":  "Meina V5.1 - Baked VAE.safetensors",
+                     "steps":  26,
+                     "cfg":  4.5,
+                     "sampler":  "dpmpp_2m",
+                     "scheduler":  "karras",
+                     "denoise":  0.28,
+                     "crop_factor":  1.65,
+                     "zone_expand":  1.1,
+                     "min_face_confidence":  0.35,
+                     "batch":  1,
+                     "require_gpu_cleanup":  true,
+                     "skip_gpu_cleanup":  false
+                 },
+    "target_presets":  {
+                           "auto":  {
+                                        "label":  "Automatic CPU face outline",
+                                        "prompt_context":  "preserve target hair, headwear, clothing, pose, background, and composition"
+                                    },
+                           "gojo":  {
+                                        "label":  "Gojo close portrait",
+                                        "eye_source":  "identity",
+                                        "eye_protection":  1,
+                                        "prompt_context":  "one visible eye, preserve the white blindfold, white hair, dark high collar, and calm three-quarter head angle",
+                                        "mesh_identity_strength":  1,
+                                        "gpu_defaults":  {
+                                                             "steps":  26,
+                                                             "cfg":  4.5,
+                                                             "denoise":  0.28
+                                                         }
+                                    },
+                           "vegeta":  {
+                                          "label":  "Vegeta close portrait",
+                                          "mesh_identity_strength":  1,
+                                          "mesh_geometry_fit":  "target-landmarks",
+                                          "eye_source":  "identity",
+                                          "eye_protection":  1.0,
+                                          "prompt_context":  "stern expression and three-quarter head angle, 1990s Dragon Ball Z cel-animation material, thick angular black ink contours, flat two-tone cel shading; preserve sharp black hair and blue armor",
+                                          "identity_strength":  0.9,
+                                          "identity_clip_strength":  1,
+                                          "gpu_defaults":  {
+                                                               "steps":  30,
+                                                               "cfg":  5.5,
+                                                               "denoise":  0.68
+                                                           }
+                                      },
+                           "luffy_close":  {
+                                               "label":  "Luffy grin close portrait",
+                                               "eye_source":  "target",
+                                               "eye_protection":  1.0,
+                                               "prompt_context":  "broad grin and front head angle; preserve straw hat and red jacket"
+                                           },
+                           "luffy_full":  {
+                                              "label":  "Luffy full body",
+                                              "eye_source":  "target",
+                                              "eye_protection":  1.0,
+                                              "prompt_context":  "small front-facing smiling face; preserve straw hat, red jacket, yellow sash, body, and background"
+                                          }
+                       },
+    "rubric":  {
+                   "identity":  "1-5 - does the edited zone read as Carey?",
+                   "integration":  "1-5 - does the face share the target linework and cel shading with no seam?",
+                   "preservation":  "1-5 - are all pixels outside the saved soft zone unchanged?"
+               }
 }

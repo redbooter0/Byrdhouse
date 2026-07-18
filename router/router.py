@@ -471,7 +471,9 @@ def run_chat_tool(name, args, actor):
             return {"error": "web_search needs a query"}
         n = min(int(args.get("limit", 5)), 10)
         try:
-            url = f"{search}?q={quote(query)}&n={n}"
+            # &format=json is SearXNG's opt-in for a JSON body instead of the
+            # HTML results page; harmless for a brave-search-style proxy too.
+            url = f"{search}?q={quote(query)}&n={n}&format=json"
             with urllib.request.urlopen(url, timeout=15) as r:
                 data = json.loads(r.read().decode())
             results = data.get("results", data) if isinstance(data, dict) else data

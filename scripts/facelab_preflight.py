@@ -29,7 +29,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import byrdimage  # noqa: E402
 
+# Windows consoles often default to cp1252, which can't encode the ✓/✗
+# markers below and would crash mid-check instead of reporting exit 2.
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 PROBLEMS = []
+WARNINGS = []
 
 
 def say(msg):
@@ -39,6 +45,12 @@ def say(msg):
 def problem(msg, fix):
     PROBLEMS.append(msg)
     print(f"[facelab] ✗ {msg}\n          fix: {fix}")
+
+
+def warning(msg, fix):
+    """Report a missing optional lane without disabling direct swap."""
+    WARNINGS.append(msg)
+    print(f"[facelab] ! {msg}\n          optional fix: {fix}")
 
 
 def ok(msg):
@@ -149,20 +161,23 @@ def main():
         if seg_info.get("BboxDetectorSEGS"):
             ok("zone preview nodes available (BboxDetectorSEGS)")
         else:
-            problem("BboxDetectorSEGS missing — the CPU zone-preview route needs it",
-                    "it ships with Impact Pack; update the pack via ComfyUI Manager")
+            reporter = problem if args.route == "auto" and args.run else warning
+            reporter("BboxDetectorSEGS missing — the zone-preview route needs it",
+                     "it ships with Impact Pack; update the pack via ComfyUI Manager")
         det_live = node_inputs(det_info["UltralyticsDetectorProvider"])
         det_models = det_live.get("model_name") if isinstance(det_live.get("model_name"), list) else []
         det_want = img_cfg.get("faceswap_detector", "bbox/face_yolov8m.pt")
         if any(det_want in str(m) for m in det_models):
             ok(f"face detector {det_want} available")
         else:
-            problem(f"face detector {det_want} not visible ({det_models[:5] or 'none'})",
+            reporter = problem if args.route == "auto" and args.run else warning
+            reporter(f"face detector {det_want} not visible ({det_models[:5] or 'none'})",
                     "ComfyUI Manager -> Model Manager -> install face_yolov8m.pt "
                     "(goes to models\\ultralytics\\bbox), or set image.faceswap_detector "
                     "to one you have")
     else:
-        problem("Impact Pack nodes missing — the AUTO route (one-step 'redraw as me') needs them",
+        reporter = problem if args.route == "auto" and args.run else warning
+        reporter("Impact Pack nodes missing — the AUTO route (one-step 'redraw as me') needs them",
                 "ComfyUI Manager -> install 'ComfyUI Impact Pack' AND 'ComfyUI Impact Subpack', "
                 "restart ComfyUI (the face_yolov8m.pt detector installs with the Subpack)")
 
@@ -179,7 +194,7 @@ def main():
         if any("control_v11p_sd15_canny" in str(m) for m in cn_models):
             ok("ControlNet canny model available (guided face-zone cleanup v2)")
         else:
-            problem("control_v11p_sd15_canny.safetensors not in models\\controlnet — "
+            warning("control_v11p_sd15_canny.safetensors not in models\\controlnet — "
                     "the v3 guided cleanup (anime_face_zone_edit@3) needs it",
                     "download from huggingface.co/lllyasviel/ControlNet-v1-1 "
                     "(control_v11p_sd15_canny.safetensors, openrail/commercial-OK) into "
@@ -193,7 +208,7 @@ def main():
     if dd_info.get("DifferentialDiffusion"):
         ok("DifferentialDiffusion available (avenue A: seam-killer variant)")
     else:
-        problem("DifferentialDiffusion node missing — avenue A needs it",
+        warning("DifferentialDiffusion node missing — avenue A needs it",
                 "it is a CORE ComfyUI node — update ComfyUI itself (git pull / "
                 "update_comfyui.bat), no pack or model required")
     try:
@@ -203,7 +218,7 @@ def main():
     if ipa_info.get("IPAdapterUnifiedLoader"):
         ok("IPAdapter nodes available (avenue B: real-photo identity anchor)")
     else:
-        problem("ComfyUI_IPAdapter_plus missing — avenue B (IP-Adapter PLUS FACE) needs it",
+        warning("ComfyUI_IPAdapter_plus missing — avenue B (IP-Adapter PLUS FACE) needs it",
                 "ComfyUI Manager -> install 'ComfyUI_IPAdapter_plus' (cubiq), restart; "
                 "models: ip-adapter-plus-face_sd15.safetensors -> models\\ipadapter and "
                 "the SD1.5 CLIP-ViT-H image encoder -> models\\clip_vision "
@@ -245,7 +260,8 @@ def finish():
     if PROBLEMS:
         say(f"NOT READY — {len(PROBLEMS)} problem(s) listed above")
         sys.exit(2)
-    say("READY — the face-swap function is proven on this machine" )
+    suffix = f" ({len(WARNINGS)} optional lane warning(s))" if WARNINGS else ""
+    say(f"READY — the direct face-swap function is proven on this machine{suffix}")
     sys.exit(0)
 
 

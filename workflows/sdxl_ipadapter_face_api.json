@@ -6,7 +6,7 @@
   },
   "12": {
     "class_type": "IPAdapterUnifiedLoader",
-    "inputs": { "preset": "PLUS FACE (portrait)", "model": ["4", 0] }
+    "inputs": { "preset": "PLUS FACE (portraits)", "model": ["4", 0] }
   },
   "13": {
     "class_type": "IPAdapterAdvanced",

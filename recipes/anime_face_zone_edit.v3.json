@@ -12,8 +12,8 @@
   "identity": {
     "trigger": "careybh person",
     "lora": "carey_meina_sd15_v1.safetensors",
-    "strength": 0.65,
-    "clip_strength": 0.8
+    "strength": 0.45,
+    "clip_strength": 0.7
   },
   "identity_references": {
     "gojo": "profiles/me/references/generated_anime_cartoon/002_naruto.png",
@@ -28,7 +28,7 @@
     "cfg": 5.5,
     "sampler": "dpmpp_2m",
     "scheduler": "karras",
-    "denoise": 0.55,
+    "denoise": 0.48,
     "crop_factor": 1.65,
     "zone_expand": 1.1,
     "min_face_confidence": 0.35,
@@ -38,7 +38,7 @@
     "gpu_passes": {
       "guided_cleanup": {
         "steps": 26,
-        "denoise": 0.55
+        "denoise": 0.48
       }
     }
   },
@@ -54,9 +54,9 @@
     },
     "gojo": {
       "label": "Gojo close portrait",
-      "eye_source": "target",
+      "eye_source": "identity",
       "eye_protection": 1.0,
-      "prompt_context": "one visible eye, preserve the white blindfold, white hair, dark high collar, and calm three-quarter head angle",
+      "prompt_context": "one visible brown eye, preserve the white blindfold, white hair, dark high collar, and calm three-quarter head angle",
       "absent_accessories": [
         "eyeglasses",
         "earrings",
@@ -72,6 +72,7 @@
       "mesh_identity_strength": 0.85,
       "eye_source": "target",
       "eye_protection": 1.0,
+      "preserve_target_features": true,
       "prompt_context": "stern expression and three-quarter head angle, 1990s Dragon Ball Z cel-animation material, thick angular black ink contours, flat two-tone cel shading; preserve sharp black hair and blue armor",
       "absent_accessories": [
         "eyeglasses",
@@ -85,9 +86,9 @@
     },
     "luffy_close": {
       "label": "Luffy grin close portrait",
-      "eye_source": "target",
+      "eye_source": "identity",
       "eye_protection": 1.0,
-      "prompt_context": "broad grin and front head angle; preserve straw hat and red jacket",
+      "prompt_context": "broad grin and front head angle, one visible large round brown anime eye; preserve straw hat and red jacket",
       "absent_accessories": [
         "eyeglasses",
         "earrings",
@@ -100,9 +101,9 @@
     },
     "luffy_full": {
       "label": "Luffy full body",
-      "eye_source": "target",
+      "eye_source": "identity",
       "eye_protection": 1.0,
-      "prompt_context": "small front-facing smiling face; preserve straw hat, red jacket, yellow sash, body, and background",
+      "prompt_context": "small front-facing smiling face with one visible large round brown anime eye; preserve straw hat, red jacket, yellow sash, body, and background",
       "absent_accessories": [
         "eyeglasses",
         "earrings",
