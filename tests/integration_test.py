@@ -1322,6 +1322,39 @@ def main():
               and "Media Finisher" in repo_cmp
               and "Adopt" in repo_cmp)
 
+        print("== dashboard — acceptance badge + seed lock + rerun button")
+        dashboard_source = (ROOT / "dashboard" / "index.html").read_text(encoding="utf-8")
+        check("dashboard artCard stores meta for rerun lookup",
+              "window._artMeta" in dashboard_source
+              and "window._artMeta[a.id] = meta" in dashboard_source)
+        check("dashboard artCard computes acceptance badge from output_acceptance",
+              "output_acceptance" in dashboard_source
+              and "acceptBadge" in dashboard_source
+              and "face OK" in dashboard_source
+              and "var(--green)" in dashboard_source)
+        check("dashboard artCard shows yellow flag badge when face flagged",
+              "_shortFlag" in dashboard_source
+              and "var(--yellow)" in dashboard_source
+              and "_oa.flags" in dashboard_source)
+        check("dashboard artCard renders rerun button when reproduce block present",
+              "hasRerun" in dashboard_source
+              and "copyRerun" in dashboard_source
+              and "meta.reproduce" in dashboard_source)
+        check("dashboard face swap panel has seed field",
+              'id="swapSeed"' in dashboard_source
+              and 'type="number"' in dashboard_source
+              and 'swapSeedLock' in dashboard_source)
+        check("dashboard face swap panel has lock and random seed buttons",
+              "toggleSwapSeedLock" in dashboard_source
+              and "randomSwapSeed" in dashboard_source)
+        check("submitSwap wires seed into payload",
+              "_seedRaw" in dashboard_source
+              and "payload.seed = _seedRaw" in dashboard_source)
+        check("copyRerun builds facelab.ps1 command from reproduce block",
+              "function copyRerun(" in dashboard_source
+              and "facelab.ps1 quality" in dashboard_source
+              and "navigator.clipboard.writeText" in dashboard_source)
+
         print("== stats + report + dashboard")
         st = api("/stats")
         check("stats counts artifacts", st["artifacts_total"] >= 4, str(st))

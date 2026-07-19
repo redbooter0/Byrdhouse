@@ -310,6 +310,13 @@ function artCard(a, opts) {
   opts = opts || {};
   const meta = JSON.parse(a.meta || '{}');
   let jn = {}; try { jn = JSON.parse(a.judge_notes || '{}') || {}; } catch (e) {}
+  window._artMeta = window._artMeta || {}; window._artMeta[a.id] = meta;
+  const _oa = meta.output_acceptance || {};
+  const _shortFlag = (_oa.flags && _oa.flags.length) ? _oa.flags[0].replace(/[ :].*/,'') : '';
+  const acceptBadge = _oa.accepted === true
+    ? '<span class="badge" style="background:var(--green);color:#111">face OK</span>'
+    : (_shortFlag ? `<span class="badge" style="background:var(--yellow);color:#111" title="${esc(_oa.flags.join(', '))}">${esc(_shortFlag)}</span>` : '');
+  const hasRerun = !!(meta.reproduce && (meta.reproduce.target || meta.reproduce.subject_profile));
   const img = a.kind === 'image' || a.kind === 'thumbnail'
     ? `<img src="/artifacts/${a.id}/file" loading="lazy" onclick="zoom(this.src)" onerror="this.style.display='none'">` : '';
   const when = (a.job_finished_at || a.created_at || '').slice(5, 16).replace('T', ' ');
@@ -317,6 +324,7 @@ function artCard(a, opts) {
   const cls = needsReview && opts.showApproval ? 'art approval-card' : 'art';
   return `<div class="${cls}">
     ${needsReview && opts.showApproval ? '<span class="badge">NEEDS YOUR REVIEW</span>' : ''}
+    ${acceptBadge}
     ${img}<div class="m">
     <b>${esc(meta.recipe || a.kind)}</b> · ${esc(a.project_id)}<br>
     ${a.score != null ? 'score <b>'+a.score+'</b> · ' : (jn.unjudged ? '<span style="color:var(--yellow)">waiting for judge</span> · ' : '')}<span class="pill">${esc(a.status)}</span>
@@ -328,6 +336,7 @@ function artCard(a, opts) {
       <button class="s no" ${a.status==='rejected'?'disabled':''} onclick="review(this,'${a.id}','reject')">reject</button>
       <button class="s" onclick="refineArt('${a.id}',0.4,1.5)" title="upscale 1.5x">upscale</button>
       <button class="s" onclick="refineArt('${a.id}',0.55,1.0)" title="variations near this image">riff</button>
+      ${hasRerun ? `<button class="s" onclick="copyRerun('${a.id}')" title="Copy facelab.ps1 rerun command">rerun</button>` : ''}
     </div></div></div>`;
 }
 async function review(btn, id, action) {
@@ -476,6 +485,13 @@ V.create = async () => {
       <input id="swapMaskId" placeholder="e.g. art.job_xxx.1">
       <label>What is this for?</label>
       <input id="swapPurpose" placeholder="e.g. gojo face swap test">
+      <label>Seed</label>
+      <div class="row" style="align-items:center;gap:6px;flex-wrap:nowrap">
+        <input id="swapSeed" type="number" value="-1" min="-1" style="width:110px;flex:none">
+        <button class="s" id="swapSeedLock" onclick="toggleSwapSeedLock()" data-locked="0" style="flex:none">Lock</button>
+        <button class="s" onclick="randomSwapSeed()" style="flex:none">Random</button>
+        <span class="muted" style="font-size:11px">-1 = random each run</span>
+      </div>
       <div class="row" style="margin-top:12px"><button class="b" onclick="submitSwap()">Swap my face on</button></div>
       <div id="swapMsg" style="color:var(--yellow);font-size:12.5px;min-height:16px;margin-top:8px"></div>
     </div>
@@ -593,6 +609,8 @@ async function submitSwap() {
   };
   const notes = $('swapPrompt').value.trim();
   if (notes) payload.prompt = notes;
+  const _seedRaw = parseInt(($('swapSeed') || {}).value || '-1', 10);
+  if (!isNaN(_seedRaw) && _seedRaw >= 0) payload.seed = _seedRaw;
   const lora = $('swapLora').value.trim();
   if (lora) payload.lora = lora;
   const maskId = $('swapMaskId') ? $('swapMaskId').value.trim() : '';
@@ -618,6 +636,31 @@ async function submitSwap() {
     if ($('swapMask')) $('swapMask').value = '';
     if ($('swapMaskPreview')) $('swapMaskPreview').innerHTML = '';
   } catch (e) { swapSay('queue error: ' + e.message); }
+}
+function toggleSwapSeedLock() {
+  const btn = $('swapSeedLock');
+  if (!btn) return;
+  const locked = btn.dataset.locked === '1';
+  btn.dataset.locked = locked ? '0' : '1';
+  btn.textContent = locked ? 'Lock' : 'Locked';
+  btn.style.color = locked ? '' : 'var(--green)';
+}
+function randomSwapSeed() {
+  if ($('swapSeedLock') && $('swapSeedLock').dataset.locked === '1') return;
+  if ($('swapSeed')) $('swapSeed').value = Math.floor(Math.random() * 2147483647);
+}
+function copyRerun(id) {
+  const meta = (window._artMeta || {})[id];
+  if (!meta || !meta.reproduce) { say('no reproduce block on this card'); return; }
+  const r = meta.reproduce;
+  const parts = [
+    'facelab.ps1 quality',
+    r.target ? `-Image "${r.target}"` : '',
+    r.preset ? `-Preset "${r.preset}"` : '',
+    (r.seed != null && r.seed >= 0) ? `-Seed ${r.seed}` : '',
+    r.lora ? `-Lora ${r.lora}` : '',
+  ].filter(Boolean).join(' ');
+  navigator.clipboard.writeText(parts).then(() => say('rerun command copied')).catch(() => say(parts));
 }
 /* The recipe currently selected in the form (id@version pinned). */
 function currentRecipe() {
