@@ -26,7 +26,8 @@ import torch
 import cv2
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 from safetensors.torch import load_file
-from facezone_composite import restore_protected_material
+from facezone_composite import (clamp_mask_border, mesh_shard_score,
+                                restore_protected_material, verify_outside_mask)
 
 
 MODEL_NAME = "mediapipe_face_fp32.safetensors"
@@ -2180,6 +2181,7 @@ def prepare_face_zone(
     uncovered_skin_path = output_dir / "uncovered_skin_tone_zone.png"
     skin_edge_path = output_dir / "skin_edge_fringe.png"
     protected_color_path = output_dir / "protected_color_features.png"
+    eye_protect_path = output_dir / "eye_protect_mask.png"
     overlay_path = output_dir / "face_outline_preview.png"
     ordered_outline_path = output_dir / "head_hair_outline_preview.png"
     crop_overlay_path = output_dir / "face_crop_outline_preview.png"
@@ -2208,6 +2210,12 @@ def prepare_face_zone(
             skin_edge_path, "PNG", optimize=True
         )
         protected_color_features.save(protected_color_path, "PNG", optimize=True)
+        # Eye-protection debug mask (founder repair 2026-07-16): the exact
+        # target-eye pixels the composite will restore AFTER generation when
+        # eye_source=target — inspectable on its own, not just a hint.
+        eyes_component = target_feature_components.get("eyes")
+        if eyes_component is not None:
+            eyes_component.save(eye_protect_path, "PNG", optimize=True)
 
     overlay = original.convert("RGBA")
     zone_fill = Image.new("RGBA", original.size, (0, 0, 0, 0))
@@ -2348,6 +2356,8 @@ def prepare_face_zone(
                     "uncovered_skin_tone_zone": str(uncovered_skin_path),
                     "skin_edge_fringe": str(skin_edge_path),
                     "protected_color_features": str(protected_color_path),
+                    **({"eye_protect_mask": str(eye_protect_path)}
+                       if eye_protect_path.is_file() else {}),
                 }
                 if identity_mesh is not None
                 else {}
@@ -2371,7 +2381,9 @@ def composite_generated(zone_file: Path, generated_crop: Path, output: Path) -> 
     with Image.open(generated_crop) as opened:
         generated = opened.convert("RGB")
     with Image.open(artifacts["soft_mask"]) as opened:
-        soft = opened.convert("L")
+        # Repair 2026-07-16 (hard Vegeta): a soft mask reaching the crop border
+        # is the rectangular-crop-leak signature — clamp it and record the leak.
+        soft, border_leak_fraction = clamp_mask_border(opened.convert("L"))
     with Image.open(artifacts["face_crop"]) as opened:
         target_crop = opened.convert("RGB")
     with Image.open(artifacts["hard_mask"]) as opened:
@@ -2457,8 +2469,62 @@ def composite_generated(zone_file: Path, generated_crop: Path, output: Path) -> 
             hair = opened.convert("L").resize((side, side), Image.Resampling.BILINEAR)
         hair = hair.filter(ImageFilter.GaussianBlur(1.5))
         original.paste(target_region, (left, top), hair)
+
+    # Repair 2026-07-16 (hard Vegeta) — three composite-time guards:
+    # 1. eye_source=target restores the EXACT original eye pixels AFTER the
+    #    identity generation (hard composite, not a generation hint).
+    eyes_restored = False
+    identity_mesh_meta = dict(zone.get("identity_mesh") or {})
+    eye_mask_path = artifacts.get("eye_protect_mask")
+    if (eye_mask_path and Path(eye_mask_path).is_file()
+            and identity_mesh_meta.get("eye_source_mode") == "target"):
+        with Image.open(eye_mask_path) as opened:
+            eye_mask = opened.convert("L").resize((side, side), Image.Resampling.BILINEAR)
+        eye_mask = eye_mask.filter(ImageFilter.GaussianBlur(1.0))
+        original.paste(target_region, (left, top), eye_mask)
+        eyes_restored = True
+
+    # 2. raw-triangle-shard heuristic on the generated crop inside the warp
+    #    coverage (byrdimage pairs this with the geometry gate: either one
+    #    failing keeps a CPU-only result from shipping as final).
+    shard_report = {"shards_detected": None, "note": "no identity mesh — not applicable"}
+    warp_mask_file = artifacts.get("identity_mesh_warp_mask")
+    if warp_mask_file and Path(warp_mask_file).is_file():
+        with Image.open(warp_mask_file) as opened:
+            warp_cov = opened.convert("L").resize(generated.size, Image.Resampling.NEAREST)
+        shard_report = mesh_shard_score(generated, warp_cov)
+
     output.parent.mkdir(parents=True, exist_ok=True)
     original.save(output, "PNG", optimize=True)
+
+    # 3. outside-mask preservation proof: every pixel outside the effective
+    #    composite mask must be IDENTICAL to the immutable original (the hair
+    #    and eye re-asserts above only restore original pixels, so the soft
+    #    zone is the entire change surface).
+    with Image.open(artifacts["original"]) as opened:
+        pristine = opened.convert("RGB")
+    effective = Image.new("L", pristine.size, 0)
+    effective.paste(soft, (left, top))
+    with Image.open(output) as opened:
+        final_saved = opened.convert("RGB")
+    outside = verify_outside_mask(pristine, final_saved, effective)
+    from facezone_composite import edit_delta
+    applied = edit_delta(pristine, final_saved, effective)
+    verification = {
+        "outside_mask": outside,
+        "edit_applied": applied,
+        "border_leak_fraction": border_leak_fraction,
+        "eyes_restored_after_generation": eyes_restored,
+        "eye_source_mode": identity_mesh_meta.get("eye_source_mode"),
+        "shard_check": shard_report,
+    }
+    Path(str(output) + ".verify.json").write_text(
+        json.dumps(verification, indent=2) + "\n", encoding="utf-8")
+    if not outside["passed"]:
+        raise RuntimeError(
+            "composite leaked outside the approved zone "
+            f"({outside['changed_pixels']} px changed, max delta {outside['max_delta']}) — "
+            "refusing to ship; original target is untouched")
     return output
 
 

@@ -69,8 +69,43 @@ switch ($Command.ToLower()) {
         & $comfyPython @args2
         exit $LASTEXITCODE
     }
+    "run" {
+        # The conductor: ONE command from image to result. Examines, picks the
+        # lane itself (free photo-anchored first), falls back automatically,
+        # ends with a result or the exact reason + next command.
+        Need-Image
+        $args2 = @((Join-Path $root "scripts\byrdswap.py"), "--image", $Image, "--root", $root)
+        if ($Lora) { $args2 += @("--lora", $Lora) }
+        if ($Preset -ne "auto") { $args2 += @("--preset", $Preset) }
+        if ($Quick) { $args2 += "--plan" }
+        & $comfyPython @args2
+        exit $LASTEXITCODE
+    }
+    "finish" {
+        # Complete an ALREADY-good composite (the almost-perfect Vegeta case):
+        # one low-denoise pass removes speckle/patchiness/seams — identity and
+        # target eyes untouched, guards + .verify.json included.
+        Need-Image
+        $args2 = @((Join-Path $root "scripts\byrdswap.py"), "--image", $Image, "--root", $root, "--finish")
+        if ($Lora) { $args2 += @("--lora", $Lora) }
+        & $comfyPython @args2
+        exit $LASTEXITCODE
+    }
     "quality" {
         Need-Image
+        # Workflow aliases (repair 2026-07-16): 'diffdiff' is the TRUE
+        # DifferentialDiffusion graph (zero extra models); 'diffdiff-canny'
+        # is the COMBINED graph and refuses before submit when the canny
+        # ControlNet model is not installed.
+        $workflowAliases = @{
+            'diffdiff'       = 'workflows/sd15_face_zone_diffdiff_api.json'
+            'diffdiff-canny' = 'workflows/sd15_face_zone_diffdiff_canny_api.json'
+            'controlnet'     = 'workflows/sd15_face_zone_controlnet_api.json'
+            'ipadapter'      = 'workflows/sd15_face_zone_ipadapter_api.json'
+        }
+        if ($Workflow -and $workflowAliases.ContainsKey($Workflow.ToLower())) {
+            $Workflow = $workflowAliases[$Workflow.ToLower()]
+        }
         $args2 = @($byrdimage, "--edit-face-zone", $Image, "--face-preset", $Preset,
                    "--face-index", "$FaceIndex", "--project", $Project, "--purpose", $Purpose)
         if ($Workflow) { $args2 += @("--workflow", $Workflow) }

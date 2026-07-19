@@ -456,8 +456,8 @@ def main():
               and (ROOT / "scripts" / "facelab.ps1").is_file()
               and "quality" in (ROOT / "scripts" / "facelab.ps1").read_text(encoding="utf-8-sig"))
         check("face-zone adapter refuses an unconditioned production run",
-              "face-zone edit requires an installed identity LoRA" in byrdimage_source
-              and "selected_identity_lora = resolve_lora(" in byrdimage_source
+              "no deployed identity LoRA exists" in byrdimage_source
+              and "select_identity_lora(root, identity, identity_lora)" in byrdimage_source
               and 'lora_id="byrd_identity_lora"' in byrdimage_source)
 
         # aspect presets snap to SDXL-native dims; LoRA splices into the graph
@@ -491,8 +491,12 @@ def main():
               and 'crop_preflight.get("passed") is False' in byrdimage_source
               and 'CPU crop preflight did not contain the full head/neck before GPU work' in byrdimage_source
               and '"crop_preflight": crop_preflight' in byrdimage_source)
-        check("face-zone v2 defaults can stop at the better CPU seed",
-              '"skip_gpu_cleanup": true' in v2_recipe_path.read_text(encoding="utf-8-sig")
+        # 2026-07-16: defaults promoted to the founder-VERIFIED golden runs —
+        # GPU finish ON by default (the d28 Gojo was a GPU-finished crop; the
+        # raw CPU-only ship is what produced the broken Vegeta). The CPU-only
+        # finish remains available as an engine capability, never the default.
+        check("face-zone v2 defaults run the verified GPU finish (CPU-only stays available)",
+              '"skip_gpu_cleanup": false' in v2_recipe_path.read_text(encoding="utf-8-sig")
               and 'skip_gpu_cleanup = bool(' in byrdimage_source
               and 'CPU identity mesh seed used without GPU cleanup' in byrdimage_source
               and 'cpu_face_zone_sd15_seed_only' in byrdimage_source)
@@ -526,7 +530,7 @@ def main():
               list(v2_plan) == ["identity_fill", "line_harmonize"]
               and [entry["seed"] for entry in v2_plan.values()] == [7132, 7133]
               and [entry["steps"] for entry in v2_plan.values()] == [16, 8]
-              and [entry["denoise"] for entry in v2_plan.values()] == [0.38, 0.12], str(v2_plan))
+              and [entry["denoise"] for entry in v2_plan.values()] == [0.28, 0.12], str(v2_plan))
         try:
             byrdimage._resolve_face_zone_gpu_passes(
                 {"gpu_passes": {"identity_fill": {"denoise": 0}}}, v2_recipe["defaults"], 7132
@@ -1354,6 +1358,309 @@ def main():
               "function copyRerun(" in dashboard_source
               and "facelab.ps1 quality" in dashboard_source
               and "navigator.clipboard.writeText" in dashboard_source)
+        # ── Face-lane repair guards (2026-07-16, hard Vegeta failure) ──────
+        # The 10 required automated tests: honest diffdiff graphs, pre-submit
+        # model gating, LoRA truth, outside-mask preservation, eye protection,
+        # geometry gate fail-closed, and rich ComfyUI HTTP errors.
+        print("== face-lane repair guards")
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import byrdimage as bi
+        import facezone_composite as fzc
+        from PIL import Image as PILImage, ImageDraw as PILDraw
+
+        # 1. JSON workflow validation
+        dd_true = json.loads((ROOT / "workflows" / "sd15_face_zone_diffdiff_api.json").read_text())
+        dd_combo = json.loads((ROOT / "workflows" / "sd15_face_zone_diffdiff_canny_api.json").read_text())
+        check("diffdiff workflows are valid JSON graphs",
+              any(n.get("class_type") == "KSampler" for n in dd_true.values() if isinstance(n, dict))
+              and any(n.get("class_type") == "KSampler" for n in dd_combo.values() if isinstance(n, dict)))
+
+        # 3. TRUE diffdiff contains no ControlNet anything
+        true_classes = {n.get("class_type") for n in dd_true.values() if isinstance(n, dict)}
+        check("TRUE diffdiff has no ControlNet nodes",
+              not any(c and "ControlNet" in c for c in true_classes),
+              str(true_classes))
+        check("TRUE diffdiff keeps the graded-mask seam killer",
+              {"DifferentialDiffusion", "SetLatentNoiseMask"} <= true_classes)
+        sampler = next(n for n in dd_true.values()
+                       if isinstance(n, dict) and n.get("class_type") == "KSampler")
+        check("TRUE diffdiff sampler conditioned straight from the prompts",
+              sampler["inputs"]["positive"][0] == "5" and sampler["inputs"]["negative"][0] == "6")
+        combo_classes = {n.get("class_type") for n in dd_combo.values() if isinstance(n, dict)}
+        check("combined diffdiff-canny is clearly the ControlNet variant",
+              "ControlNetLoader" in combo_classes and "DifferentialDiffusion" in combo_classes)
+
+        # 2. /object_info-style schema validation (same helper preflight uses live)
+        core_catalog = {c for c in (true_classes | combo_classes) if c} - {"ControlNetLoader"}
+        check("schema validation passes for TRUE diffdiff on a ControlNet-less server",
+              bi.validate_graph_classes(dd_true, core_catalog) == [])
+        check("schema validation names ControlNetLoader missing for the combined graph",
+              bi.validate_graph_classes(dd_combo, core_catalog) == ["ControlNetLoader"])
+
+        # 4. combined route refuses BEFORE submit when the canny model is missing
+        def raises_value(fn, *fargs):
+            try:
+                fn(*fargs)
+                return None
+            except ValueError as exc:
+                return str(exc)
+        msg = raises_value(bi.require_workflow_models, ROOT, dd_combo,
+                           "workflows/sd15_face_zone_diffdiff_canny_api.json")
+        check("combined graph refuses pre-submit and names the missing model",
+              bool(msg) and "control_v11p_sd15_canny" in msg and "NOT installed" in msg, str(msg)[:120])
+        check("TRUE diffdiff needs no model gate",
+              raises_value(bi.require_workflow_models, ROOT, dd_true, "x") is None)
+        cn_dir = ROOT / "Generators" / "ComfyUI" / "models" / "controlnet"
+        cn_dir.mkdir(parents=True, exist_ok=True)
+        (cn_dir / "control_v11p_sd15_canny.safetensors").write_bytes(b"fake")
+        check("combined graph passes once the canny model exists",
+              raises_value(bi.require_workflow_models, ROOT, dd_combo, "x") is None)
+
+        # 5. job LoRA overrides stale recipe value; no silent preview promotion
+        lora_dir = ROOT / "Generators" / "ComfyUI" / "models" / "loras"
+        lora_dir.mkdir(parents=True, exist_ok=True)
+        (lora_dir / "carey_preview_hybrid_r32_1200.safetensors").write_bytes(b"fake")
+        name, status = bi.select_identity_lora(ROOT, {"lora": "carey_meina_sd15_v1.safetensors"},
+                                               "carey_preview_hybrid_r32_1200")
+        check("explicit -Lora overrides the stale recipe LoRA cleanly",
+              name == "carey_preview_hybrid_r32_1200.safetensors"
+              and "explicit-override" in status and "preview" in status)
+        msg = raises_value(bi.select_identity_lora, ROOT,
+                           {"lora": "carey_meina_sd15_v1.safetensors"}, None)
+        check("stale recipe LoRA is refused by name, never partial-matched to a preview",
+              bool(msg) and "carey_meina_sd15_v1" in msg and "not installed" in msg)
+        msg = raises_value(bi.select_identity_lora, ROOT, {}, None)
+        check("no deployed LoRA is said plainly",
+              bool(msg) and "no deployed identity LoRA" in msg)
+        for rv in ("2", "3"):
+            rj = json.loads((ROOT / "recipes" / f"anime_face_zone_edit.v{rv}.json").read_text())
+            check(f"anime_face_zone_edit v{rv} no longer ships the stale deployed-LoRA claim",
+                  rj["identity"]["lora"] is None)
+
+        # 6. outside-mask pixels remain unchanged (and tampering is caught)
+        orig = PILImage.new("RGB", (64, 64), (40, 80, 120))
+        gen = PILImage.new("RGB", (64, 64), (200, 60, 60))
+        mask = PILImage.new("L", (64, 64), 0)
+        PILDraw.Draw(mask).ellipse((20, 20, 44, 44), fill=255)
+        final_img = orig.copy()
+        final_img.paste(gen, (0, 0), mask)
+        check("outside-mask preservation verifies a clean composite",
+              fzc.verify_outside_mask(orig, final_img, mask)["passed"] is True)
+        tampered = final_img.copy()
+        tampered.putpixel((2, 2), (255, 255, 255))
+        bad = fzc.verify_outside_mask(orig, tampered, mask)
+        check("outside-mask verification catches a leak",
+              bad["passed"] is False and bad["changed_pixels"] >= 1)
+        leaky = PILImage.new("L", (64, 64), 0)
+        PILDraw.Draw(leaky).rectangle((0, 0, 63, 30), fill=255)  # touches the border
+        clamped, frac = fzc.clamp_mask_border(leaky)
+        check("rectangular border leak is clamped and measured",
+              frac > 0 and clamped.getpixel((0, 0)) == 0 and clamped.getpixel((32, 20)) == 255)
+
+        # 7. eye_source=target restores protected eye pixels exactly
+        eye_mask = PILImage.new("L", (64, 64), 0)
+        PILDraw.Draw(eye_mask).ellipse((24, 26, 40, 36), fill=255)
+        restored = fzc.restore_protected_material(gen, orig, eye_mask)
+        check("protected target-eye pixels are restored after generation",
+              restored.getpixel((32, 31)) == (40, 80, 120)
+              and restored.getpixel((5, 5)) == (200, 60, 60))
+
+        # D. raw-triangle shard heuristic
+        shardy = PILImage.new("L", (128, 128), 128)
+        d = PILDraw.Draw(shardy)
+        for i in range(0, 128, 9):
+            d.line((0, i, 127, i), fill=255, width=1)
+            d.line((i, 0, i, 127), fill=255, width=1)
+        full = PILImage.new("L", (128, 128), 255)
+        verdict = fzc.mesh_shard_score(shardy.convert("RGB"), full)
+        check("shard detector flags dense straight seams",
+              verdict["shards_detected"] is True, str(verdict))
+        smooth = PILImage.new("RGB", (128, 128), (120, 110, 100))
+        check("shard detector passes a smooth face crop",
+              fzc.mesh_shard_score(smooth, full)["shards_detected"] is False)
+
+        # 8. geometry_stability=0 can never yield a CPU-only founder-facing final
+        unstable_report = {"faces": [{"index": 0, "flags": ["strong_profile"],
+                                      "checks": {"geometry_stability": 0.0,
+                                                 "geometry_warning": "landmarks disagree across scales"}}]}
+        g = bi.geometry_gate(unstable_report)
+        check("geometry gate blocks unstable mesh case and CPU-only final",
+              g["mesh_case_allowed"] is False and g["cpu_final_allowed"] is False
+              and len(g["reasons"]) >= 2 and "reviewed-mask" in g["fallback"])
+        stable_report = {"faces": [{"index": 0, "flags": [],
+                                    "checks": {"geometry_stability": 0.92}}]}
+        g2 = bi.geometry_gate(stable_report)
+        check("geometry gate passes stable geometry",
+              g2["mesh_case_allowed"] is True and g2["reasons"] == [])
+        g3 = bi.geometry_gate({"faces": [{"index": 0, "flags": [], "checks": {}}]})
+        check("unmeasurable stability fails closed",
+              g3["mesh_case_allowed"] is False)
+
+        # 9. HTTP 400 responses surface the body, node_errors, ids and classes
+        err_body = json.dumps({
+            "error": {"type": "prompt_outputs_failed_validation",
+                      "message": "Prompt outputs failed validation"},
+            "node_errors": {"13": {"class_type": "ControlNetLoader", "errors": [
+                {"type": "value_not_in_list",
+                 "message": "control_net_name 'control_v11p_sd15_canny.safetensors' not in []"}]}}})
+        formatted = bi._format_comfy_http_error(400, err_body)
+        check("ComfyUI HTTP 400 surfaces status, node id, class and message",
+              "HTTP 400" in formatted and "node 13" in formatted
+              and "ControlNetLoader" in formatted and "value_not_in_list" in formatted,
+              formatted[:160])
+        check("non-JSON error bodies are still printed",
+              "some html error page" in bi._format_comfy_http_error(500, "some html error page"))
+
+        # Free swap stack skeleton (docs/FREE_SWAP_STACK.md): photo-anchored
+        # identity needs NO LoRA and the doc keeps the lane license-clean.
+        free_doc = (ROOT / "docs" / "FREE_SWAP_STACK.md")
+        check("free swap stack skeleton doc exists",
+              free_doc.is_file() and "Excluded on purpose" in free_doc.read_text())
+        bi_source = (ROOT / "scripts" / "byrdimage.py").read_text(encoding="utf-8-sig")
+        check("photo-anchored workflows run LoRA-free (license-clean identity)",
+              '"IDENTITY PHOTO\\"" in' in repr(bi_source) or '\'"IDENTITY PHOTO"\'' in bi_source
+              or '"IDENTITY PHOTO"' in bi_source)
+        check("LoRA splice is conditional, never mandatory",
+              "if selected_identity_lora:" in bi_source
+              and "photo-anchored identity" in bi_source)
+        ipad_graph = json.loads((ROOT / "workflows" / "sd15_face_zone_ipadapter_api.json")
+                                .read_text(encoding="utf-8-sig"))
+        check("avenue-B zone graph really has the IDENTITY PHOTO anchor node",
+              any(n.get("_meta", {}).get("title") == "IDENTITY PHOTO"
+                  for n in ipad_graph.values() if isinstance(n, dict)))
+
+        # The conductor (byrdswap.py): the bot's lane decisions, zero GPU.
+        import byrdswap
+        stable_rep = {"faces": [{"index": 0, "flags": [],
+                                 "checks": {"geometry_stability": 0.9}}]}
+        unstable_rep = {"faces": [{"index": 0, "flags": ["strong_profile"],
+                                   "checks": {"geometry_stability": 0.0,
+                                              "geometry_warning": "landmarks disagree across scales"}}]}
+        p = byrdswap.plan_ladder(unstable_rep, lora="x", identity_photo="p.jpg")
+        check("conductor stops on unstable geometry with manual next steps",
+              p["lanes"] == [] and "geometry gate" in p["stop_reason"]
+              and any("zone" in s for s in p["manual_next"]))
+        p = byrdswap.plan_ladder(stable_rep, lora=None, identity_photo="p.jpg")
+        check("conductor picks the free photo-anchored lane first, no LoRA",
+              p["lanes"][0]["lane"] == "quality_photo_anchored"
+              and any(s["lane"] == "quality_lora_mesh" for s in p["skipped"]))
+        p = byrdswap.plan_ladder(stable_rep, lora="preview_r32", identity_photo=None)
+        check("conductor uses explicit LoRA lanes when photo is unavailable",
+              [l["lane"] for l in p["lanes"]] == ["quality_lora_mesh", "auto_facedetailer"]
+              and any(s["lane"] == "quality_photo_anchored" for s in p["skipped"]))
+        p = byrdswap.plan_ladder(stable_rep, lora=None, identity_photo=None)
+        check("conductor says plainly when nothing is runnable",
+              p["lanes"] == [] and "stop_reason" in p)
+        check("facelab run command wires the conductor",
+              '"run"' in (ROOT / "scripts" / "facelab.ps1").read_text(encoding="utf-8-sig")
+              and "byrdswap.py" in (ROOT / "scripts" / "facelab.ps1").read_text(encoding="utf-8-sig"))
+
+        # The founder-verified gojo avenue (d0.28 / mesh 0.40) + finish pass
+        check("gojo avenue codified: identity_fill d0.28, mesh 0.40, eyes protected, cleanup ON",
+              byrdswap.GOJO_AVENUE_ENGINE["gpu_passes"]["identity_fill"]["denoise"] == 0.28
+              and byrdswap.GOJO_AVENUE_ENGINE["mesh_identity_strength"] == 0.40
+              and byrdswap.GOJO_AVENUE_ENGINE["eye_source"] == "target"
+              and byrdswap.GOJO_AVENUE_ENGINE["skip_gpu_cleanup"] is False)
+        p = byrdswap.plan_ladder(stable_rep, lora="preview", identity_photo=None)
+        check("conductor's LoRA lane rides the gojo avenue",
+              p["lanes"][0]["engine"].get("mesh_identity_strength") == 0.40)
+        # Golden-run replay (reproduce the runs that actually worked)
+        import byrdswap_replay as replay
+        golden_card = {"recipe": "anime_face_zone_edit@2", "seed": 42,
+                       "lora": "carey_hybrid_r32.safetensors",
+                       "workflow": "workflows/sd15_face_mesh_seed_multipass_api.json",
+                       "target": "E:/x/gojo.png", "target_preset": "gojo",
+                       "gpu_passes": [{"id": "identity_fill", "denoise": 0.28},
+                                      {"id": "line_harmonize", "denoise": 0.12}],
+                       "face_zone": {"identity_mesh": {"mesh_identity_strength": 0.40,
+                                                       "eye_source_mode": "target"}}}
+        gp = replay.extract_golden_params(golden_card)
+        check("replay recovers the golden parameters from a card",
+              gp["denoise_per_pass"]["identity_fill"] == 0.28
+              and gp["mesh_identity_strength"] == 0.40 and gp["seed"] == 42)
+        today = json.loads((ROOT / "recipes" / "anime_face_zone_edit.v2.json")
+                           .read_text(encoding="utf-8-sig"))
+        drift = replay.diff_vs_recipe(gp, today)
+        check("replay names remaining drift (recipe now MATCHES the golden denoise)",
+              not any("identity_fill" in d for d in drift)
+              and any("LoRA" in d for d in drift))
+        old_recipe = {"defaults": {"gpu_passes": {"identity_fill": {"denoise": 0.38}},
+                                   "skip_gpu_cleanup": True}, "identity": {}}
+        old_drift = replay.diff_vs_recipe(gp, old_recipe)
+        check("replay catches denoise + skip drift against a stale recipe",
+              any("0.28" in d and "0.38" in d for d in old_drift)
+              and any("SKIPS gpu cleanup" in d for d in old_drift))
+        check("replay emits an exact rerun command",
+              "-Lora" in replay.rerun_command(gp) and "quality" in replay.rerun_command(gp))
+
+        # Complete settings capture: every card carries a full reproduce block
+        empty_block = bi.reproduce_block()
+        check("reproduce block always contains every required key (None when n/a)",
+              set(bi.REPRODUCE_REQUIRED) <= set(empty_block)
+              and all(empty_block[k] is None for k in bi.REPRODUCE_REQUIRED))
+        check("both face-zone card paths embed the reproduce block",
+              bi_source.count('"reproduce": reproduce,') >= 2
+              and '"workflow_sha256"' in bi_source)
+        modern_card = {"seed": 42,
+                       "reproduce": {"seed": 7, "lora": "x.safetensors",
+                                     "gpu_passes": [{"id": "identity_fill", "denoise": 0.28}]}}
+        check("replay prefers the complete reproduce block over legacy fields",
+              replay.extract_golden_params(modern_card)["seed"] == 7
+              and replay.extract_golden_params(modern_card)
+                  ["denoise_per_pass"]["identity_fill"] == 0.28)
+
+        # FINISH never edits a processed image: it re-renders generation 1
+        # from the immutable original using the card's captured settings.
+        fin_img = ROOT / "artifacts" / "fin_test.png"
+        fin_img.parent.mkdir(parents=True, exist_ok=True)
+        fin_img.write_bytes(b"png")
+        Path(str(fin_img) + ".json").write_text(json.dumps(
+            {"job_id": "job_x", "reproduce": {
+                "target": "E:/originals/vegeta.jpg", "seed": 99,
+                "lora": "hybrid_r32.safetensors", "target_preset": "vegeta",
+                "recipe": "anime_face_zone_edit@2",
+                "engine": {"crop_size": 640}}}))
+        fsrc = byrdswap.finish_source(fin_img)
+        check("finish re-renders from the immutable original with the same seed",
+              fsrc["original"] == "E:/originals/vegeta.jpg" and fsrc["seed"] == 99
+              and fsrc["recipe"] == "anime_face_zone_edit.v2"
+              and fsrc["engine"] == {"crop_size": 640})
+        bare = ROOT / "artifacts" / "bare.png"
+        bare.write_bytes(b"png")
+        try:
+            byrdswap.finish_source(bare)
+            fin_refused = False
+        except ValueError as exc:
+            fin_refused = "no generation card" in str(exc)
+        check("finish refuses a cardless image instead of guessing", fin_refused)
+        check("every card is generation 1 (edit-on-edit structurally refused)",
+              bi_source.count('"generation": 1,') >= 3
+              and "fresh-retry policy rejected" in bi_source
+              and '"finish"' in (ROOT / "scripts" / "facelab.ps1").read_text(encoding="utf-8-sig"))
+
+        # No-op law: an untouched copy must never ship as a result.
+        same = PILImage.new("RGB", (64, 64), (90, 90, 90))
+        check("edit_delta calls an untouched copy a no-op",
+              fzc.edit_delta(same, same.copy())["edited"] is False)
+        changed_img = same.copy()
+        PILDraw.Draw(changed_img).ellipse((20, 20, 44, 44), fill=(180, 120, 90))
+        check("edit_delta confirms a real zone edit",
+              fzc.edit_delta(same, changed_img)["edited"] is True
+              and fzc.edit_delta(same, changed_img, mask)["edited"] is True)
+        # Bounded advisor fixes (2026-07-16): restyle after swap + hard_anime routing
+        bcs_cfg_now = json.loads((ROOT / "configs" / "byrdcast_swap_v0.json").read_text(encoding="utf-8-sig"))
+        check("swap restyle pass: FaceDetailer denoise 0.40 with 14px feather",
+              bcs_cfg_now["refine"]["facedetailer_denoise"] == 0.4
+              and bcs_cfg_now["refine"]["facedetailer_feather_px"] == 14)
+        bi_source_now = (ROOT / "scripts" / "byrdimage.py").read_text(encoding="utf-8-sig")
+        check("hard_anime targets are refused by ReActor and routed to the redraw path",
+              "hard_anime target: ReActor paste is disabled" in bi_source_now
+              and "extreme_expression" in bi_source_now)
+        check("no-op outputs are rejected on every lane (run_graph + zone paths)",
+              bi_source_now.count("untouched copy") >= 3
+              and "images_effectively_identical" in bi_source_now
+              and '"edit_applied"' in (ROOT / "scripts" / "byrdfacezone.py")
+                  .read_text(encoding="utf-8-sig"))
 
         print("== stats + report + dashboard")
         st = api("/stats")
