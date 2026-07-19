@@ -180,6 +180,17 @@ def _known_face_zone_target(root: Path, target: Path) -> dict:
             "face_index": 2,
             "reason": "reviewed multi-face Luffy sheet; closest grin face is index 2",
         },
+        "ef4c374ca1faa658fd5660a951251b14bb13b1c2a927cc1645952246109c763d": {
+            "preset": "luffy_close",
+            "recipe": "anime_face_zone_edit@3",
+            "face_index": 0,
+            "reason": (
+                "reviewed padded Luffy target; the CPU examiner only sees "+
+                "false hat/forehead/ear boxes, so the luffy_close preset "+
+                "manual_face_box + identity-template-to-manual-box own "+
+                "the canonical face oval"
+            ),
+        },
         "8398872a4a7cb53532cd0b753325c347d3da530dbe2307b4113face1dd5cf598": {
             "preset": "gojo",
             "recipe": "anime_face_zone_edit@1",
@@ -1044,6 +1055,12 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         if isinstance(manual, dict):
             manual = ",".join(str(manual[key]) for key in ("x", "y", "width", "height"))
         zone_cmd += ["--manual-box", str(manual)]
+    manual_landmark_mode = (
+        engine.get("manual_landmark_mode")
+        or preset.get("manual_landmark_mode")
+    )
+    if manual_landmark_mode and manual:
+        zone_cmd += ["--manual-landmark-mode", str(manual_landmark_mode)]
     for box in preset.get("exclude_boxes", []):
         if isinstance(box, dict):
             box = ",".join(str(box[key]) for key in ("x", "y", "width", "height"))

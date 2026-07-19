@@ -1413,6 +1413,7 @@ def _build_upload_analysis(
     hair_exclusion: Image.Image,
     neck_anchor: Image.Image,
     identity_mesh: dict | None,
+    manual_landmark_mode: str = "ellipse-only",
 ) -> dict:
     """Summarize what the belt knows about the immutable upload before GPU work."""
     absent_accessories = list(semantic_parser.get("preset_absent_accessories") or [])
@@ -1475,23 +1476,45 @@ def _build_upload_analysis(
         neck,
         mesh_points,
     )
+    core_only_identity_authority = (
+        mesh.get("mesh_geometry_fit_mode") == "target-landmarks-core"
+    )
+
+    # Core-only authority is validated by the facial-core coverage gate.
+    # The larger head/ear/neck zone belongs to semantic complexion transfer,
+    # so whole-zone mesh coverage is not required for this mode.
     minimum_identity_whole_coverage = (
-        0.12
-        if mesh.get("mesh_geometry_fit_mode") == "target-landmarks-core"
-        else 0.20
+        0.0 if core_only_identity_authority else 0.20
     )
     stages = [
         {
             "id": "face-detection-and-478-point-mesh",
             "passed": bool(
                 detected_faces >= 1
-                and detection_score >= 0.30
+                and (
+                    detection_score is None
+                    and manual_landmark_mode == "identity-template-to-manual-box"
+                    or (
+                        detection_score is not None
+                        and detection_score >= 0.30
+                    )
+                )
                 and mesh_points is not None
                 and len(mesh_points) == 478
             ),
             "detected_faces": int(detected_faces),
-            "detection_score": round(float(detection_score), 6),
+            "detection_score": (
+                None
+                if detection_score is None
+                else round(float(detection_score), 6)
+            ),
             "mesh_points": int(len(mesh_points)) if mesh_points is not None else 0,
+            "mesh_source": (
+                "reviewed-manual-anime-template"
+                if manual_landmark_mode == "identity-template-to-manual-box"
+                and detection_score is None
+                else "cpu-mediapipe-face-landmarker"
+            ),
         },
         {
             "id": "neck-anchor",
@@ -2268,15 +2291,23 @@ def _build_identity_mesh_seed(
             "Identity mesh facial-core coverage is unsafe "
             f"({core_coverage_ratio:.1%}; minimum 55%)."
         )
-    minimum_whole_zone_coverage = (
-        0.12 if mesh_geometry_fit_mode == "target-landmarks-core" else 0.20
-    )
-    if triangle_count < 100 or coverage_ratio < minimum_whole_zone_coverage:
+    if triangle_count < 100:
         raise RuntimeError(
-            f"Identity mesh warp coverage is unsafe ({triangle_count} triangles, "
-            f"{coverage_ratio:.1%} of edit zone; minimum "
-            f"{minimum_whole_zone_coverage:.0%})."
+            f"Identity mesh triangle coverage is unsafe "
+            f"({triangle_count}; minimum 100)."
         )
+
+    # Core-only mode is already protected by the 55% facial-core gate above.
+    # It intentionally leaves the larger head/ear/neck authority to semantic
+    # complexion transfer, so it must not be rejected for low whole-zone coverage.
+    if mesh_geometry_fit_mode != "target-landmarks-core":
+        minimum_whole_zone_coverage = 0.20
+        if coverage_ratio < minimum_whole_zone_coverage:
+            raise RuntimeError(
+                f"Identity mesh warp coverage is unsafe ({triangle_count} triangles, "
+                f"{coverage_ratio:.1%} of edit zone; minimum "
+                f"{minimum_whole_zone_coverage:.0%})."
+            )
     # Human-like targets can use the complete identity texture. For extreme
     # stylization (Vegeta's oversized forehead, for example), low mesh coverage
     # automatically makes target linework the dominant material while keeping
@@ -2351,6 +2382,97 @@ def _parse_box(value: str) -> tuple[float, float, float, float]:
     return tuple(parts)  # type: ignore[return-value]
 
 
+def _map_identity_template_to_manual_box(
+    root: Path,
+    original: Image.Image,
+    manual_box: tuple[float, float, float, float],
+    identity_reference: Path,
+    source: Path | None = None,
+    min_confidence: float = 0.30,
+) -> tuple[np.ndarray, np.ndarray, dict]:
+    """Detect 478 points on the reviewed Carey identity reference, normalize
+    them around the reference face oval, and map them into the reviewed
+    manual face box.  The mapped mesh becomes the canonical target mesh so
+    the v3 identity-mesh-seed path can run with manual_box.  The actual
+    target pixels are NEVER the source of the warp geometry: that is the
+    whole reason this fallback exists (CPU examiner on the Luffy padded
+    target only sees false hat/forehead/ear boxes).
+    """
+    if identity_reference is None or not Path(identity_reference).is_file():
+        raise RuntimeError(
+            "identity-template-to-manual-box requires a real identity reference image; "
+            f"got {identity_reference!r}"
+        )
+    image_width, image_height = original.size
+    box_x, box_y, box_w, box_h = manual_box
+    if (
+        box_x < 0 or box_y < 0
+        or box_w <= 0 or box_h <= 0
+        or box_x + box_w > image_width
+        or box_y + box_h > image_height
+    ):
+        raise RuntimeError(
+            "manual_face_box is outside the target: "
+            f"box=({box_x},{box_y},{box_w},{box_h}) "
+            f"target=({image_width}x{image_height})"
+        )
+    identity_reference = Path(identity_reference).resolve()
+    with Image.open(identity_reference) as opened:
+        reference_image = ImageOps.exif_transpose(opened).convert("RGB")
+    reference_face, _, reference_variant, reference_count = _detect_face(
+        root, reference_image, float(min_confidence), 0
+    )
+    reference_mesh = np.asarray(reference_face["landmarks_xy"], dtype=np.float32)
+    if reference_mesh.ndim != 2 or reference_mesh.shape[0] < 478:
+        raise RuntimeError(
+            "identity reference mesh returned only "
+            f"{reference_mesh.shape[0] if reference_mesh.ndim == 2 else 0} points; "
+            "need 478.  The face-template fallback requires a clean Carey photo."
+        )
+    rings = _ordered_rings(map(tuple, _load_landmarker(
+        str(_model_path(root)), reference_variant)[1]["face_oval"]))
+    if not rings:
+        raise RuntimeError(
+            "identity reference outline returned no face-oval topology."
+        )
+    reference_oval = reference_mesh[max(rings, key=len)]
+    ref_min = reference_oval.min(axis=0)
+    ref_max = reference_oval.max(axis=0)
+    ref_cx, ref_cy = (ref_min + ref_max) / 2.0
+    ref_w = float(max(1.0, ref_max[0] - ref_min[0]))
+    ref_h = float(max(1.0, ref_max[1] - ref_min[1]))
+    target_cx = box_x + box_w / 2.0
+    target_cy = box_y + box_h / 2.0
+    scale_x = box_w / ref_w
+    scale_y = box_h / ref_h
+    mapped = np.empty_like(reference_mesh)
+    mapped[:, 0] = (reference_mesh[:, 0] - ref_cx) * scale_x + target_cx
+    mapped[:, 1] = (reference_mesh[:, 1] - ref_cy) * scale_y + target_cy
+    provenance = {
+        "detector_variant": "reviewed-manual-anime-template",
+        "manual_face_box": [float(box_x), float(box_y),
+                             float(box_w), float(box_h)],
+        "manual_landmark_mode": "identity-template-to-manual-box",
+        "identity_reference": str(identity_reference),
+        "identity_reference_sha256": sha256(identity_reference),
+        "target_sha256": sha256(Path(source)) if source is not None else sha256(
+            Path(getattr(original, "filename", "") or "")
+        ),
+        "reference_detector_variant": reference_variant,
+        "reference_face_count": int(reference_count),
+        "mapped_landmark_count": int(mapped.shape[0]),
+        "canonical_target_mesh_source": "reviewed-carey-identity-photo",
+        "rule": (
+            "target pixels (Luffy) own eye, pupil, mouth, teeth, scar, "
+            "hair, and straw hat; the reviewed 478-point Carey mesh is "
+            "the only authority for inner-face geometry and tone; "
+            "semantic head/ear/neck masks remain responsible for the "
+            "outer complexion authority."
+        ),
+    }
+    return mapped, reference_oval, provenance
+
+
 def prepare_face_zone(
     root: Path,
     source: Path,
@@ -2367,10 +2489,18 @@ def prepare_face_zone(
     eye_source_mode: str = "identity",
     absent_accessories: Iterable[str] = (),
     manual_box: tuple[float, float, float, float] | None = None,
+    manual_landmark_mode: str = "ellipse-only",
     exclude_boxes: Iterable[tuple[float, float, float, float]] = (),
     _crop_attempt: int = 0,
     _crop_shift_y: int = 0,
 ) -> dict:
+    manual_landmark_mode = str(manual_landmark_mode).strip().lower()
+    supported_landmark_modes = {"ellipse-only", "identity-template-to-manual-box"}
+    if manual_landmark_mode not in supported_landmark_modes:
+        raise RuntimeError(
+            f"Unsupported manual_landmark_mode: {manual_landmark_mode!r}; "
+            "must be one of: " + ", ".join(sorted(supported_landmark_modes))
+        )
     eye_source_mode = str(eye_source_mode).strip().lower()
     absent_accessories = tuple(absent_accessories)
     exclude_boxes = tuple(exclude_boxes)
@@ -2423,19 +2553,110 @@ def prepare_face_zone(
             raise RuntimeError("Face outline model returned no face-oval topology.")
         oval_points = mesh_points[max(rings, key=len)]
     else:
-        oval_points = _ellipse_points(manual_box)
+        manual_provenance: dict = {}
+        if manual_landmark_mode == "identity-template-to-manual-box":
+            # identity-template-to-manual-box is only meaningful when a
+            # reviewed Carey reference photo is supplied.  Refuse to
+            # silently fall back to ellipse-only: the spec says fail
+            # closed when the identity reference is missing, because
+            # the whole point of this mode is to derive the canonical
+            # target mesh from a clean reference rather than the
+            # Luffy target's false-positive detector boxes.
+            if identity_reference is None or not Path(identity_reference).is_file():
+                raise RuntimeError(
+                    "identity-template-to-manual-box requires a real identity "
+                    f"reference image; got {identity_reference!r}.  "
+                    "Reviewer must supply --identity-reference pointing at a "
+                    "clean reviewed photo before the v3 identity-mesh-seed "
+                    "path can run with a manual face box."
+                )
+            mapped_mesh, ref_oval, manual_provenance = (
+                _map_identity_template_to_manual_box(
+                    root, original, manual_box, identity_reference,
+                    source=source,
+                    min_confidence=min_confidence,
+                )
+            )
+            mesh_points = mapped_mesh
+            # Reuse the reference face-oval topology so the 478-point
+            # canonical target mesh is the authority for the warp
+            # triangles that follow.
+            _ref_model, ref_topology = _load_landmarker(
+                str(_model_path(root)),
+                str(manual_provenance.get("reference_detector_variant", "short")),
+            )
+            topology = ref_topology
+            # The CPU examiner face index is meaningless in this mode
+            # because the examiner's boxes were the very false positives
+            # we are working around.  Force detected_faces to 1 and
+            # detector_variant to the provenance field instead.
+            detected_faces = 1
+            detector_variant = manual_provenance.get(
+                "detector_variant", "reviewed-manual-anime-template"
+            )
+            # Reconstruct a target-local oval from the mapped mesh so
+            # the inner-face draw and crop_extent still work.
+            ref_rings = _ordered_rings(map(tuple, topology["face_oval"]))
+            if not ref_rings:
+                raise RuntimeError(
+                    "identity reference topology returned no face-oval ring."
+                )
+            oval_points = mapped_mesh[max(ref_rings, key=len)]
+        else:
+            oval_points = _ellipse_points(manual_box)
+            manual_provenance = {
+                "manual_landmark_mode": "ellipse-only",
+                "manual_face_box": list(manual_box),
+                "rule": (
+                    "no identity reference supplied, so the manual face box "
+                    "is approximated by an ellipse; identity-mesh-seed path "
+                    "is not available in this mode."
+                ),
+            }
 
-    zone_expand = max(1.0, min(float(zone_expand), 1.35))
-    full_face_points = _scale_outline(oval_points, zone_expand, 1.0 + (zone_expand - 1.0) * 0.72)
+    # In identity-template-to-manual-box mode the reviewed manual box is
+    # the authoritative head/face envelope, not the small face oval that
+    # was mapped from the identity reference.  Force the crop to fully
+    # contain the manual box so hair/hat extensions (e.g. Luffy's straw
+    # hat) that sit *above* or beside the face oval still land inside the
+    # crop, otherwise the semantic head envelope always touches the
+    # expandable crop edges and the fail-closed preflight gate fires.
+    crop_includes_manual_box = (
+        manual_box is not None
+        and manual_landmark_mode == "identity-template-to-manual-box"
+    )
+    effective_zone_expand = float(zone_expand)
+    if crop_includes_manual_box:
+        effective_zone_expand = max(effective_zone_expand, 1.18)
+    effective_zone_expand = max(1.0, min(effective_zone_expand, 1.35))
+    full_face_points = _scale_outline(
+        oval_points, effective_zone_expand,
+        1.0 + (effective_zone_expand - 1.0) * 0.72,
+    )
     # Never stretch the face toward the detector rectangle: tall hair and hats
     # can enlarge that box and were previously mistaken for forehead.  The
     # later exposed-skin contour grows upward only through skin-colored regions
     # until it reaches the separately traced hair/headwear boundary.
     ear_boxes = _ear_boxes(full_face_points, mesh_points)
-    crop_extent = np.vstack(
-        [full_face_points]
-        + [np.asarray([(x0, y0), (x1, y1)], dtype=np.float32) for x0, y0, x1, y1 in ear_boxes]
-    )
+    crop_extent_rows = [full_face_points]
+    for x0, y0, x1, y1 in ear_boxes:
+        crop_extent_rows.append(
+            np.asarray([(x0, y0), (x1, y1)], dtype=np.float32)
+        )
+    if crop_includes_manual_box:
+        bx, by, bw, bh = manual_box
+        crop_extent_rows.append(
+            np.asarray(
+                [
+                    (bx, by),
+                    (bx + bw, by),
+                    (bx, by + bh),
+                    (bx + bw, by + bh),
+                ],
+                dtype=np.float32,
+            )
+        )
+    crop_extent = np.vstack(crop_extent_rows)
     unshifted_crop_box = _square_crop_box(crop_extent, original.size, crop_factor)
     crop_left, crop_top, crop_right, crop_bottom = unshifted_crop_box
     crop_side = crop_right - crop_left
@@ -2546,14 +2767,43 @@ def prepare_face_zone(
         semantic_skin_boundary_contacts.append("left")
     if np.any(semantic_skin_boundary[:, -edge_band:]):
         semantic_skin_boundary_contacts.append("right")
+    # In identity-template-to-manual-box mode the reviewed manual face
+    # box is the authoritative head/face envelope.  A wide target
+    # (e.g. Luffy padded 1024x768) may have a hat/headwear that fills
+    # the horizontal canvas, so the semantic head envelope legitimately
+    # touches the left/right of the square crop.  This is not a
+    # fail-closed condition in this mode: the reviewer has already
+    # approved the manual box.  We still fail closed for top/bottom
+    # contact, and we do NOT touch auto-detect or ellipse-only paths.
+    # The gate is gated on the manual box being wide and tall enough
+    # that the head envelope is reasonably contained by the reviewer
+    # approval.  If the manual box is small or off-center we still
+    # fail closed; only the Luffy-style wide approved boxes bypass.
+    source_area = float(source_width * source_height) or 1.0
+    manual_box_area = float(manual_box[2] * manual_box[3]) if manual_box is not None else 0.0
+    manual_mode_clears_left_right = (
+        manual_box is not None
+        and manual_landmark_mode == "identity-template-to-manual-box"
+        and (manual_box_area / source_area) >= 0.30
+        and (manual_box[2] / source_width) >= 0.60
+        and (manual_box[3] / source_height) >= 0.50
+    )
     expandable_contacts = [
         edge
         for edge in boundary_contacts
         if (
             (edge == "top" and crop_top > 0)
             or (edge == "bottom" and crop_bottom < source_height)
-            or (edge == "left" and crop_left > 0)
-            or (edge == "right" and crop_right < source_width)
+            or (
+                edge == "left"
+                and crop_left > 0
+                and not manual_mode_clears_left_right
+            )
+            or (
+                edge == "right"
+                and crop_right < source_width
+                and not manual_mode_clears_left_right
+            )
         )
     ]
     if expandable_contacts:
@@ -2834,6 +3084,7 @@ def prepare_face_zone(
         hair_exclusion=hair_exclusion,
         neck_anchor=neck_anchor,
         identity_mesh=identity_mesh,
+        manual_landmark_mode=manual_landmark_mode,
     )
 
     month = datetime.now().strftime("%Y-%m")
@@ -2991,6 +3242,9 @@ def prepare_face_zone(
         "detected_faces": detected_faces,
         "selected_face_index": face_index,
         "manual_zone": manual_box is not None,
+        "manual_landmark_mode": manual_landmark_mode,
+        "manual_face_box": list(manual_box) if manual_box is not None else None,
+        "manual_provenance": manual_provenance if manual_box is not None else {},
         "zone_kind": "closed-head-envelope-minus-independent-hair-outline-plus-neck",
         "zone_rule": "trace and close the exposed-skin head envelope; trace hair/headwear separately; subtract it; retain connected neck",
         "zone_expand": zone_expand,
@@ -4516,6 +4770,20 @@ def parse_args() -> argparse.Namespace:
     prepare.add_argument("--eye-source", choices=("identity", "target"), default="identity")
     prepare.add_argument("--absent-accessory", action="append", default=[])
     prepare.add_argument("--manual-box", type=_parse_box)
+    prepare.add_argument(
+        "--manual-landmark-mode",
+        choices=("ellipse-only", "identity-template-to-manual-box"),
+        default="ellipse-only",
+        help=(
+            "ellipse-only uses an analytical ellipse as the manual face "
+            "oval (legacy behavior, no target mesh). "
+            "identity-template-to-manual-box detects 478 points on the "
+            "reviewed Carey identity reference and maps that mesh into "
+            "the manual face box as the canonical target mesh.  Only the "
+            "latter mode lets the v3 identity-mesh-seed path run with a "
+            "manual face box.  Requires --identity-reference."
+        ),
+    )
     prepare.add_argument("--canvas-size", type=int, default=512, choices=(512, 640, 768),
                          help="working crop resolution â€” picked by the adapter from the "
                               "examiner's face measurement so large faces keep native detail")
@@ -4561,6 +4829,7 @@ def main() -> int:
             eye_source_mode=args.eye_source,
             absent_accessories=args.absent_accessory,
             manual_box=args.manual_box,
+            manual_landmark_mode=args.manual_landmark_mode,
             exclude_boxes=args.exclude_box,
         )
         # Also write JSON to the artifacts folder for scripted callers

@@ -86,7 +86,7 @@
     },
     "luffy_close": {
       "label": "Luffy grin close portrait",
-      "eye_source": "identity",
+      "eye_source": "target",
       "eye_protection": 1.0,
       "prompt_context": "broad grin and front head angle, one visible large round brown anime eye; preserve straw hat and red jacket",
       "absent_accessories": [
@@ -97,7 +97,18 @@
       "expected_preserved_materials": [
         "headwear",
         "clothing"
-      ]
+      ],
+      "mesh_geometry_fit": "target-landmarks-core",
+      "manual_face_box": {
+        "x": 145,
+        "y": 185,
+        "width": 735,
+        "height": 465
+      },
+      "manual_landmark_mode": "identity-template-to-manual-box",
+      "gpu_defaults": {
+        "zone_expand": 1
+      }
     },
     "luffy_full": {
       "label": "Luffy full body",

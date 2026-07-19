@@ -611,6 +611,151 @@ def main():
             invalid_pass_rejected = False
         check("v2 adapter rejects an unsafe GPU-pass override", invalid_pass_rejected)
 
+        # ─── HARD-ANIME MANUAL LANDMARK FALLBACK (luffy padded) ───
+        # The padded Luffy target (1024x768) defeats the CPU face
+        # detector (it returns false hat/forehead/ear boxes instead of
+        # the central face).  The fix is a reviewed manual face box
+        # plus an identity-template-to-manual-box mode that derives
+        # the canonical target mesh from a clean Carey reference photo
+        # rather than from the Luffy target.  These tests lock every
+        # contract end to end and fail closed on regressions.
+        v3_recipe_path = ROOT / "recipes" / "anime_face_zone_edit.v3.json"
+        check("plug-and-play face-swap v3 recipe exists",
+              v3_recipe_path.is_file(), str(v3_recipe_path))
+        v3_recipe = (json.loads(v3_recipe_path.read_text(encoding="utf-8-sig"))
+                     if v3_recipe_path.is_file() else {})
+        v3_presets = v3_recipe.get("target_presets") or {}
+        v3_luffy_close = v3_presets.get("luffy_close") or {}
+        check("v3 luffy_close preset pins the reviewed manual face box",
+              v3_luffy_close.get("manual_face_box") == {
+                  "x": 145, "y": 185, "width": 735, "height": 465,
+              }
+              and v3_luffy_close.get("manual_landmark_mode")
+              == "identity-template-to-manual-box"
+              and v3_luffy_close.get("eye_source") == "target"
+              and v3_luffy_close.get("eye_protection") == 1.0,
+              str(v3_luffy_close))
+        check("byrdfacezone implements the identity-template-to-manual-box mode",
+              "def _map_identity_template_to_manual_box(" in facezone_source
+              and "--manual-landmark-mode" in facezone_source
+              and "\"identity-template-to-manual-box\"" in facezone_source
+              and "manual_landmark_mode: str = \"ellipse-only\"" in facezone_source
+              and "reviewed-manual-anime-template" in facezone_source
+              and "manual_provenance" in facezone_source)
+        check("manual mode fail-closed gates protect the Luffy target",
+              "manual_face_box is outside the target" in facezone_source
+              and "identity-template-to-manual-box requires a real identity reference image"
+              in facezone_source
+              and "identity reference mesh returned only" in facezone_source
+              and "no identity reference supplied" in facezone_source)
+        check("byrdimage forwards the manual landmark mode to the CPU script",
+              "manual_landmark_mode" in byrdimage_source
+              and "--manual-landmark-mode" in byrdimage_source
+              and "identity-template-to-manual-box" in byrdimage_source
+              and "engine.get(\"manual_face_box\") or preset.get(\"manual_face_box\")"
+              in byrdimage_source)
+        # Functional smoke: run the reviewed fallback on the actual
+        # Luffy padded target and confirm the 478-point mesh seeds,
+        # crop preflight passes, and the manual_provenance record is
+        # exported for the audit trail.  We do not exercise the full
+        # GPU composite here; that gate is locked separately.
+        try:
+            import byrdfacezone as _bz
+            # The integration test root is an isolated snapshot; the
+            # reviewed Luffy target and Carey identity photo live in
+            # the source repo's Images/ + profiles/ trees.  Resolve
+            # from REPO so the test is hermetic.
+            _target_path = (REPO / "Images" / "Targets" / "anime_games"
+                            / "luffy_face_padded.png")
+            _identity_path = (REPO / "profiles" / "me" / "references"
+                              / "generated_anime_cartoon" / "003_one-piece.png")
+            if _target_path.is_file() and _identity_path.is_file():
+                _record = _bz.prepare_face_zone(
+                    REPO, _target_path, "luffy_padded_integration_test",
+                    manual_box=(145.0, 185.0, 735.0, 465.0),
+                    identity_reference=_identity_path,
+                    eye_source_mode="target",
+                    eye_protection_strength=1.0,
+                    mesh_geometry_fit_mode="target-landmarks-core",
+                    manual_landmark_mode="identity-template-to-manual-box",
+                    absent_accessories=("eyeglasses", "earrings", "necklaces"),
+                )
+                _imp = _record.get("manual_provenance") or {}
+                _mesh_stage = next(
+                    (s for s in (_record.get("upload_analysis") or {}).get("stages", [])
+                     if s.get("id") == "face-detection-and-478-point-mesh"),
+                    {},
+                )
+                check("reviewed manual fallback produces 478 mapped landmarks",
+                      _imp.get("mapped_landmark_count") == 478
+                      and _record.get("detected_faces") == 1
+                      and _record.get("manual_landmark_mode")
+                      == "identity-template-to-manual-box"
+                      and _record.get("detector_variant")
+                      == "reviewed-manual-anime-template"
+                      and _mesh_stage.get("mesh_points") == 478
+                      and _mesh_stage.get("mesh_source")
+                      == "reviewed-manual-anime-template"
+                      and _mesh_stage.get("passed") is True,
+                      str({"mapped": _imp.get("mapped_landmark_count"),
+                           "variant": _record.get("detector_variant"),
+                           "stage": _mesh_stage}))
+                check("reviewed manual fallback passes the crop preflight",
+                      (_record.get("crop_preflight") or {}).get("passed") is True
+                      and ((_record.get("crop_preflight") or {})
+                           .get("expandable_contacts") or []) == [],
+                      str(_record.get("crop_preflight")))
+                check("reviewed manual fallback records manual_provenance and target SHA",
+                      _imp.get("target_sha256") is not None
+                      and _imp.get("identity_reference_sha256") is not None
+                      and _imp.get("identity_reference") is not None,
+                      str({k: _imp.get(k) for k in
+                           ("target_sha256", "identity_reference_sha256",
+                            "identity_reference")}))
+                # Fail-closed: missing identity reference must refuse,
+                # not silently fall back to ellipse-only.
+                try:
+                    _bz.prepare_face_zone(
+                        REPO, _target_path, "luffy_padded_fail_closed_ref",
+                        manual_box=(145.0, 185.0, 735.0, 465.0),
+                        identity_reference=None,
+                        manual_landmark_mode="identity-template-to-manual-box",
+                        absent_accessories=("eyeglasses", "earrings", "necklaces"),
+                    )
+                    _fail_closed_missing_ref = False
+                except RuntimeError as _exc:
+                    _fail_closed_missing_ref = (
+                        "identity-template-to-manual-box" in str(_exc)
+                        and "identity reference" in str(_exc).lower()
+                    )
+                check("manual mode fails closed when identity reference is missing",
+                      _fail_closed_missing_ref, str(_fail_closed_missing_ref))
+                # Fail-closed: manual box outside the target must refuse.
+                try:
+                    _bz.prepare_face_zone(
+                        REPO, _target_path, "luffy_padded_fail_closed_box",
+                        manual_box=(-50.0, -50.0, 200.0, 200.0),
+                        identity_reference=_identity_path,
+                        manual_landmark_mode="identity-template-to-manual-box",
+                        absent_accessories=("eyeglasses", "earrings", "necklaces"),
+                    )
+                    _fail_closed_outside_box = False
+                except RuntimeError as _exc:
+                    _fail_closed_outside_box = "outside the target" in str(_exc)
+                check("manual mode fails closed when box is outside the target",
+                      _fail_closed_outside_box, str(_fail_closed_outside_box))
+            else:
+                check("reviewed manual fallback smoke (target + identity present)",
+                      False,
+                      f"missing target or identity: {_target_path} / {_identity_path}")
+        except Exception as _exc:
+            check("reviewed manual fallback runs without crashing", False, repr(_exc))
+        check("byrdfacezone_manual_preview script exists and is importable",
+              (REPO / "scripts" / "byrdfacezone_manual_preview.py").is_file()
+              and "manual_preview.png" in (REPO / "scripts"
+                                          / "byrdfacezone_manual_preview.py")
+                                         .read_text(encoding="utf-8-sig"))
+
         uploaded_target = ROOT / "artifacts" / "_sources" / "dashboard-upload.png"
         uploaded_target.parent.mkdir(parents=True, exist_ok=True)
         uploaded_target.write_bytes(b"immutable upload")
