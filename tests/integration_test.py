@@ -1266,6 +1266,62 @@ def main():
               (ROOT / "workflows" / "experiments" / "comfyui-mcp-lab" / "README.md").is_file()
               and (ROOT / "workflows" / "candidates" / "README.md").is_file())
 
+        # ── Identity + Face Acceptance Layer (2026-07-19) ────────────────────
+        # Post-generation check: did the face survive in the output?
+        # Runs on the FINAL composite (not the target), flags framing failures.
+        print("== acceptance check (output-side face gate)")
+        check("acceptance_check function exists in byrdfacezone",
+              "def acceptance_check(" in facezone_source)
+        check("accept subcommand registered in byrdfacezone parse_args",
+              '"accept"' in facezone_source
+              and 'accept.add_argument("--image"' in facezone_source
+              and 'acceptance_check(args.root, args.image' in facezone_source)
+        check("acceptance_check has all required output keys",
+              '"accepted"' in facezone_source
+              and '"face_count"' in facezone_source
+              and '"framing_ok"' in facezone_source
+              and '"flags"' in facezone_source
+              and '"face_crop_preview"' in facezone_source
+              and '"side_px"' in facezone_source
+              and '"check_seconds"' in facezone_source)
+        check("acceptance_check checks all four framing edges",
+              "face_cropped_left" in facezone_source
+              and "face_cropped_right" in facezone_source
+              and "face_cropped_top" in facezone_source
+              and "face_cropped_bottom" in facezone_source)
+        check("acceptance_check saves face_crop_preview when output_dir provided",
+              "_accept_crop.jpg" in facezone_source
+              and "crop_img.save(" in facezone_source)
+        check("acceptance_check never raises on detection failure",
+              "except RuntimeError as exc:" in facezone_source
+              and "no_face_detected" in facezone_source
+              and "result[\"check_seconds\"]" in facezone_source)
+        check("acceptance_check accepted=True only when framing_ok and single face",
+              "result[\"accepted\"] = result[\"framing_ok\"] and total == 1"
+              in facezone_source)
+        check("edit_face_zone calls acceptance check on every final composite",
+              "accept_cmd" in byrdimage_source
+              and '"accept"' in byrdimage_source
+              and '"--image", str(final)' in byrdimage_source
+              and '"--output-dir"' in byrdimage_source)
+        check("output_acceptance block written to card",
+              'card["output_acceptance"]' in byrdimage_source)
+        check("acceptance gate logs flags when output is flagged",
+              '"acceptance gate: FLAGGED"' in byrdimage_source
+              and '"output_acceptance.get(\"accepted\")' in byrdimage_source
+              or 'acceptance gate: FLAGGED' in byrdimage_source)
+        check("repo comparison doc exists",
+              (ROOT / "docs" / "REPO_COMPARISON.md").is_file())
+        repo_cmp = ((ROOT / "docs" / "REPO_COMPARISON.md").read_text(encoding="utf-8-sig")
+                    if (ROOT / "docs" / "REPO_COMPARISON.md").is_file() else "")
+        check("comparison doc covers ZPix, gimp-mcp, adopt/reject verdicts, and three specs",
+              "ZPix" in repo_cmp
+              and "gimp-mcp" in repo_cmp
+              and "Create Room" in repo_cmp
+              and "Identity + Face Acceptance Layer" in repo_cmp
+              and "Media Finisher" in repo_cmp
+              and "Adopt" in repo_cmp)
+
         print("== stats + report + dashboard")
         st = api("/stats")
         check("stats counts artifacts", st["artifacts_total"] >= 4, str(st))

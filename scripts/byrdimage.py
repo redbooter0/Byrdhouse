@@ -1283,6 +1283,23 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         card["candidate"] = crop_index + 1
         card["candidates"] = len(saved_candidates)
         card["canvas"] = canvas
+        # post-generation acceptance check: did the face survive in the output?
+        accept_cmd = [
+            str(comfy_python), str(zone_script), "--root", str(root), "accept",
+            "--image", str(final), "--output-dir", str(month_dir),
+        ]
+        accept_result = subprocess.run(accept_cmd, capture_output=True, text=True,
+                                       encoding="utf-8", errors="replace")
+        if accept_result.returncode in (0, 3):
+            try:
+                card["output_acceptance"] = json.loads(accept_result.stdout)
+                if not card["output_acceptance"].get("accepted"):
+                    flags = card["output_acceptance"].get("flags", [])
+                    print(f"[byrdimage] acceptance gate: FLAGGED — {flags}")
+            except json.JSONDecodeError:
+                card["output_acceptance"] = {"error": "could not parse acceptance output"}
+        else:
+            card["output_acceptance"] = {"error": accept_result.stderr[-300:] or "accept command failed"}
         final.with_suffix(final.suffix + ".json").write_text(
             json.dumps(card, indent=2) + "\n", encoding="utf-8"
         )
