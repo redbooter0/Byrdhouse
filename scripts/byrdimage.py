@@ -332,6 +332,29 @@ def require_workflow_models(root: Path, graph: dict, workflow_rel: str) -> None:
                     "no ControlNet model.")
 
 
+def collect_face_signals(face: dict) -> dict:
+    """Normalize an examiner face record across schema versions.
+
+    Older reports nested the deep-scrutiny reads under face['checks']; the
+    current examiner nests them under face['thorough'] and promotes a few
+    values (yaw_asymmetry, mouth_open_ratio, confidence_floor, side_px, verdict)
+    to the face top level. Readers must NOT assume one layout — geometry_gate,
+    classify_realism and is_frontal all read through this so the conductor sees
+    geometry_stability / parser / yaw_asymmetry no matter which examiner wrote
+    the report (the 2026-07-20 baseline stalled because the code read only
+    'checks' while the real report used 'thorough' + top-level yaw_asymmetry).
+    """
+    signals: dict = {}
+    signals.update(face.get("checks") or {})
+    signals.update(face.get("thorough") or {})
+    for key in ("yaw_asymmetry", "mouth_open_ratio", "confidence_floor",
+                "side_px", "verdict"):
+        val = face.get(key)
+        if val is not None:
+            signals[key] = val
+    return signals
+
+
 def geometry_gate(face_report: dict, face_index: int = 0,
                   stability_threshold: float = 0.35,
                   profile_threshold: float = 0.6) -> dict:
@@ -346,10 +369,10 @@ def geometry_gate(face_report: dict, face_index: int = 0,
     """
     faces = {f.get("index"): f for f in face_report.get("faces", [])}
     face = faces.get(face_index) or (face_report.get("faces") or [{}])[0]
-    checks = dict(face.get("checks") or {})
+    signals = collect_face_signals(face)
     flags = list(face.get("flags") or [])
-    stability = checks.get("geometry_stability")
-    warning = checks.get("geometry_warning")
+    stability = signals.get("geometry_stability")
+    warning = signals.get("geometry_warning")
     reasons = []
     if stability is None:
         reasons.append("geometry stability could not be measured (rescale re-detect failed)")
@@ -858,8 +881,16 @@ def _resolve_face_zone_gpu_passes(engine: dict, defaults: dict, run_seed: int) -
     default_denoise = float(engine.get("denoise") or defaults.get("denoise", 0.38))
     default_passes = defaults.get("gpu_passes")
     requested = engine.get("gpu_passes")
+    # Photo-anchored / finish path: identity comes from elsewhere (IP-Adapter
+    # photo, or existing pixels), so the engine's passes are AUTHORITATIVE and
+    # must REPLACE the recipe defaults, not merge with them. The IP-Adapter
+    # graph has a single KSampler, so merging in the recipe's 2-pass default
+    # would resolve 2 passes for 1 sampler and die (line ~1428).
+    replace_passes = bool(engine.get("no_identity_mesh")) and requested is not None
     if requested is None:
         requested = default_passes
+    elif replace_passes:
+        pass  # keep the engine's passes exactly as given
     elif isinstance(requested, dict) and isinstance(default_passes, dict):
         merged = {}
         for default_pass_id, default_pass in default_passes.items():
@@ -1230,8 +1261,24 @@ def edit_face_zone(root, recipe_name, target_path, project, purpose,
         require_workflow_models(root, graph, workflow_rel)
     except ValueError as exc:
         die(str(exc))
-    crop_title = "IDENTITY MESH SEED" if identity_reference_path is not None else "FACE CROP"
-    _, crop_node = _named_node(graph, "LoadImage", crop_title)
+    if identity_reference_path is not None:
+        _, crop_node = _named_node(graph, "LoadImage", "IDENTITY MESH SEED")
+    else:
+        # Photo-anchored / finish: the clean target crop starts diffusion.
+        # Accept EITHER the current "FACE CROP" title or the legacy
+        # "IDENTITY MESH SEED" title so a photo graph authored under either
+        # convention still receives the crop (runtime hotfix 2026-07-20).
+        crop_node = None
+        for _title in ("FACE CROP", "IDENTITY MESH SEED"):
+            hits = [n for n in graph.values()
+                    if n.get("class_type") == "LoadImage"
+                    and str(n.get("_meta", {}).get("title", "")).strip() == _title]
+            if len(hits) == 1:
+                crop_node = hits[0]
+                break
+        if crop_node is None:
+            die("photo-anchored workflow needs one LoadImage titled 'FACE CROP' "
+                "or legacy 'IDENTITY MESH SEED' for the clean target crop")
     _, mask_node = _named_node(graph, "LoadImage", "EDIT ZONE MASK")
     crop_artifact = (
         zone["artifacts"]["identity_mesh_seed"]

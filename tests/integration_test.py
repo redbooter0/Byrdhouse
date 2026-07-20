@@ -1759,6 +1759,59 @@ def main():
               p_profile["frontal"] is False
               and "realistic_reactor_refine" not in [l["lane"] for l in p_profile["lanes"]])
 
+        # ── examiner-schema normalization (2026-07-20 baseline stall) ────────
+        # The REAL report nests geometry_stability/parser under "thorough" and
+        # promotes yaw_asymmetry to the face top level — NOT under "checks".
+        # This fixture has NO "checks" key, so any reader that only looks at
+        # "checks" sees stability=None -> unstable gate -> zero lanes, and these
+        # asserts fail. That is the regression guard the founder asked for.
+        import byrdimage as bimg
+        real_report = {"faces": [{
+            "index": 0,
+            "yaw_asymmetry": 0.0999,
+            "flags": [],
+            "thorough": {"geometry_stability": 0.987, "parser": "selfie_multiclass"},
+        }]}
+        sig = bimg.collect_face_signals(real_report["faces"][0])
+        check("collect_face_signals lifts thorough + top-level fields",
+              sig.get("geometry_stability") == 0.987
+              and sig.get("parser") == "selfie_multiclass"
+              and sig.get("yaw_asymmetry") == 0.0999)
+        rg = bimg.geometry_gate(real_report)
+        check("real report: geometry_gate is stable with stability 0.987",
+              rg["stable"] is True and rg["geometry_stability"] == 0.987)
+        check("real report: classify_realism == 'realistic'",
+              bswap.classify_realism(real_report) == "realistic")
+        check("real report: is_frontal is True (yaw 0.0999)",
+              bswap.is_frontal(real_report) is True)
+        rp = bswap.plan_ladder(real_report, reactor_available=True, has_references=True,
+                               identity_photo="/tmp/carey_ref.jpg")
+        check("real report: plan_ladder places realistic_reactor_refine FIRST",
+              rp["lanes"] and rp["lanes"][0]["lane"] == "realistic_reactor_refine")
+
+        # promoted runtime hotfixes (2026-07-20 — repo sync had reverted these)
+        bswap_src = (ROOT / "scripts" / "byrdswap.py").read_text(encoding="utf-8-sig")
+        check("conductor default recipe is anime_face_zone_edit@2 (resolvable), not .v2",
+              'default="anime_face_zone_edit@2"' in bswap_src
+              and 'default="anime_face_zone_edit.v2"' not in bswap_src)
+        eng = bswap.PHOTO_ANCHORED_ENGINE("/tmp/ref.jpg")
+        check("photo-anchored engine sets no_identity_mesh + one GPU pass 26/5.5/dpmpp_2m/karras/0.55",
+              eng["no_identity_mesh"] is True
+              and len(eng["gpu_passes"]) == 1
+              and list(eng["gpu_passes"].values())[0] == {
+                  "steps": 26, "cfg": 5.5, "sampler_name": "dpmpp_2m",
+                  "scheduler": "karras", "denoise": 0.55})
+        bi_src = (ROOT / "scripts" / "byrdimage.py").read_text(encoding="utf-8-sig")
+        check("photo mode crop node accepts both FACE CROP and legacy IDENTITY MESH SEED",
+              '"FACE CROP", "IDENTITY MESH SEED"' in bi_src)
+        check("no_identity_mesh + explicit gpu_passes REPLACE recipe defaults (1 sampler safe)",
+              "replace_passes" in bi_src)
+        ipad_wf = json.loads((ROOT / "workflows" / "sd15_face_zone_ipadapter_api.json")
+                             .read_text(encoding="utf-8-sig"))
+        check("ipadapter workflow preset is exactly 'PLUS FACE (portraits)'",
+              any(n.get("inputs", {}).get("preset") == "PLUS FACE (portraits)"
+                  for n in ipad_wf.values() if isinstance(n, dict)))
+
         print("== stats + report + dashboard")
         st = api("/stats")
         check("stats counts artifacts", st["artifacts_total"] >= 4, str(st))

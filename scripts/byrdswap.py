@@ -39,6 +39,22 @@ import byrdimage  # noqa: E402  (same stdlib-only module the worker uses)
 
 PHOTO_ANCHOR_WORKFLOW = "workflows/sd15_face_zone_ipadapter_api.json"
 
+
+def PHOTO_ANCHORED_ENGINE(identity_photo) -> dict:
+    """Engine for the free/license-clean photo-anchored lane (runtime-proven,
+    2026-07-20). no_identity_mesh=True because IP-Adapter supplies the identity
+    and the CLEAN target crop (not a mesh warp) should start diffusion. The
+    IP-Adapter graph has ONE KSampler, so exactly ONE GPU pass is resolved:
+    steps 26 / cfg 5.5 / dpmpp_2m / karras / denoise 0.55."""
+    return {
+        "workflow": PHOTO_ANCHOR_WORKFLOW,
+        "identity_photo": str(identity_photo),
+        "no_identity_mesh": True,
+        "gpu_passes": {"photo_cleanup": {
+            "steps": 26, "cfg": 5.5, "sampler_name": "dpmpp_2m",
+            "scheduler": "karras", "denoise": 0.55}},
+    }
+
 # The GOJO AVENUE (founder-verified direction, 2026-07-14 outputs
 # ..._fullidentity_fill_d28_m40...): identity fill at denoise 0.28 with mesh
 # strength 0.40 — NOT the recipe default 0.38 the doc's run table already
@@ -123,11 +139,11 @@ def classify_realism(face_report: dict, face_index: int = 0) -> str:
     (free) lane order.
     """
     face = _first_face(face_report, face_index)
-    checks = dict(face.get("checks") or {})
-    parser = str(checks.get("parser") or "").lower()
+    signals = byrdimage.collect_face_signals(face)
+    parser = str(signals.get("parser") or "").lower()
     if "anime" in parser or "parsenet" in parser:
         return "stylized"
-    if face.get("embedding") or checks.get("has_embedding"):
+    if face.get("embedding") or signals.get("has_embedding"):
         return "realistic"
     if parser and "selfie" in parser:
         return "realistic"
@@ -138,10 +154,10 @@ def is_frontal(face_report: dict, face_index: int = 0, max_yaw: float = 0.28) ->
     """Front-facing when the examiner's yaw proxy is low and no strong_profile
     flag is set. Fail-safe: unknown yaw -> not frontal (conductor won't claim it)."""
     face = _first_face(face_report, face_index)
-    checks = dict(face.get("checks") or {})
+    signals = byrdimage.collect_face_signals(face)
     if "strong_profile" in " ".join(face.get("flags") or []):
         return False
-    yaw = checks.get("yaw_asymmetry")
+    yaw = signals.get("yaw_asymmetry")
     if yaw is None:
         return False
     return float(yaw) <= max_yaw
@@ -190,8 +206,7 @@ def plan_ladder(face_report: dict, face_index: int = 0, lora: str | None = None,
     if ipadapter_graph_exists and identity_photo:
         lanes.append({"lane": "quality_photo_anchored",
                       "why": "license-clean identity from a real photo; no LoRA needed",
-                      "engine": {"workflow": PHOTO_ANCHOR_WORKFLOW,
-                                 "identity_photo": str(identity_photo)}})
+                      "engine": PHOTO_ANCHORED_ENGINE(identity_photo)})
     elif ipadapter_graph_exists:
         skipped.append({"lane": "quality_photo_anchored",
                         "why_skipped": "no reference photo in profiles/me/references"})
@@ -219,7 +234,7 @@ def run(argv=None) -> int:
     ap = argparse.ArgumentParser(description="one-command swap conductor")
     ap.add_argument("--image", required=True)
     ap.add_argument("--lora", help="explicit private-preview identity LoRA")
-    ap.add_argument("--recipe", default="anime_face_zone_edit.v2")
+    ap.add_argument("--recipe", default="anime_face_zone_edit@2")
     ap.add_argument("--preset", default="auto")
     ap.add_argument("--project", default="image_lab")
     ap.add_argument("--profile", default="me")
