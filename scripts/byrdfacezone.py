@@ -26,7 +26,8 @@ import torch
 import cv2
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 from safetensors.torch import load_file
-from facezone_composite import restore_protected_material
+from facezone_composite import (clamp_mask_border, mesh_shard_score,
+                                restore_protected_material, verify_outside_mask)
 
 
 MODEL_NAME = "mediapipe_face_fp32.safetensors"
@@ -2180,6 +2181,7 @@ def prepare_face_zone(
     uncovered_skin_path = output_dir / "uncovered_skin_tone_zone.png"
     skin_edge_path = output_dir / "skin_edge_fringe.png"
     protected_color_path = output_dir / "protected_color_features.png"
+    eye_protect_path = output_dir / "eye_protect_mask.png"
     overlay_path = output_dir / "face_outline_preview.png"
     ordered_outline_path = output_dir / "head_hair_outline_preview.png"
     crop_overlay_path = output_dir / "face_crop_outline_preview.png"
@@ -2208,6 +2210,12 @@ def prepare_face_zone(
             skin_edge_path, "PNG", optimize=True
         )
         protected_color_features.save(protected_color_path, "PNG", optimize=True)
+        # Eye-protection debug mask (founder repair 2026-07-16): the exact
+        # target-eye pixels the composite will restore AFTER generation when
+        # eye_source=target — inspectable on its own, not just a hint.
+        eyes_component = target_feature_components.get("eyes")
+        if eyes_component is not None:
+            eyes_component.save(eye_protect_path, "PNG", optimize=True)
 
     overlay = original.convert("RGBA")
     zone_fill = Image.new("RGBA", original.size, (0, 0, 0, 0))
@@ -2348,6 +2356,8 @@ def prepare_face_zone(
                     "uncovered_skin_tone_zone": str(uncovered_skin_path),
                     "skin_edge_fringe": str(skin_edge_path),
                     "protected_color_features": str(protected_color_path),
+                    **({"eye_protect_mask": str(eye_protect_path)}
+                       if eye_protect_path.is_file() else {}),
                 }
                 if identity_mesh is not None
                 else {}
@@ -2371,7 +2381,9 @@ def composite_generated(zone_file: Path, generated_crop: Path, output: Path) -> 
     with Image.open(generated_crop) as opened:
         generated = opened.convert("RGB")
     with Image.open(artifacts["soft_mask"]) as opened:
-        soft = opened.convert("L")
+        # Repair 2026-07-16 (hard Vegeta): a soft mask reaching the crop border
+        # is the rectangular-crop-leak signature — clamp it and record the leak.
+        soft, border_leak_fraction = clamp_mask_border(opened.convert("L"))
     with Image.open(artifacts["face_crop"]) as opened:
         target_crop = opened.convert("RGB")
     with Image.open(artifacts["hard_mask"]) as opened:
@@ -2457,8 +2469,62 @@ def composite_generated(zone_file: Path, generated_crop: Path, output: Path) -> 
             hair = opened.convert("L").resize((side, side), Image.Resampling.BILINEAR)
         hair = hair.filter(ImageFilter.GaussianBlur(1.5))
         original.paste(target_region, (left, top), hair)
+
+    # Repair 2026-07-16 (hard Vegeta) — three composite-time guards:
+    # 1. eye_source=target restores the EXACT original eye pixels AFTER the
+    #    identity generation (hard composite, not a generation hint).
+    eyes_restored = False
+    identity_mesh_meta = dict(zone.get("identity_mesh") or {})
+    eye_mask_path = artifacts.get("eye_protect_mask")
+    if (eye_mask_path and Path(eye_mask_path).is_file()
+            and identity_mesh_meta.get("eye_source_mode") == "target"):
+        with Image.open(eye_mask_path) as opened:
+            eye_mask = opened.convert("L").resize((side, side), Image.Resampling.BILINEAR)
+        eye_mask = eye_mask.filter(ImageFilter.GaussianBlur(1.0))
+        original.paste(target_region, (left, top), eye_mask)
+        eyes_restored = True
+
+    # 2. raw-triangle-shard heuristic on the generated crop inside the warp
+    #    coverage (byrdimage pairs this with the geometry gate: either one
+    #    failing keeps a CPU-only result from shipping as final).
+    shard_report = {"shards_detected": None, "note": "no identity mesh — not applicable"}
+    warp_mask_file = artifacts.get("identity_mesh_warp_mask")
+    if warp_mask_file and Path(warp_mask_file).is_file():
+        with Image.open(warp_mask_file) as opened:
+            warp_cov = opened.convert("L").resize(generated.size, Image.Resampling.NEAREST)
+        shard_report = mesh_shard_score(generated, warp_cov)
+
     output.parent.mkdir(parents=True, exist_ok=True)
     original.save(output, "PNG", optimize=True)
+
+    # 3. outside-mask preservation proof: every pixel outside the effective
+    #    composite mask must be IDENTICAL to the immutable original (the hair
+    #    and eye re-asserts above only restore original pixels, so the soft
+    #    zone is the entire change surface).
+    with Image.open(artifacts["original"]) as opened:
+        pristine = opened.convert("RGB")
+    effective = Image.new("L", pristine.size, 0)
+    effective.paste(soft, (left, top))
+    with Image.open(output) as opened:
+        final_saved = opened.convert("RGB")
+    outside = verify_outside_mask(pristine, final_saved, effective)
+    from facezone_composite import edit_delta
+    applied = edit_delta(pristine, final_saved, effective)
+    verification = {
+        "outside_mask": outside,
+        "edit_applied": applied,
+        "border_leak_fraction": border_leak_fraction,
+        "eyes_restored_after_generation": eyes_restored,
+        "eye_source_mode": identity_mesh_meta.get("eye_source_mode"),
+        "shard_check": shard_report,
+    }
+    Path(str(output) + ".verify.json").write_text(
+        json.dumps(verification, indent=2) + "\n", encoding="utf-8")
+    if not outside["passed"]:
+        raise RuntimeError(
+            "composite leaked outside the approved zone "
+            f"({outside['changed_pixels']} px changed, max delta {outside['max_delta']}) — "
+            "refusing to ship; original target is untouched")
     return output
 
 
@@ -2573,6 +2639,94 @@ def _recommend_lane(face_entry: dict) -> str:
     if "small_face" in flags:
         return "upscale the target first (image.refine), then quality lane or zone route"
     return "quality lane (v2 proven / v3 guided when hardware-approved); auto route for quick drafts"
+
+
+def acceptance_check(root: Path, image_path: Path,
+                     output_dir: "Path | None" = None,
+                     min_confidence: float = 0.35, min_face_px: int = 48,
+                     edge_clearance_pct: float = 0.06) -> dict:
+    """Post-generation acceptance gate: did the face survive in the output?
+
+    Runs on the FINAL composite (not the target), checks four failure modes
+    the examiner cannot see because they only appear after generation:
+    - face cropped at any edge (forehead/chin cut off)
+    - face too small in the output
+    - no face detected (generation introduced a flaw)
+    - multiple faces (wrong character bleed)
+
+    Saves a padded face crop preview beside the output for visual inspection.
+    Returns a structured dict with accepted/rejected verdict + flags.
+    Never raises — any detection failure is recorded as a flag, not an exception.
+    """
+    started = time.monotonic()
+    with Image.open(image_path) as opened:
+        image = opened.convert("RGB")
+    W, H = image.size
+    result: dict = {
+        "image": str(image_path),
+        "size": [W, H],
+        "accepted": False,
+        "face_count": 0,
+        "framing_ok": False,
+        "flags": [],
+        "face_crop_preview": None,
+        "side_px": None,
+        "edge_clearance_pct_threshold": edge_clearance_pct,
+        "check_seconds": None,
+    }
+    try:
+        _, _, _, total = _detect_face(root, image, min_confidence, 0)
+    except RuntimeError as exc:
+        result["flags"].append(f"no_face_detected: {exc}")
+        result["check_seconds"] = round(time.monotonic() - started, 2)
+        return result
+
+    result["face_count"] = total
+    if total > 1:
+        result["flags"].append(f"multiple_faces: {total} detected — verify correct subject")
+    if total == 0:
+        result["flags"].append("no_face_detected")
+        result["check_seconds"] = round(time.monotonic() - started, 2)
+        return result
+
+    face, _, _, _ = _detect_face(root, image, min_confidence, 0)
+    x1, y1, x2, y2 = [float(v) for v in face["bbox_xyxy"]]
+    side = max(x2 - x1, y2 - y1)
+    result["side_px"] = round(side)
+
+    framing_flags = []
+    if x1 / W < edge_clearance_pct:
+        framing_flags.append("face_cropped_left")
+    if (W - x2) / W < edge_clearance_pct:
+        framing_flags.append("face_cropped_right")
+    if y1 / H < edge_clearance_pct:
+        framing_flags.append("face_cropped_top — forehead may be cut off")
+    if (H - y2) / H < edge_clearance_pct:
+        framing_flags.append("face_cropped_bottom — chin may be cut off")
+    if side < min_face_px:
+        framing_flags.append(f"face_too_small: {side:.0f}px in output")
+
+    result["flags"].extend(framing_flags)
+    result["framing_ok"] = len(framing_flags) == 0
+
+    # save padded crop preview (30% expansion, clamped)
+    pad = int(side * 0.30)
+    cx1 = max(0, int(x1) - pad)
+    cy1 = max(0, int(y1) - pad)
+    cx2 = min(W, int(x2) + pad)
+    cy2 = min(H, int(y2) + pad)
+    crop_img = image.crop((cx1, cy1, cx2, cy2))
+    if output_dir is not None:
+        output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        stem = Path(image_path).stem
+        crop_path = output_dir / f"{stem}_accept_crop.jpg"
+        crop_img.save(str(crop_path), "JPEG", quality=90)
+        result["face_crop_preview"] = str(crop_path)
+
+    result["accepted"] = result["framing_ok"] and total == 1
+    result["check_seconds"] = round(time.monotonic() - started, 2)
+    return result
 
 
 def analyze_image(root: Path, image_path: Path, min_confidence: float = 0.35,
@@ -2703,6 +2857,14 @@ def parse_args() -> argparse.Namespace:
     analyze.add_argument("--thorough", action="store_true",
                          help="deep scrutiny: scale-stability cross-check, occlusion "
                               "truth, lane recommendation (founder default before edits)")
+    accept = sub.add_parser("accept", help="Post-generation acceptance check: did the face survive?")
+    accept.add_argument("--image", type=Path, required=True)
+    accept.add_argument("--output-dir", type=Path,
+                        help="where to save the face_crop_preview (default: same dir as --image)")
+    accept.add_argument("--min-confidence", type=float, default=0.35)
+    accept.add_argument("--min-face-px", type=int, default=48)
+    accept.add_argument("--edge-clearance-pct", type=float, default=0.06)
+    accept.add_argument("--report", type=Path, help="write the JSON result here")
     return parser.parse_args()
 
 
@@ -2740,6 +2902,17 @@ def main() -> int:
             render_report_overview(args.input, report, args.overview)
         print(json.dumps(report, indent=2))
         return 0 if report["operable_faces"] > 0 else 3
+    elif args.command == "accept":
+        out_dir = args.output_dir or Path(args.image).parent
+        result = acceptance_check(args.root, args.image, output_dir=out_dir,
+                                  min_confidence=args.min_confidence,
+                                  min_face_px=args.min_face_px,
+                                  edge_clearance_pct=args.edge_clearance_pct)
+        if args.report:
+            args.report.parent.mkdir(parents=True, exist_ok=True)
+            args.report.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps(result, indent=2))
+        return 0 if result["accepted"] else 3
     else:
         output = composite_generated(args.zone, args.generated_crop, args.output)
         print(output)

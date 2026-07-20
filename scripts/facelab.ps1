@@ -16,6 +16,9 @@ Every lane, by hand, for the founder or Codex:
     auto     -Image X [-Lora name] [-Prompt "..."]
                                     backup: detector finds the face, redraws as you
     swap     -Image X [-Blend 0.35] backup (private experiments): ReActor + blend
+    reactor  -Image X [-Denoise 0.28] realistic targets: ReActor identity transfer +
+                                    facial-hair mask + low-denoise cleanup + verify
+                                    (NON-COMMERCIAL / private-experiment only)
     collect  [-Dataset carey_face]  move newest generated images into the dataset
     train    [-Dataset carey_face]  new versioned LoRA (never overwrites)
     help                            this text
@@ -69,8 +72,43 @@ switch ($Command.ToLower()) {
         & $comfyPython @args2
         exit $LASTEXITCODE
     }
+    "run" {
+        # The conductor: ONE command from image to result. Examines, picks the
+        # lane itself (free photo-anchored first), falls back automatically,
+        # ends with a result or the exact reason + next command.
+        Need-Image
+        $args2 = @((Join-Path $root "scripts\byrdswap.py"), "--image", $Image, "--root", $root)
+        if ($Lora) { $args2 += @("--lora", $Lora) }
+        if ($Preset -ne "auto") { $args2 += @("--preset", $Preset) }
+        if ($Quick) { $args2 += "--plan" }
+        & $comfyPython @args2
+        exit $LASTEXITCODE
+    }
+    "finish" {
+        # Complete an ALREADY-good composite (the almost-perfect Vegeta case):
+        # one low-denoise pass removes speckle/patchiness/seams — identity and
+        # target eyes untouched, guards + .verify.json included.
+        Need-Image
+        $args2 = @((Join-Path $root "scripts\byrdswap.py"), "--image", $Image, "--root", $root, "--finish")
+        if ($Lora) { $args2 += @("--lora", $Lora) }
+        & $comfyPython @args2
+        exit $LASTEXITCODE
+    }
     "quality" {
         Need-Image
+        # Workflow aliases (repair 2026-07-16): 'diffdiff' is the TRUE
+        # DifferentialDiffusion graph (zero extra models); 'diffdiff-canny'
+        # is the COMBINED graph and refuses before submit when the canny
+        # ControlNet model is not installed.
+        $workflowAliases = @{
+            'diffdiff'       = 'workflows/sd15_face_zone_diffdiff_api.json'
+            'diffdiff-canny' = 'workflows/sd15_face_zone_diffdiff_canny_api.json'
+            'controlnet'     = 'workflows/sd15_face_zone_controlnet_api.json'
+            'ipadapter'      = 'workflows/sd15_face_zone_ipadapter_api.json'
+        }
+        if ($Workflow -and $workflowAliases.ContainsKey($Workflow.ToLower())) {
+            $Workflow = $workflowAliases[$Workflow.ToLower()]
+        }
         $args2 = @($byrdimage, "--edit-face-zone", $Image, "--face-preset", $Preset,
                    "--face-index", "$FaceIndex", "--project", $Project, "--purpose", $Purpose)
         if ($Workflow) { $args2 += @("--workflow", $Workflow) }
@@ -103,6 +141,21 @@ switch ($Command.ToLower()) {
         & $sysPython $preflightPy --run $Image --blend $Blend
         exit $LASTEXITCODE
     }
+    "reactor" {
+        # realistic_reactor_refine: the preferred lane for a STABLE, FRONT-FACING,
+        # REALISTIC human target. Ranks the identity references, ReActor identity
+        # transfer (inswapper_128), facial-hair-aware mask, LOW-denoise cleanup
+        # (0.20-0.35), then verifies vs Carey with explicit status codes. The
+        # conductor (facelab run) auto-picks this lane for such targets; this verb
+        # forces it. NON-COMMERCIAL / private-experiment only (inswapper license).
+        Need-Image
+        $args2 = @((Join-Path $root "scripts\realistic_reactor_refine.py"),
+                   "--image", $Image, "--project", $Project, "--root", $root)
+        if ($Denoise -gt 0) { $args2 += @("--denoise", "$Denoise") }
+        if ($Quick) { $args2 += "--plan" }
+        & $comfyPython @args2
+        exit $LASTEXITCODE
+    }
     "collect" {
         & powershell -ExecutionPolicy Bypass -File (Join-Path $root "scripts\collect-training-images.ps1") -Name $Dataset
         exit $LASTEXITCODE
@@ -112,6 +165,6 @@ switch ($Command.ToLower()) {
         exit $LASTEXITCODE
     }
     default {
-        Get-Content $PSCommandPath | Select-Object -First 28 | ForEach-Object { $_ -replace "^#? ?", "" }
+        Get-Content $PSCommandPath | Select-Object -First 31 | ForEach-Object { $_ -replace "^#? ?", "" }
     }
 }

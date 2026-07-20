@@ -1,5 +1,5 @@
 {
-  "_comment": "Avenue B (reverse-engineered from the most-replicated consistent-face stack that runs on 8GB): v3 guided cleanup + IP-Adapter PLUS FACE conditioning from a REAL identity photo. CLIP-embedding based (h94 Apache-2.0) \u2014 NOT the insightface FaceID variant, so it stays in the funded lane. Identity gets a third anchor besides the mesh seed and the LoRA \u2014 covers the gap while no LoRA candidate is approved. Needs ComfyUI_IPAdapter_plus (already a kit dependency) + ip-adapter-plus-face_sd15 + the SD1.5 CLIP-ViT-H image encoder (docs/MODELS.md). The adapter fills IDENTITY PHOTO from engine.identity_photo (a real photo path) or the reviewed identity reference. Select per job: engine.workflow or facelab.ps1 quality -Workflow ipadapter.",
+  "_comment": "Avenue B (reverse-engineered from the most-replicated consistent-face stack that runs on 8GB): v3 guided cleanup + IP-Adapter PLUS FACE conditioning from a REAL identity photo. CLIP-embedding based (h94 Apache-2.0) — NOT the insightface FaceID variant, so it stays in the funded lane. Identity gets a third anchor besides the mesh seed and the LoRA — covers the gap while no LoRA candidate is approved. Needs ComfyUI_IPAdapter_plus (already a kit dependency) + ip-adapter-plus-face_sd15 + the SD1.5 CLIP-ViT-H image encoder (docs/MODELS.md). The adapter fills IDENTITY PHOTO from engine.identity_photo (a real photo path) or the reviewed identity reference. Select per job: engine.workflow or facelab.ps1 quality -Workflow ipadapter.",
   "1": {
     "class_type": "LoadImage",
     "inputs": {
@@ -232,7 +232,7 @@
   "21": {
     "class_type": "IPAdapterUnifiedLoader",
     "inputs": {
-      "preset": "PLUS FACE (portrait)",
+      "preset": "PLUS FACE (portraits)",
       "model": [
         "4",
         0

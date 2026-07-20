@@ -1,8 +1,55 @@
 # Image Generation State — read before changing the GAMING image lane
 
-**Last updated:** 2026-07-15 (EDT, CPU crop reroute + adapter crop-preflight gate verified on the hard Vegeta target; integration suite green)  
+**Last updated:** 2026-07-16 (face-lane repair after the hard Vegeta failure; code + suite green, hardware retest PENDING)  
 **Owner:** BYRD-GAMING (`E:\ByrdHouse`)  
 **Rule:** Read this file before changing an image model, graph, training set, or route. Update it after every real local test.
+
+## 2026-07-16 — Hard Vegeta failure and the repair (honest outcome)
+
+Real hardware run on `Images\Targets\anime_games\anime_game_4.jpg`
+(strong-profile Vegeta) failed on every lane:
+ReActor/ByrdCast failed honestly (placeholder detector, accepted=false); the
+examiner correctly measured **geometry_stability 0.0** with "landmarks
+disagree across scales" and yaw asymmetry ~0.667 — and the v2 mesh lane ran
+anyway, shipping a raw CPU triangle warp as the visible final
+(`artifacts\image_lab\2026-07\20260716_anime_face_zone_edit_job_19f694590e77xbmy5_00001_.png`:
+rectangular forehead crop leak, visible mesh shards, damaged target eyes
+despite eye_source=target, hard temple/jaw/ear/neck seams). The diffdiff
+route died as an undiagnosable HTTP 400 because the "no extra models" graph
+secretly required the uninstalled canny ControlNet.
+
+**Repair shipped (branch `claude/face-lane-repair-vegeta`) — code-side only,
+NOT hardware-proven yet:**
+
+- **Geometry gate (fail-closed):** `byrdimage.geometry_gate` blocks the mesh
+  lane AND any CPU-only final when stability < 0.35, stability is
+  unmeasurable, landmarks disagree across scales, or strong_profile lacks
+  solid stability — with the exact reasons and the reviewed-mask fallback in
+  the refusal and on every card.
+- **Composite guards** (`facezone_composite.py`, CI-tested): border-clamp
+  kills rectangular crop leakage; `verify_outside_mask` proves outside-zone
+  pixels are byte-identical to the immutable original (written to
+  `<final>.verify.json`, raises on violation); `eye_source=target` now HARD
+  restores original eye pixels after generation (debug mask
+  `eye_protect_mask.png`); a straight-seam shard heuristic marks raw-warp
+  finals **rejected** instead of draft.
+- **Honest diffdiff:** `sd15_face_zone_diffdiff_api.json` is now TRUE
+  DifferentialDiffusion (core nodes only, zero extra models);
+  `sd15_face_zone_diffdiff_canny_api.json` is the clearly-named COMBINED
+  variant, refused BEFORE submit while the canny model is missing.
+- **ComfyUI errors surfaced:** HTTP errors now print status, body,
+  node_errors, offending node ids and class types.
+- **LoRA truth:** the stale `carey_meina_sd15_v1.safetensors` recipe claim is
+  removed (v2/v3 declare `lora: null`); `-Lora` overrides cleanly, previews
+  are never silently promoted, and "no deployed identity LoRA" is said
+  plainly. Cards carry `lora_status`.
+
+**Hardware retest order (do NOT start with Vegeta):** (1) front/mild
+three-quarter anime face — identity, complexion, eye preservation, seamless
+mask; (2) Gojo — occlusion/headwear + one-eye protection; (3) Vegeta — the
+gate must refuse the mesh lane and the reviewed-mask fallback must produce
+the result. Record VRAM peak, runtime, route, and pass/fail per run here.
+**The lane is not ready until those runs produce inspectable images.**
 
 ## Current verdict
 
@@ -292,3 +339,24 @@ PhotoMaker V1 private test:
 - Rank-16 split-strength diagnostics added separate `strength_model` / `strength_clip` support to `scripts/byrdimage.py`; this is an experimental calibration control, not evidence of approval.
 
 
+
+## 2026-07-16 — The gojo avenue is the direction (founder-verified visually)
+
+The founder confirmed two outputs as the right direction: the
+`..._fullidentity_fill_d28_m40...` Gojo crops (identity clear, headwear
+kept) and a near-perfect Vegeta composite that only needs FINISHING
+(cheek/jaw speckle, patchy beard region, faint seam remnants).
+**Winning parameters: identity_fill denoise 0.28 + mesh strength 0.40** —
+NOT the recipe-locked d0.38 this doc already flagged for eye distortion.
+
+Codified in `scripts/byrdswap.py` (the conductor):
+- `GOJO_AVENUE_ENGINE` — the LoRA lane now runs d0.28/m0.40, eyes hard-
+  protected, GPU cleanup ON so the repair guards finish the result.
+- `facelab.ps1 run -Image <target> -Lora <preview>` — one command, auto
+  lane pick + fallback, honest report in logs\byrdswap\.
+- `facelab.ps1 finish -Image <almost_perfect.png>` — completes an existing
+  composite: one low-denoise (0.14) pass over the face zone, no re-seed,
+  identity/eyes untouched, `.verify.json` proof included. This is the
+  command for the Vegeta.
+
+Hardware-unverified until the PC runs it; record results here.

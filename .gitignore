@@ -99,6 +99,17 @@ Backups/
 *.zip
 *.7z
 
+# ByrdCoder generated machine config (real LM Studio URL substituted from
+# byrdhouse.config.json at start time) — the example ships in configs/byrdcoder/,
+# the live copy never enters git.
+LLM/byrdcoder/
+
+# ComfyUI MCP Workflow Lab scratch graphs are disposable/local; only the
+# lab rules README is tracked. Candidates (workflows/candidates/) ARE tracked
+# — they are reviewed artifacts headed for production.
+workflows/experiments/comfyui-mcp-lab/*
+!workflows/experiments/comfyui-mcp-lab/README.md
+
 # Local verification and temporary reports
 _verification/
 

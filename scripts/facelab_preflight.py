@@ -180,7 +180,11 @@ def main():
             ok("ControlNet canny model available (guided face-zone cleanup v2)")
         else:
             problem("control_v11p_sd15_canny.safetensors not in models\\controlnet — "
-                    "the v3 guided cleanup (anime_face_zone_edit@3) needs it",
+                    "the v3 guided cleanup (anime_face_zone_edit@3) AND the COMBINED "
+                    "diffdiff-canny graph (sd15_face_zone_diffdiff_canny_api.json) need it; "
+                    "byrdimage now refuses those graphs before submit while it is missing. "
+                    "The TRUE diffdiff graph (sd15_face_zone_diffdiff_api.json) needs NO "
+                    "ControlNet and keeps working",
                     "download from huggingface.co/lllyasviel/ControlNet-v1-1 "
                     "(control_v11p_sd15_canny.safetensors, openrail/commercial-OK) into "
                     "ComfyUI\\models\\controlnet — see docs/MODELS.md")

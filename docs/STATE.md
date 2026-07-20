@@ -53,6 +53,25 @@ Odysseus/smart-home/Stripe is removed from this repo. Cherry Studio remains the 
   `identity-benchmark.ps1` (repeatable scorecard runner). **Next action:** run
   the preflight on both machines and paste results into the inventory; then P1
   Identity Lab (RMBG → facetools → Forbidden Vision, isolated ComfyUI).
+- **ByrdCoder Local V0 (2026-07-16)**: permanent local coding agent so work
+  continues when Codex/cloud usage is exhausted — OpenCode + pinned
+  `opencode-lmstudio@0.3.1` bridge over the existing LM Studio, isolated
+  config (`OPENCODE_CONFIG` → gitignored `LLM\byrdcoder\`), seven byrd-*
+  profiles defaulting read-only, tiers 0–4 enforced (no push/merge/main/
+  secrets/production-ComfyUI), 7-task model benchmark harness, two-agent
+  review loop (fail-closed block). See docs/BYRDCODER_LOCAL.md. **Next
+  action on GAMING:** install opencode CLI, run `byrdcoder-preflight.ps1` +
+  `test-byrdcoder.ps1`, then the acceptance checkpoint and Phase 5 benchmark
+  of the installed Qwen/Qwopus models.
+- **ByrdCoder ComfyUI MCP layer (2026-07-16)**: two strictly separated roles —
+  Role A `byrd_comfy_mcp.py`, a narrow approved-recipe executor that submits
+  normal belt jobs (curated manifest only, traversal/unmapped overrides
+  rejected + tested, publish/output-root/set_defaults structurally absent,
+  read-only by default); Role B `comfyui-mcp@0.34.0` (pinned, commit
+  `6a7ceeb9…`) as an isolated workflow architect against a future Workflow
+  Lab ComfyUI, disabled until that lab exists, candidates gated by the
+  7-gate checklist in `workflows/candidates/README.md`. See
+  docs/BYRDCODER_COMFY_MCP.md for the acceptance checkpoint.
 
 ## What worked before (U0 foundation)
 

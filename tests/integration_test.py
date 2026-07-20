@@ -456,8 +456,8 @@ def main():
               and (ROOT / "scripts" / "facelab.ps1").is_file()
               and "quality" in (ROOT / "scripts" / "facelab.ps1").read_text(encoding="utf-8-sig"))
         check("face-zone adapter refuses an unconditioned production run",
-              "face-zone edit requires an installed identity LoRA" in byrdimage_source
-              and "selected_identity_lora = resolve_lora(" in byrdimage_source
+              "no deployed identity LoRA exists" in byrdimage_source
+              and "select_identity_lora(root, identity, identity_lora)" in byrdimage_source
               and 'lora_id="byrd_identity_lora"' in byrdimage_source)
 
         # aspect presets snap to SDXL-native dims; LoRA splices into the graph
@@ -491,8 +491,12 @@ def main():
               and 'crop_preflight.get("passed") is False' in byrdimage_source
               and 'CPU crop preflight did not contain the full head/neck before GPU work' in byrdimage_source
               and '"crop_preflight": crop_preflight' in byrdimage_source)
-        check("face-zone v2 defaults can stop at the better CPU seed",
-              '"skip_gpu_cleanup": true' in v2_recipe_path.read_text(encoding="utf-8-sig")
+        # 2026-07-16: defaults promoted to the founder-VERIFIED golden runs —
+        # GPU finish ON by default (the d28 Gojo was a GPU-finished crop; the
+        # raw CPU-only ship is what produced the broken Vegeta). The CPU-only
+        # finish remains available as an engine capability, never the default.
+        check("face-zone v2 defaults run the verified GPU finish (CPU-only stays available)",
+              '"skip_gpu_cleanup": false' in v2_recipe_path.read_text(encoding="utf-8-sig")
               and 'skip_gpu_cleanup = bool(' in byrdimage_source
               and 'CPU identity mesh seed used without GPU cleanup' in byrdimage_source
               and 'cpu_face_zone_sd15_seed_only' in byrdimage_source)
@@ -526,7 +530,7 @@ def main():
               list(v2_plan) == ["identity_fill", "line_harmonize"]
               and [entry["seed"] for entry in v2_plan.values()] == [7132, 7133]
               and [entry["steps"] for entry in v2_plan.values()] == [16, 8]
-              and [entry["denoise"] for entry in v2_plan.values()] == [0.38, 0.12], str(v2_plan))
+              and [entry["denoise"] for entry in v2_plan.values()] == [0.28, 0.12], str(v2_plan))
         try:
             byrdimage._resolve_face_zone_gpu_passes(
                 {"gpu_passes": {"identity_fill": {"denoise": 0}}}, v2_recipe["defaults"], 7132
@@ -1082,6 +1086,731 @@ def main():
                   ("insightface", "opencv_haar", "placeholder_center"))
             check("dry-run sidecar lists reasons for failure",
                   len(bcs_sidecar.get("reasons", [])) >= 1)
+
+        # ── ByrdCoder Local V0 contract (docs/BYRDCODER_LOCAL.md) ──────────
+        # Config / permission / allowlist behavior: the local coding agent
+        # must default read-only, pin its bridge, never hardcode hosts, and
+        # keep push/merge/secret paths structurally impossible.
+        print("== byrdcoder local v0 contract")
+        bc_dir = ROOT / "configs" / "byrdcoder"
+        bc_profiles = ("byrd-ask", "byrd-patch", "byrd-build", "byrd-test",
+                       "byrd-review", "byrd-offline", "byrd-private")
+        for fname in ("BYRDCODER_LOCAL.md", "byrdcoder-model-benchmark.md",
+                      "byrdcoder-security-review.md"):
+            check(f"byrdcoder doc {fname} exists", (ROOT / "docs" / fname).is_file())
+        for sname in ("byrdcoder-preflight.ps1", "start-byrdcoder.ps1",
+                      "test-byrdcoder.ps1", "byrdcoder-benchmark.ps1"):
+            check(f"byrdcoder script {sname} exists",
+                  (ROOT / "scripts" / sname).is_file())
+        for pyname in ("byrdcoder_models.py", "byrdcoder_review.py"):
+            check(f"byrdcoder helper {pyname} compiles",
+                  subprocess.run([sys.executable, "-m", "py_compile",
+                                  str(ROOT / "scripts" / pyname)],
+                                 capture_output=True).returncode == 0)
+
+        bc_cfg = json.loads((bc_dir / "opencode.example.json").read_text())
+        check("byrdcoder bridge plugin pinned",
+              any(p.startswith("opencode-lmstudio@") and p[18:19].isdigit()
+                  for p in bc_cfg.get("plugin", [])), str(bc_cfg.get("plugin")))
+        check("byrdcoder LM Studio URL is a placeholder (zero hardcoded hosts)",
+              bc_cfg["provider"]["lmstudio"]["options"]["baseURL"] == "{{LMSTUDIO_URL}}")
+        check("byrdcoder default is read-only (global edit+bash+webfetch deny)",
+              bc_cfg["permission"]["edit"] == "deny"
+              and bc_cfg["permission"]["bash"].get("*") == "deny"
+              and bc_cfg["permission"]["webfetch"] == "deny")
+        check("byrdcoder share disabled + autoupdate off",
+              bc_cfg.get("share") == "disabled" and bc_cfg.get("autoupdate") is False)
+        check("byrdcoder defines all 7 profiles",
+              set(bc_profiles) <= set(bc_cfg.get("agent", {})))
+        for ro in ("byrd-ask", "byrd-review", "byrd-offline", "byrd-private"):
+            a = bc_cfg["agent"][ro]
+            check(f"byrdcoder {ro} is read-only",
+                  a["permission"]["edit"] == "deny"
+                  and a["tools"]["write"] is False and a["tools"]["edit"] is False)
+        bb = bc_cfg["agent"]["byrd-build"]["permission"]["bash"]
+        check("byrdcoder byrd-build cannot push/merge/reach main",
+              bb.get("git push*") == "deny" and bb.get("git merge*") == "deny"
+              and bb.get("git checkout main*") == "deny" and bb.get("*") == "deny")
+        bt = bc_cfg["agent"]["byrd-test"]["permission"]
+        check("byrdcoder byrd-test executes only allowlisted tests",
+              bt["edit"] == "deny" and bt["bash"].get("*") == "deny"
+              and bt["bash"].get("python tests/integration_test.py") == "allow")
+        check("byrdcoder byrd-patch never applies (edit deny)",
+              bc_cfg["agent"]["byrd-patch"]["permission"]["edit"] == "deny")
+
+        bc_allow = json.loads((bc_dir / "allowlist.json").read_text())
+        check("byrdcoder allowlist protects main",
+              "main" in bc_allow["branches"]["protected"])
+        check("byrdcoder deny list covers push/merge/delete/net/install",
+              {"git push", "git merge", "git reset --hard", "rm", "Remove-Item",
+               "pip install", "Invoke-WebRequest"} <= set(bc_allow["commands"]["deny"]))
+        check("byrdcoder allow list has no escape hatches",
+              not [c for c in bc_allow["commands"]["allow"]
+                   if any(w in c for w in ("push", "merge", "rm", "del",
+                                           "install", "curl", "wget"))])
+        check("byrdcoder forbidden dirs cover secrets/identity/production",
+              {".env", "secrets", "credentials", "db", "profiles/*/references",
+               "Generators/ComfyUI"} <= set(bc_allow["directories"]["forbidden"]))
+        for prof in bc_profiles:
+            prompt = bc_dir / "prompts" / f"{prof}.md"
+            check(f"byrdcoder prompt {prof}.md is substantive",
+                  prompt.is_file() and len(prompt.read_text()) > 200)
+        raw_cfg = (bc_dir / "opencode.example.json").read_text()
+        check("byrdcoder example config has no hardcoded host/IP",
+              "byrd-gaming" not in raw_cfg and "http://" not in raw_cfg.replace(
+                  "https://opencode.ai/config.json", ""))
+
+        # ── ByrdCoder ComfyUI MCP layer (docs/BYRDCODER_COMFY_MCP.md) ──────
+        # Role A behavioral proof: path traversal and unmapped parameter
+        # overrides are REJECTED; dangerous upstream tools stay absent;
+        # read-only mode hides write tools. Role B: pinned version + hard env.
+        print("== byrdcoder comfyui mcp layer")
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import byrd_comfy_mcp as bcm
+
+        check("comfy-mcp doc exists", (ROOT / "docs" / "BYRDCODER_COMFY_MCP.md").is_file())
+        manifest = bcm.load_manifest(ROOT)
+        check("comfy-mcp approved manifest loads with entries",
+              len(manifest["approved"]) >= 1, str(sorted(manifest["approved"])))
+        for rid, entry in manifest["approved"].items():
+            try:
+                bcm.resolve_workflow_path(ROOT, entry["workflow"])
+                wf_ok = True
+            except ValueError:
+                wf_ok = False
+            check(f"comfy-mcp approved '{rid}' workflow resolves safely", wf_ok)
+            rec = ROOT / "recipes" / f"{entry['recipe']}.v{entry['recipe_version']}.json"
+            check(f"comfy-mcp approved '{rid}' recipe file exists", rec.is_file())
+            check(f"comfy-mcp approved '{rid}' params are typed",
+                  all(p.get("type") in ("string", "int", "float", "enum")
+                      for p in entry.get("params", {}).values()))
+
+        def rejects(fn, *fargs):
+            try:
+                fn(*fargs)
+                return False
+            except ValueError:
+                return True
+        check("comfy-mcp rejects .. path traversal",
+              rejects(bcm.resolve_workflow_path, ROOT, "workflows/../db/byrdhouse.db"))
+        check("comfy-mcp rejects parent-escape traversal",
+              rejects(bcm.resolve_workflow_path, ROOT, "../secrets/evil.json"))
+        check("comfy-mcp rejects absolute paths",
+              rejects(bcm.resolve_workflow_path, ROOT, "/etc/passwd")
+              and rejects(bcm.resolve_workflow_path, ROOT, "C:/Windows/evil.json"))
+        check("comfy-mcp rejects paths outside workflows/",
+              rejects(bcm.resolve_workflow_path, ROOT, "recipes/fast_preview.v1.json"))
+
+        fp_entry = manifest["approved"]["fast_preview"]
+        check("comfy-mcp rejects unmapped override by name",
+              rejects(bcm.validate_overrides, fp_entry,
+                      {"prompt": "ok", "checkpoint_path": "../../evil"}))
+        check("comfy-mcp rejects enum value outside allowed set",
+              rejects(bcm.validate_overrides, fp_entry, {"aspect": "4:3"}))
+        check("comfy-mcp rejects overlong string override",
+              rejects(bcm.validate_overrides, fp_entry, {"prompt": "x" * 501}))
+        check("comfy-mcp accepts a valid mapped override set",
+              bcm.validate_overrides(fp_entry,
+                                     {"prompt": "castle at dawn", "aspect": "16:9"})
+              == {"prompt": "castle at dawn", "aspect": "16:9"})
+        int_entry = {"params": {"steps": {"type": "int", "min": 1, "max": 40}}}
+        check("comfy-mcp rejects out-of-bounds int override",
+              rejects(bcm.validate_overrides, int_entry, {"steps": 999})
+              and rejects(bcm.validate_overrides, int_entry, {"steps": 0}))
+
+        roster = {t["name"] for t in bcm.TOOLS}
+        check("comfy-mcp removed upstream tools stay absent",
+              not (roster & set(bcm.REMOVED_TOOLS)), str(roster & set(bcm.REMOVED_TOOLS)))
+        check("comfy-mcp keeps the useful surface",
+              {"list_recipes", "describe_recipe", "submit_recipe", "job_status",
+               "cancel_job", "regenerate", "asset_meta", "last_error"} <= roster)
+        os.environ["BYRD_COMFY_MCP_READONLY"] = "1"
+        try:
+            ro_roster = {t["name"] for t in bcm.visible_tools()}
+            check("comfy-mcp read-only mode hides write tools",
+                  not ({"submit_recipe", "cancel_job", "regenerate"} & ro_roster)
+                  and "list_recipes" in ro_roster)
+            blocked, is_err = bcm.call_tool({}, "submit_recipe", {"recipe_id": "fast_preview"})
+            check("comfy-mcp read-only mode blocks submit with a tier message",
+                  is_err and "read-only" in blocked.get("error", ""))
+        finally:
+            del os.environ["BYRD_COMFY_MCP_READONLY"]
+
+        oc_cfg = json.loads((bc_dir / "opencode.example.json").read_text())
+        mcp = oc_cfg.get("mcp", {})
+        check("comfy-mcp wired into opencode config, read-only by default",
+              mcp.get("byrd-comfy", {}).get("environment", {})
+                 .get("BYRD_COMFY_MCP_READONLY") == "1"
+              and mcp.get("byrd-comfy", {}).get("enabled") is True)
+        lab = mcp.get("comfyui-lab", {})
+        check("comfyui-lab pinned to 0.34.0 and disabled by default",
+              any("comfyui-mcp@0.34.0" in c for c in lab.get("command", []))
+              and lab.get("enabled") is False)
+        lab_env = lab.get("environment", {})
+        check("comfyui-lab env: no autoinstall/autoupdate, compact mode, no tokens",
+              lab_env.get("COMFYUI_MCP_PANEL_AUTOINSTALL") == "0"
+              and lab_env.get("COMFYUI_MCP_AUTOUPDATE") == "0"
+              and lab_env.get("COMFYUI_MCP_TOOL_MODE") == "compact"
+              and not ({"CIVITAI_API_TOKEN", "HUGGINGFACE_TOKEN", "COMFYUI_API_KEY"}
+                       & set(lab_env)))
+        for prof in ("byrd-offline", "byrd-private"):
+            tools = oc_cfg["agent"][prof]["tools"]
+            check(f"comfy-mcp servers disabled in {prof}",
+                  tools.get("byrd-comfy*") is False and tools.get("comfyui-lab*") is False)
+
+        lab_env_file = (bc_dir / "comfyui-mcp-lab.env.example").read_text()
+        check("comfyui-lab env example pins version + reviewed commit",
+              "comfyui-mcp@0.34.0" in lab_env_file
+              and "6a7ceeb9b578a149b0da65b43e0def708f0b3078" in lab_env_file)
+        lab_url_lines = [ln for ln in lab_env_file.splitlines()
+                         if ln.startswith("COMFYUI_URL=")]
+        check("comfyui-lab env example never points at production :8188",
+              lab_url_lines and all("8188" not in ln for ln in lab_url_lines))
+        check("lab + candidates gate READMEs exist",
+              (ROOT / "workflows" / "experiments" / "comfyui-mcp-lab" / "README.md").is_file()
+              and (ROOT / "workflows" / "candidates" / "README.md").is_file())
+
+        # ── Identity + Face Acceptance Layer (2026-07-19) ────────────────────
+        # Post-generation check: did the face survive in the output?
+        # Runs on the FINAL composite (not the target), flags framing failures.
+        print("== acceptance check (output-side face gate)")
+        check("acceptance_check function exists in byrdfacezone",
+              "def acceptance_check(" in facezone_source)
+        check("accept subcommand registered in byrdfacezone parse_args",
+              '"accept"' in facezone_source
+              and 'accept.add_argument("--image"' in facezone_source
+              and 'acceptance_check(args.root, args.image' in facezone_source)
+        check("acceptance_check has all required output keys",
+              '"accepted"' in facezone_source
+              and '"face_count"' in facezone_source
+              and '"framing_ok"' in facezone_source
+              and '"flags"' in facezone_source
+              and '"face_crop_preview"' in facezone_source
+              and '"side_px"' in facezone_source
+              and '"check_seconds"' in facezone_source)
+        check("acceptance_check checks all four framing edges",
+              "face_cropped_left" in facezone_source
+              and "face_cropped_right" in facezone_source
+              and "face_cropped_top" in facezone_source
+              and "face_cropped_bottom" in facezone_source)
+        check("acceptance_check saves face_crop_preview when output_dir provided",
+              "_accept_crop.jpg" in facezone_source
+              and "crop_img.save(" in facezone_source)
+        check("acceptance_check never raises on detection failure",
+              "except RuntimeError as exc:" in facezone_source
+              and "no_face_detected" in facezone_source
+              and "result[\"check_seconds\"]" in facezone_source)
+        check("acceptance_check accepted=True only when framing_ok and single face",
+              "result[\"accepted\"] = result[\"framing_ok\"] and total == 1"
+              in facezone_source)
+        check("edit_face_zone calls acceptance check on every final composite",
+              "accept_cmd" in byrdimage_source
+              and '"accept"' in byrdimage_source
+              and '"--image", str(final)' in byrdimage_source
+              and '"--output-dir"' in byrdimage_source)
+        check("output_acceptance block written to card",
+              'card["output_acceptance"]' in byrdimage_source)
+        check("acceptance gate logs flags when output is flagged",
+              '"acceptance gate: FLAGGED"' in byrdimage_source
+              and '"output_acceptance.get(\"accepted\")' in byrdimage_source
+              or 'acceptance gate: FLAGGED' in byrdimage_source)
+        check("repo comparison doc exists",
+              (ROOT / "docs" / "REPO_COMPARISON.md").is_file())
+        repo_cmp = ((ROOT / "docs" / "REPO_COMPARISON.md").read_text(encoding="utf-8-sig")
+                    if (ROOT / "docs" / "REPO_COMPARISON.md").is_file() else "")
+        check("comparison doc covers ZPix, gimp-mcp, adopt/reject verdicts, and three specs",
+              "ZPix" in repo_cmp
+              and "gimp-mcp" in repo_cmp
+              and "Create Room" in repo_cmp
+              and "Identity + Face Acceptance Layer" in repo_cmp
+              and "Media Finisher" in repo_cmp
+              and "Adopt" in repo_cmp)
+
+        print("== dashboard — acceptance badge + seed lock + rerun button")
+        dashboard_source = (ROOT / "dashboard" / "index.html").read_text(encoding="utf-8")
+        check("dashboard artCard stores meta for rerun lookup",
+              "window._artMeta" in dashboard_source
+              and "window._artMeta[a.id] = meta" in dashboard_source)
+        check("dashboard artCard computes acceptance badge from output_acceptance",
+              "output_acceptance" in dashboard_source
+              and "acceptBadge" in dashboard_source
+              and "face OK" in dashboard_source
+              and "var(--green)" in dashboard_source)
+        check("dashboard artCard shows yellow flag badge when face flagged",
+              "_shortFlag" in dashboard_source
+              and "var(--yellow)" in dashboard_source
+              and "_oa.flags" in dashboard_source)
+        check("dashboard artCard renders rerun button when reproduce block present",
+              "hasRerun" in dashboard_source
+              and "copyRerun" in dashboard_source
+              and "meta.reproduce" in dashboard_source)
+        check("dashboard face swap panel has seed field",
+              'id="swapSeed"' in dashboard_source
+              and 'type="number"' in dashboard_source
+              and 'swapSeedLock' in dashboard_source)
+        check("dashboard face swap panel has lock and random seed buttons",
+              "toggleSwapSeedLock" in dashboard_source
+              and "randomSwapSeed" in dashboard_source)
+        check("submitSwap wires seed into payload",
+              "_seedRaw" in dashboard_source
+              and "payload.seed = _seedRaw" in dashboard_source)
+        check("copyRerun builds facelab.ps1 command from reproduce block",
+              "function copyRerun(" in dashboard_source
+              and "facelab.ps1 quality" in dashboard_source
+              and "navigator.clipboard.writeText" in dashboard_source)
+        # ── Face-lane repair guards (2026-07-16, hard Vegeta failure) ──────
+        # The 10 required automated tests: honest diffdiff graphs, pre-submit
+        # model gating, LoRA truth, outside-mask preservation, eye protection,
+        # geometry gate fail-closed, and rich ComfyUI HTTP errors.
+        print("== face-lane repair guards")
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import byrdimage as bi
+        import facezone_composite as fzc
+        from PIL import Image as PILImage, ImageDraw as PILDraw
+
+        # 1. JSON workflow validation
+        dd_true = json.loads((ROOT / "workflows" / "sd15_face_zone_diffdiff_api.json").read_text())
+        dd_combo = json.loads((ROOT / "workflows" / "sd15_face_zone_diffdiff_canny_api.json").read_text())
+        check("diffdiff workflows are valid JSON graphs",
+              any(n.get("class_type") == "KSampler" for n in dd_true.values() if isinstance(n, dict))
+              and any(n.get("class_type") == "KSampler" for n in dd_combo.values() if isinstance(n, dict)))
+
+        # 3. TRUE diffdiff contains no ControlNet anything
+        true_classes = {n.get("class_type") for n in dd_true.values() if isinstance(n, dict)}
+        check("TRUE diffdiff has no ControlNet nodes",
+              not any(c and "ControlNet" in c for c in true_classes),
+              str(true_classes))
+        check("TRUE diffdiff keeps the graded-mask seam killer",
+              {"DifferentialDiffusion", "SetLatentNoiseMask"} <= true_classes)
+        sampler = next(n for n in dd_true.values()
+                       if isinstance(n, dict) and n.get("class_type") == "KSampler")
+        check("TRUE diffdiff sampler conditioned straight from the prompts",
+              sampler["inputs"]["positive"][0] == "5" and sampler["inputs"]["negative"][0] == "6")
+        combo_classes = {n.get("class_type") for n in dd_combo.values() if isinstance(n, dict)}
+        check("combined diffdiff-canny is clearly the ControlNet variant",
+              "ControlNetLoader" in combo_classes and "DifferentialDiffusion" in combo_classes)
+
+        # 2. /object_info-style schema validation (same helper preflight uses live)
+        core_catalog = {c for c in (true_classes | combo_classes) if c} - {"ControlNetLoader"}
+        check("schema validation passes for TRUE diffdiff on a ControlNet-less server",
+              bi.validate_graph_classes(dd_true, core_catalog) == [])
+        check("schema validation names ControlNetLoader missing for the combined graph",
+              bi.validate_graph_classes(dd_combo, core_catalog) == ["ControlNetLoader"])
+
+        # 4. combined route refuses BEFORE submit when the canny model is missing
+        def raises_value(fn, *fargs):
+            try:
+                fn(*fargs)
+                return None
+            except ValueError as exc:
+                return str(exc)
+        msg = raises_value(bi.require_workflow_models, ROOT, dd_combo,
+                           "workflows/sd15_face_zone_diffdiff_canny_api.json")
+        check("combined graph refuses pre-submit and names the missing model",
+              bool(msg) and "control_v11p_sd15_canny" in msg and "NOT installed" in msg, str(msg)[:120])
+        check("TRUE diffdiff needs no model gate",
+              raises_value(bi.require_workflow_models, ROOT, dd_true, "x") is None)
+        cn_dir = ROOT / "Generators" / "ComfyUI" / "models" / "controlnet"
+        cn_dir.mkdir(parents=True, exist_ok=True)
+        (cn_dir / "control_v11p_sd15_canny.safetensors").write_bytes(b"fake")
+        check("combined graph passes once the canny model exists",
+              raises_value(bi.require_workflow_models, ROOT, dd_combo, "x") is None)
+
+        # 5. job LoRA overrides stale recipe value; no silent preview promotion
+        lora_dir = ROOT / "Generators" / "ComfyUI" / "models" / "loras"
+        lora_dir.mkdir(parents=True, exist_ok=True)
+        (lora_dir / "carey_preview_hybrid_r32_1200.safetensors").write_bytes(b"fake")
+        name, status = bi.select_identity_lora(ROOT, {"lora": "carey_meina_sd15_v1.safetensors"},
+                                               "carey_preview_hybrid_r32_1200")
+        check("explicit -Lora overrides the stale recipe LoRA cleanly",
+              name == "carey_preview_hybrid_r32_1200.safetensors"
+              and "explicit-override" in status and "preview" in status)
+        msg = raises_value(bi.select_identity_lora, ROOT,
+                           {"lora": "carey_meina_sd15_v1.safetensors"}, None)
+        check("stale recipe LoRA is refused by name, never partial-matched to a preview",
+              bool(msg) and "carey_meina_sd15_v1" in msg and "not installed" in msg)
+        msg = raises_value(bi.select_identity_lora, ROOT, {}, None)
+        check("no deployed LoRA is said plainly",
+              bool(msg) and "no deployed identity LoRA" in msg)
+        for rv in ("2", "3"):
+            rj = json.loads((ROOT / "recipes" / f"anime_face_zone_edit.v{rv}.json").read_text())
+            check(f"anime_face_zone_edit v{rv} no longer ships the stale deployed-LoRA claim",
+                  rj["identity"]["lora"] is None)
+
+        # 6. outside-mask pixels remain unchanged (and tampering is caught)
+        orig = PILImage.new("RGB", (64, 64), (40, 80, 120))
+        gen = PILImage.new("RGB", (64, 64), (200, 60, 60))
+        mask = PILImage.new("L", (64, 64), 0)
+        PILDraw.Draw(mask).ellipse((20, 20, 44, 44), fill=255)
+        final_img = orig.copy()
+        final_img.paste(gen, (0, 0), mask)
+        check("outside-mask preservation verifies a clean composite",
+              fzc.verify_outside_mask(orig, final_img, mask)["passed"] is True)
+        tampered = final_img.copy()
+        tampered.putpixel((2, 2), (255, 255, 255))
+        bad = fzc.verify_outside_mask(orig, tampered, mask)
+        check("outside-mask verification catches a leak",
+              bad["passed"] is False and bad["changed_pixels"] >= 1)
+        leaky = PILImage.new("L", (64, 64), 0)
+        PILDraw.Draw(leaky).rectangle((0, 0, 63, 30), fill=255)  # touches the border
+        clamped, frac = fzc.clamp_mask_border(leaky)
+        check("rectangular border leak is clamped and measured",
+              frac > 0 and clamped.getpixel((0, 0)) == 0 and clamped.getpixel((32, 20)) == 255)
+
+        # 7. eye_source=target restores protected eye pixels exactly
+        eye_mask = PILImage.new("L", (64, 64), 0)
+        PILDraw.Draw(eye_mask).ellipse((24, 26, 40, 36), fill=255)
+        restored = fzc.restore_protected_material(gen, orig, eye_mask)
+        check("protected target-eye pixels are restored after generation",
+              restored.getpixel((32, 31)) == (40, 80, 120)
+              and restored.getpixel((5, 5)) == (200, 60, 60))
+
+        # D. raw-triangle shard heuristic
+        shardy = PILImage.new("L", (128, 128), 128)
+        d = PILDraw.Draw(shardy)
+        for i in range(0, 128, 9):
+            d.line((0, i, 127, i), fill=255, width=1)
+            d.line((i, 0, i, 127), fill=255, width=1)
+        full = PILImage.new("L", (128, 128), 255)
+        verdict = fzc.mesh_shard_score(shardy.convert("RGB"), full)
+        check("shard detector flags dense straight seams",
+              verdict["shards_detected"] is True, str(verdict))
+        smooth = PILImage.new("RGB", (128, 128), (120, 110, 100))
+        check("shard detector passes a smooth face crop",
+              fzc.mesh_shard_score(smooth, full)["shards_detected"] is False)
+
+        # 8. geometry_stability=0 can never yield a CPU-only founder-facing final
+        unstable_report = {"faces": [{"index": 0, "flags": ["strong_profile"],
+                                      "checks": {"geometry_stability": 0.0,
+                                                 "geometry_warning": "landmarks disagree across scales"}}]}
+        g = bi.geometry_gate(unstable_report)
+        check("geometry gate blocks unstable mesh case and CPU-only final",
+              g["mesh_case_allowed"] is False and g["cpu_final_allowed"] is False
+              and len(g["reasons"]) >= 2 and "reviewed-mask" in g["fallback"])
+        stable_report = {"faces": [{"index": 0, "flags": [],
+                                    "checks": {"geometry_stability": 0.92}}]}
+        g2 = bi.geometry_gate(stable_report)
+        check("geometry gate passes stable geometry",
+              g2["mesh_case_allowed"] is True and g2["reasons"] == [])
+        g3 = bi.geometry_gate({"faces": [{"index": 0, "flags": [], "checks": {}}]})
+        check("unmeasurable stability fails closed",
+              g3["mesh_case_allowed"] is False)
+
+        # 9. HTTP 400 responses surface the body, node_errors, ids and classes
+        err_body = json.dumps({
+            "error": {"type": "prompt_outputs_failed_validation",
+                      "message": "Prompt outputs failed validation"},
+            "node_errors": {"13": {"class_type": "ControlNetLoader", "errors": [
+                {"type": "value_not_in_list",
+                 "message": "control_net_name 'control_v11p_sd15_canny.safetensors' not in []"}]}}})
+        formatted = bi._format_comfy_http_error(400, err_body)
+        check("ComfyUI HTTP 400 surfaces status, node id, class and message",
+              "HTTP 400" in formatted and "node 13" in formatted
+              and "ControlNetLoader" in formatted and "value_not_in_list" in formatted,
+              formatted[:160])
+        check("non-JSON error bodies are still printed",
+              "some html error page" in bi._format_comfy_http_error(500, "some html error page"))
+
+        # Free swap stack skeleton (docs/FREE_SWAP_STACK.md): photo-anchored
+        # identity needs NO LoRA and the doc keeps the lane license-clean.
+        free_doc = (ROOT / "docs" / "FREE_SWAP_STACK.md")
+        check("free swap stack skeleton doc exists",
+              free_doc.is_file() and "Excluded on purpose" in free_doc.read_text())
+        bi_source = (ROOT / "scripts" / "byrdimage.py").read_text(encoding="utf-8-sig")
+        check("photo-anchored workflows run LoRA-free (license-clean identity)",
+              '"IDENTITY PHOTO\\"" in' in repr(bi_source) or '\'"IDENTITY PHOTO"\'' in bi_source
+              or '"IDENTITY PHOTO"' in bi_source)
+        check("LoRA splice is conditional, never mandatory",
+              "if selected_identity_lora:" in bi_source
+              and "photo-anchored identity" in bi_source)
+        ipad_graph = json.loads((ROOT / "workflows" / "sd15_face_zone_ipadapter_api.json")
+                                .read_text(encoding="utf-8-sig"))
+        check("avenue-B zone graph really has the IDENTITY PHOTO anchor node",
+              any(n.get("_meta", {}).get("title") == "IDENTITY PHOTO"
+                  for n in ipad_graph.values() if isinstance(n, dict)))
+
+        # The conductor (byrdswap.py): the bot's lane decisions, zero GPU.
+        import byrdswap
+        stable_rep = {"faces": [{"index": 0, "flags": [],
+                                 "checks": {"geometry_stability": 0.9}}]}
+        unstable_rep = {"faces": [{"index": 0, "flags": ["strong_profile"],
+                                   "checks": {"geometry_stability": 0.0,
+                                              "geometry_warning": "landmarks disagree across scales"}}]}
+        p = byrdswap.plan_ladder(unstable_rep, lora="x", identity_photo="p.jpg")
+        check("conductor stops on unstable geometry with manual next steps",
+              p["lanes"] == [] and "geometry gate" in p["stop_reason"]
+              and any("zone" in s for s in p["manual_next"]))
+        p = byrdswap.plan_ladder(stable_rep, lora=None, identity_photo="p.jpg")
+        check("conductor picks the free photo-anchored lane first, no LoRA",
+              p["lanes"][0]["lane"] == "quality_photo_anchored"
+              and any(s["lane"] == "quality_lora_mesh" for s in p["skipped"]))
+        p = byrdswap.plan_ladder(stable_rep, lora="preview_r32", identity_photo=None)
+        check("conductor uses explicit LoRA lanes when photo is unavailable",
+              [l["lane"] for l in p["lanes"]] == ["quality_lora_mesh", "auto_facedetailer"]
+              and any(s["lane"] == "quality_photo_anchored" for s in p["skipped"]))
+        p = byrdswap.plan_ladder(stable_rep, lora=None, identity_photo=None)
+        check("conductor says plainly when nothing is runnable",
+              p["lanes"] == [] and "stop_reason" in p)
+        check("facelab run command wires the conductor",
+              '"run"' in (ROOT / "scripts" / "facelab.ps1").read_text(encoding="utf-8-sig")
+              and "byrdswap.py" in (ROOT / "scripts" / "facelab.ps1").read_text(encoding="utf-8-sig"))
+
+        # The founder-verified gojo avenue (d0.28 / mesh 0.40) + finish pass
+        check("gojo avenue codified: identity_fill d0.28, mesh 0.40, eyes protected, cleanup ON",
+              byrdswap.GOJO_AVENUE_ENGINE["gpu_passes"]["identity_fill"]["denoise"] == 0.28
+              and byrdswap.GOJO_AVENUE_ENGINE["mesh_identity_strength"] == 0.40
+              and byrdswap.GOJO_AVENUE_ENGINE["eye_source"] == "target"
+              and byrdswap.GOJO_AVENUE_ENGINE["skip_gpu_cleanup"] is False)
+        p = byrdswap.plan_ladder(stable_rep, lora="preview", identity_photo=None)
+        check("conductor's LoRA lane rides the gojo avenue",
+              p["lanes"][0]["engine"].get("mesh_identity_strength") == 0.40)
+        # Golden-run replay (reproduce the runs that actually worked)
+        import byrdswap_replay as replay
+        golden_card = {"recipe": "anime_face_zone_edit@2", "seed": 42,
+                       "lora": "carey_hybrid_r32.safetensors",
+                       "workflow": "workflows/sd15_face_mesh_seed_multipass_api.json",
+                       "target": "E:/x/gojo.png", "target_preset": "gojo",
+                       "gpu_passes": [{"id": "identity_fill", "denoise": 0.28},
+                                      {"id": "line_harmonize", "denoise": 0.12}],
+                       "face_zone": {"identity_mesh": {"mesh_identity_strength": 0.40,
+                                                       "eye_source_mode": "target"}}}
+        gp = replay.extract_golden_params(golden_card)
+        check("replay recovers the golden parameters from a card",
+              gp["denoise_per_pass"]["identity_fill"] == 0.28
+              and gp["mesh_identity_strength"] == 0.40 and gp["seed"] == 42)
+        today = json.loads((ROOT / "recipes" / "anime_face_zone_edit.v2.json")
+                           .read_text(encoding="utf-8-sig"))
+        drift = replay.diff_vs_recipe(gp, today)
+        check("replay names remaining drift (recipe now MATCHES the golden denoise)",
+              not any("identity_fill" in d for d in drift)
+              and any("LoRA" in d for d in drift))
+        old_recipe = {"defaults": {"gpu_passes": {"identity_fill": {"denoise": 0.38}},
+                                   "skip_gpu_cleanup": True}, "identity": {}}
+        old_drift = replay.diff_vs_recipe(gp, old_recipe)
+        check("replay catches denoise + skip drift against a stale recipe",
+              any("0.28" in d and "0.38" in d for d in old_drift)
+              and any("SKIPS gpu cleanup" in d for d in old_drift))
+        check("replay emits an exact rerun command",
+              "-Lora" in replay.rerun_command(gp) and "quality" in replay.rerun_command(gp))
+
+        # Complete settings capture: every card carries a full reproduce block
+        empty_block = bi.reproduce_block()
+        check("reproduce block always contains every required key (None when n/a)",
+              set(bi.REPRODUCE_REQUIRED) <= set(empty_block)
+              and all(empty_block[k] is None for k in bi.REPRODUCE_REQUIRED))
+        check("both face-zone card paths embed the reproduce block",
+              bi_source.count('"reproduce": reproduce,') >= 2
+              and '"workflow_sha256"' in bi_source)
+        modern_card = {"seed": 42,
+                       "reproduce": {"seed": 7, "lora": "x.safetensors",
+                                     "gpu_passes": [{"id": "identity_fill", "denoise": 0.28}]}}
+        check("replay prefers the complete reproduce block over legacy fields",
+              replay.extract_golden_params(modern_card)["seed"] == 7
+              and replay.extract_golden_params(modern_card)
+                  ["denoise_per_pass"]["identity_fill"] == 0.28)
+
+        # FINISH never edits a processed image: it re-renders generation 1
+        # from the immutable original using the card's captured settings.
+        fin_img = ROOT / "artifacts" / "fin_test.png"
+        fin_img.parent.mkdir(parents=True, exist_ok=True)
+        fin_img.write_bytes(b"png")
+        Path(str(fin_img) + ".json").write_text(json.dumps(
+            {"job_id": "job_x", "reproduce": {
+                "target": "E:/originals/vegeta.jpg", "seed": 99,
+                "lora": "hybrid_r32.safetensors", "target_preset": "vegeta",
+                "recipe": "anime_face_zone_edit@2",
+                "engine": {"crop_size": 640}}}))
+        fsrc = byrdswap.finish_source(fin_img)
+        check("finish re-renders from the immutable original with the same seed",
+              fsrc["original"] == "E:/originals/vegeta.jpg" and fsrc["seed"] == 99
+              and fsrc["recipe"] == "anime_face_zone_edit.v2"
+              and fsrc["engine"] == {"crop_size": 640})
+        bare = ROOT / "artifacts" / "bare.png"
+        bare.write_bytes(b"png")
+        try:
+            byrdswap.finish_source(bare)
+            fin_refused = False
+        except ValueError as exc:
+            fin_refused = "no generation card" in str(exc)
+        check("finish refuses a cardless image instead of guessing", fin_refused)
+        check("every card is generation 1 (edit-on-edit structurally refused)",
+              bi_source.count('"generation": 1,') >= 3
+              and "fresh-retry policy rejected" in bi_source
+              and '"finish"' in (ROOT / "scripts" / "facelab.ps1").read_text(encoding="utf-8-sig"))
+
+        # No-op law: an untouched copy must never ship as a result.
+        same = PILImage.new("RGB", (64, 64), (90, 90, 90))
+        check("edit_delta calls an untouched copy a no-op",
+              fzc.edit_delta(same, same.copy())["edited"] is False)
+        changed_img = same.copy()
+        PILDraw.Draw(changed_img).ellipse((20, 20, 44, 44), fill=(180, 120, 90))
+        check("edit_delta confirms a real zone edit",
+              fzc.edit_delta(same, changed_img)["edited"] is True
+              and fzc.edit_delta(same, changed_img, mask)["edited"] is True)
+        # Bounded advisor fixes (2026-07-16): restyle after swap + hard_anime routing
+        bcs_cfg_now = json.loads((ROOT / "configs" / "byrdcast_swap_v0.json").read_text(encoding="utf-8-sig"))
+        check("swap restyle pass: FaceDetailer denoise 0.40 with 14px feather",
+              bcs_cfg_now["refine"]["facedetailer_denoise"] == 0.4
+              and bcs_cfg_now["refine"]["facedetailer_feather_px"] == 14)
+        bi_source_now = (ROOT / "scripts" / "byrdimage.py").read_text(encoding="utf-8-sig")
+        check("hard_anime targets are refused by ReActor and routed to the redraw path",
+              "hard_anime target: ReActor paste is disabled" in bi_source_now
+              and "extreme_expression" in bi_source_now)
+        check("no-op outputs are rejected on every lane (run_graph + zone paths)",
+              bi_source_now.count("untouched copy") >= 3
+              and "images_effectively_identical" in bi_source_now
+              and '"edit_applied"' in (ROOT / "scripts" / "byrdfacezone.py")
+                  .read_text(encoding="utf-8-sig"))
+
+        # ── realistic_reactor_refine lane (2026-07-20) ──────────────────────
+        # Preferred conductor lane for stable, front-facing, realistic human
+        # targets. Pure-function proof of the Stage 3 mask policy, Stage 4
+        # denoise clamp, Stage 5 verifier, and the conductor routing — zero GPU.
+        print("== realistic_reactor_refine lane")
+        lane_cfg_path = ROOT / "configs" / "image" / "realistic_reactor_refine.json"
+        check("lane config exists and is valid JSON", lane_cfg_path.is_file())
+        lane_cfg = json.loads(lane_cfg_path.read_text(encoding="utf-8-sig"))
+        check("lane config is flagged non-commercial / private-experiment",
+              lane_cfg["license"]["non_commercial"] is True
+              and "private-local-experiment" in lane_cfg["license"]["scope"])
+        check("lane config keeps the cleanup denoise in the 0.20-0.35 band",
+              lane_cfg["refine"]["denoise_min"] == 0.20
+              and lane_cfg["refine"]["denoise_max"] == 0.35
+              and lane_cfg["refine"]["denoise_refuse_at_or_above"] <= 0.50)
+
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import realistic_reactor_refine as rrr
+        import byrdswap as bswap
+
+        # Stage 4: denoise clamp — refuse the identity-regenerating 0.55, keep 0.28
+        rc = lane_cfg["refine"]
+        d_hi = rrr.clamp_refine_denoise(0.55, rc)
+        d_ok = rrr.clamp_refine_denoise(0.28, rc)
+        d_lo = rrr.clamp_refine_denoise(0.10, rc)
+        check("denoise 0.55 is refused (would regenerate the target identity)",
+              d_hi["refused"] is True and d_hi["denoise"] <= 0.35)
+        check("denoise 0.28 passes through unchanged",
+              d_ok["denoise"] == 0.28 and d_ok["refused"] is False)
+        check("denoise 0.10 clamps up into the band",
+              d_lo["denoise"] == 0.20 and d_lo["clamped"] is True)
+
+        # Stage 5: verifier — every status code reachable, accept only on clean pass
+        vc = lane_cfg["verification"]
+        v_pass = rrr.verify_identity(0.50, True, 10.0, False, vc)
+        v_idf = rrr.verify_identity(0.10, True, 10.0, False, vc)
+        v_unm = rrr.verify_identity(None, True, 10.0, False, vc)
+        v_hair = rrr.verify_identity(0.50, True, 10.0, True, vc)
+        v_seam = rrr.verify_identity(0.50, True, 99.0, False, vc)
+        v_noface = rrr.verify_identity(0.50, False, 10.0, False, vc)
+        check("verifier: clean pass -> IDENTITY_PASS accepted",
+              v_pass["primary_status"] == "IDENTITY_PASS" and v_pass["accepted"] is True)
+        check("verifier: low similarity -> IDENTITY_FAIL rejected",
+              v_idf["primary_status"] == "IDENTITY_FAIL" and v_idf["accepted"] is False)
+        check("verifier: unmeasured identity fails closed",
+              v_unm["primary_status"] == "IDENTITY_FAIL" and v_unm["accepted"] is False)
+        check("verifier: doubled beard -> FACIAL_HAIR_FAIL not accepted",
+              "FACIAL_HAIR_FAIL" in v_hair["statuses"] and v_hair["accepted"] is False)
+        check("verifier: high seam energy -> SEAM_FAIL not accepted",
+              "SEAM_FAIL" in v_seam["statuses"] and v_seam["accepted"] is False)
+        check("verifier: no face -> FACE_DETECTION_FAIL, identity not judged",
+              v_noface["primary_status"] == "FACE_DETECTION_FAIL"
+              and "IDENTITY_PASS" not in v_noface["statuses"]
+              and v_noface["accepted"] is False)
+
+        # Stage 3: facial-hair-aware mask — facial hair INSIDE, scalp OUTSIDE
+        box = [120, 120, 280, 320]
+        masks = rrr.build_facial_identity_mask((400, 500), box, lane_cfg["facial_hair_mask"])
+        bw, bh = box[2] - box[0], box[3] - box[1]
+        cx = (box[0] + box[2]) // 2
+        chin = masks["identity"].getpixel((cx, box[3] - int(bh * 0.05)))
+        scalp_in_ident = masks["identity"].getpixel((cx, box[1] + int(bh * 0.08)))
+        scalp_in_scalp = masks["scalp_exclude"].getpixel((cx, box[1] + int(bh * 0.08)))
+        sideburn = masks["identity"].getpixel((box[0] + int(bw * 0.03), box[1] + int(bh * 0.6)))
+        check("mask: chin/beard is inside the identity zone", chin > 160)
+        check("mask: scalp is OUTSIDE the identity zone", scalp_in_ident < 96)
+        check("mask: scalp is inside the scalp-exclude zone", scalp_in_scalp > 160)
+        check("mask: sideburn is inside the identity zone", sideburn > 120)
+
+        # Conductor routing — realism/frontal signals + lane order
+        def _rep(stability=0.8, yaw=0.1, parser="selfie_multiclass", flags=None):
+            return {"faces": [{"index": 0, "flags": flags or [],
+                               "checks": {"geometry_stability": stability,
+                                          "yaw_asymmetry": yaw, "parser": parser}}]}
+        p_real = bswap.plan_ladder(_rep(), reactor_available=True, has_references=True,
+                                   identity_photo="p.jpg")
+        check("conductor: stable+frontal+realistic -> realistic_reactor_refine is FIRST",
+              p_real["lanes"] and p_real["lanes"][0]["lane"] == "realistic_reactor_refine"
+              and "quality_photo_anchored" in [l["lane"] for l in p_real["lanes"]])
+        p_anime = bswap.plan_ladder(_rep(parser="parsenet-anime-fallback"),
+                                    reactor_available=True, has_references=True,
+                                    identity_photo="p.jpg", lora="carey_v2")
+        check("conductor: anime target never gets the reactor lane",
+              "realistic_reactor_refine" not in [l["lane"] for l in p_anime["lanes"]]
+              and p_anime["realism"] == "stylized")
+        p_noreactor = bswap.plan_ladder(_rep(), reactor_available=False,
+                                        has_references=True, identity_photo="p.jpg")
+        check("conductor: no ReActor installed -> lane skipped, photo-anchored still runs",
+              "realistic_reactor_refine" in [s["lane"] for s in p_noreactor["skipped"]]
+              and [l["lane"] for l in p_noreactor["lanes"]] == ["quality_photo_anchored"])
+        p_profile = bswap.plan_ladder(_rep(yaw=0.45, flags=["strong_profile — strains"]),
+                                      reactor_available=True, has_references=True,
+                                      identity_photo="p.jpg")
+        check("conductor: non-frontal/profile target does not get the reactor lane",
+              p_profile["frontal"] is False
+              and "realistic_reactor_refine" not in [l["lane"] for l in p_profile["lanes"]])
+
+        # ── examiner-schema normalization (2026-07-20 baseline stall) ────────
+        # The REAL report nests geometry_stability/parser under "thorough" and
+        # promotes yaw_asymmetry to the face top level — NOT under "checks".
+        # This fixture has NO "checks" key, so any reader that only looks at
+        # "checks" sees stability=None -> unstable gate -> zero lanes, and these
+        # asserts fail. That is the regression guard the founder asked for.
+        import byrdimage as bimg
+        real_report = {"faces": [{
+            "index": 0,
+            "yaw_asymmetry": 0.0999,
+            "flags": [],
+            "thorough": {"geometry_stability": 0.987, "parser": "selfie_multiclass"},
+        }]}
+        sig = bimg.collect_face_signals(real_report["faces"][0])
+        check("collect_face_signals lifts thorough + top-level fields",
+              sig.get("geometry_stability") == 0.987
+              and sig.get("parser") == "selfie_multiclass"
+              and sig.get("yaw_asymmetry") == 0.0999)
+        rg = bimg.geometry_gate(real_report)
+        check("real report: geometry_gate is stable with stability 0.987",
+              rg["stable"] is True and rg["geometry_stability"] == 0.987)
+        check("real report: classify_realism == 'realistic'",
+              bswap.classify_realism(real_report) == "realistic")
+        check("real report: is_frontal is True (yaw 0.0999)",
+              bswap.is_frontal(real_report) is True)
+        rp = bswap.plan_ladder(real_report, reactor_available=True, has_references=True,
+                               identity_photo="/tmp/carey_ref.jpg")
+        check("real report: plan_ladder places realistic_reactor_refine FIRST",
+              rp["lanes"] and rp["lanes"][0]["lane"] == "realistic_reactor_refine")
+
+        # promoted runtime hotfixes (2026-07-20 — repo sync had reverted these)
+        bswap_src = (ROOT / "scripts" / "byrdswap.py").read_text(encoding="utf-8-sig")
+        check("conductor default recipe is anime_face_zone_edit@2 (resolvable), not .v2",
+              'default="anime_face_zone_edit@2"' in bswap_src
+              and 'default="anime_face_zone_edit.v2"' not in bswap_src)
+        eng = bswap.PHOTO_ANCHORED_ENGINE("/tmp/ref.jpg")
+        check("photo-anchored engine sets no_identity_mesh + one GPU pass 26/5.5/dpmpp_2m/karras/0.55",
+              eng["no_identity_mesh"] is True
+              and len(eng["gpu_passes"]) == 1
+              and list(eng["gpu_passes"].values())[0] == {
+                  "steps": 26, "cfg": 5.5, "sampler_name": "dpmpp_2m",
+                  "scheduler": "karras", "denoise": 0.55})
+        bi_src = (ROOT / "scripts" / "byrdimage.py").read_text(encoding="utf-8-sig")
+        check("photo mode crop node accepts both FACE CROP and legacy IDENTITY MESH SEED",
+              '"FACE CROP", "IDENTITY MESH SEED"' in bi_src)
+        check("no_identity_mesh + explicit gpu_passes REPLACE recipe defaults (1 sampler safe)",
+              "replace_passes" in bi_src)
+        ipad_wf = json.loads((ROOT / "workflows" / "sd15_face_zone_ipadapter_api.json")
+                             .read_text(encoding="utf-8-sig"))
+        check("ipadapter workflow preset is exactly 'PLUS FACE (portraits)'",
+              any(n.get("inputs", {}).get("preset") == "PLUS FACE (portraits)"
+                  for n in ipad_wf.values() if isinstance(n, dict)))
 
         print("== stats + report + dashboard")
         st = api("/stats")

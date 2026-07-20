@@ -1,126 +1,134 @@
 {
-  "id": "anime_face_zone_edit",
-  "version": 2,
-  "kind": "image.generate",
-  "runner": "face_zone_identity_edit",
-  "subject_profile": "me",
-  "category": "CPU outlined anime face edit",
-  "_note": "v2 \u2014 the local two-pass mesh route the PC calibration settled on: pass 1 identity_fill (0.38) rebuilds the zone from the mesh seed, pass 2 line_harmonize (0.12) melts linework, both inside one masked latent chain. defaults.skip_gpu_cleanup=true because the CPU-only seed/composite finish currently beats GPU cleanup on hard targets (DECISIONS 2026-07-15); flip it per-job via engine.skip_gpu_cleanup=false. Presets carry accessory truth: absent_accessories are removed from the zone before masking, expected_preserved_materials must survive the composite.",
-  "workflow": "workflows/sd15_face_mesh_seed_multipass_api.json",
-  "template": "masterpiece, best quality, close-up face of (careybh person:1.35), 1boy, adult Black man, (deep dark brown skin:1.45), recognizable Carey identity, sparse jawline beard and short goatee, preserve the target head angle and expression, native hand-drawn 2D shonen anime, bold clean outlines, flat cel shading, coherent with the supplied artwork",
-  "negative": "pale skin, light skin, beige skin, tan skin, orange skin, different person, generic replacement face, thick full beard, dense beard, photorealistic skin, individual beard hairs, stubble texture, realistic eyelashes, detailed iris, glossy skin highlights, tears, tear streaks, face gems, cheek gems, eye makeup, white face marks, glowing facial spots, facial tattoo, face piercing, facial jewelry, nose ring, lip ring, eyebrow ring, stray earring, letters on face, writing on skin, pasted face, face cutout, mask seam, duplicate eye, warped eyes, asymmetrical pupils, distorted mouth, blurry, text, watermark",
-  "identity": {
-    "trigger": "careybh person",
-    "lora": "carey_meina_sd15_v1.safetensors",
-    "strength": 0.65,
-    "clip_strength": 0.8
+ "id": "anime_face_zone_edit",
+ "version": 2,
+ "kind": "image.generate",
+ "runner": "face_zone_identity_edit",
+ "subject_profile": "me",
+ "category": "CPU outlined anime face edit",
+ "_note": "v2 \u2014 the local two-pass mesh route the PC calibration settled on: pass 1 identity_fill (0.38) rebuilds the zone from the mesh seed, pass 2 line_harmonize (0.12) melts linework, both inside one masked latent chain. defaults.skip_gpu_cleanup=true because the CPU-only seed/composite finish currently beats GPU cleanup on hard targets (DECISIONS 2026-07-15); flip it per-job via engine.skip_gpu_cleanup=false. Presets carry accessory truth: absent_accessories are removed from the zone before masking, expected_preserved_materials must survive the composite.",
+ "workflow": "workflows/sd15_face_mesh_seed_multipass_api.json",
+ "template": "masterpiece, best quality, close-up face of (careybh person:1.35), 1boy, adult Black man, (deep dark brown skin:1.45), recognizable Carey identity, sparse jawline beard and short goatee, preserve the target head angle and expression, native hand-drawn 2D shonen anime, bold clean outlines, flat cel shading, coherent with the supplied artwork",
+ "negative": "pale skin, light skin, beige skin, tan skin, orange skin, different person, generic replacement face, thick full beard, dense beard, photorealistic skin, individual beard hairs, stubble texture, realistic eyelashes, detailed iris, glossy skin highlights, tears, tear streaks, face gems, cheek gems, eye makeup, white face marks, glowing facial spots, facial tattoo, face piercing, facial jewelry, nose ring, lip ring, eyebrow ring, stray earring, letters on face, writing on skin, pasted face, face cutout, mask seam, duplicate eye, warped eyes, asymmetrical pupils, distorted mouth, blurry, text, watermark",
+ "identity": {
+  "trigger": "careybh person",
+  "lora": null,
+  "strength": 0.65,
+  "clip_strength": 0.8,
+  "_lora_note": "No identity LoRA is deployed/approved (2026-07-16). Every candidate under artifacts/lora/candidates is a PRIVATE PREVIEW; pass -Lora explicitly per job \u2014 byrdimage refuses to run without it and never silently promotes a preview."
+ },
+ "identity_references": {
+  "gojo": "profiles/me/references/generated_anime_cartoon/002_naruto.png",
+  "vegeta": "profiles/me/references/generated_anime_cartoon/013_yu-yu-hakusho.png",
+  "luffy_close": "profiles/me/references/generated_anime_cartoon/003_one-piece.png",
+  "luffy_full": "profiles/me/references/generated_anime_cartoon/003_one-piece.png",
+  "auto": "profiles/me/references/generated_anime_cartoon/002_naruto.png"
+ },
+ "defaults": {
+  "checkpoint": "Meina V5.1 - Baked VAE.safetensors",
+  "steps": 22,
+  "cfg": 5.0,
+  "sampler": "dpmpp_2m",
+  "scheduler": "karras",
+  "denoise": 0.38,
+  "crop_factor": 1.65,
+  "zone_expand": 1.1,
+  "min_face_confidence": 0.35,
+  "batch": 1,
+  "min_mesh_coverage": 0.55,
+  "skip_gpu_cleanup": false,
+  "gpu_passes": {
+   "identity_fill": {
+    "steps": 16,
+    "denoise": 0.28
+   },
+   "line_harmonize": {
+    "steps": 8,
+    "denoise": 0.12
+   }
   },
-  "identity_references": {
-    "gojo": "profiles/me/references/generated_anime_cartoon/002_naruto.png",
-    "vegeta": "profiles/me/references/generated_anime_cartoon/013_yu-yu-hakusho.png",
-    "luffy_close": "profiles/me/references/generated_anime_cartoon/003_one-piece.png",
-    "luffy_full": "profiles/me/references/generated_anime_cartoon/003_one-piece.png",
-    "auto": "profiles/me/references/generated_anime_cartoon/002_naruto.png"
+  "_defaults_note": "2026-07-16: promoted the founder-VERIFIED golden parameters (the d28/m40 Gojo + near-perfect Vegeta outputs): identity_fill denoise 0.28 (the old 0.38 default is the one the run log flagged for eye distortion), GPU cleanup ON so line_harmonize + the composite guards finish every output, mesh strength 0.40 per preset. byrdswap.py's gojo avenue matches."
+ },
+ "target_presets": {
+  "auto": {
+   "label": "Automatic CPU face outline",
+   "prompt_context": "preserve target hair, headwear, clothing, pose, background, and composition",
+   "absent_accessories": [],
+   "expected_preserved_materials": [
+    "headwear",
+    "clothing"
+   ],
+   "mesh_identity_strength": 0.4,
+   "eye_source": "target",
+   "eye_protection": 1.0
   },
-  "defaults": {
-    "checkpoint": "Meina V5.1 - Baked VAE.safetensors",
-    "steps": 22,
-    "cfg": 5.0,
-    "sampler": "dpmpp_2m",
-    "scheduler": "karras",
-    "denoise": 0.38,
-    "crop_factor": 1.65,
-    "zone_expand": 1.1,
-    "min_face_confidence": 0.35,
-    "batch": 1,
-    "min_mesh_coverage": 0.55,
-    "skip_gpu_cleanup": true,
-    "gpu_passes": {
-      "identity_fill": {
-        "steps": 16,
-        "denoise": 0.38
-      },
-      "line_harmonize": {
-        "steps": 8,
-        "denoise": 0.12
-      }
-    }
+  "gojo": {
+   "label": "Gojo close portrait",
+   "eye_source": "target",
+   "eye_protection": 1.0,
+   "prompt_context": "one visible eye, preserve the white blindfold, white hair, dark high collar, and calm three-quarter head angle",
+   "absent_accessories": [
+    "eyeglasses",
+    "earrings",
+    "necklaces"
+   ],
+   "expected_preserved_materials": [
+    "headwear",
+    "clothing"
+   ],
+   "mesh_identity_strength": 0.4
   },
-  "target_presets": {
-    "auto": {
-      "label": "Automatic CPU face outline",
-      "prompt_context": "preserve target hair, headwear, clothing, pose, background, and composition",
-      "absent_accessories": [],
-      "expected_preserved_materials": [
-        "headwear",
-        "clothing"
-      ]
-    },
-    "gojo": {
-      "label": "Gojo close portrait",
-      "eye_source": "target",
-      "eye_protection": 1.0,
-      "prompt_context": "one visible eye, preserve the white blindfold, white hair, dark high collar, and calm three-quarter head angle",
-      "absent_accessories": [
-        "eyeglasses",
-        "earrings",
-        "necklaces"
-      ],
-      "expected_preserved_materials": [
-        "headwear",
-        "clothing"
-      ]
-    },
-    "vegeta": {
-      "label": "Vegeta close portrait",
-      "mesh_identity_strength": 0.85,
-      "eye_source": "target",
-      "eye_protection": 1.0,
-      "prompt_context": "stern expression and three-quarter head angle, 1990s Dragon Ball Z cel-animation material, thick angular black ink contours, flat two-tone cel shading; preserve sharp black hair and blue armor",
-      "absent_accessories": [
-        "eyeglasses",
-        "headwear",
-        "earrings",
-        "necklaces"
-      ],
-      "expected_preserved_materials": [
-        "clothing"
-      ]
-    },
-    "luffy_close": {
-      "label": "Luffy grin close portrait",
-      "eye_source": "target",
-      "eye_protection": 1.0,
-      "prompt_context": "broad grin and front head angle; preserve straw hat and red jacket",
-      "absent_accessories": [
-        "eyeglasses",
-        "earrings",
-        "necklaces"
-      ],
-      "expected_preserved_materials": [
-        "headwear",
-        "clothing"
-      ]
-    },
-    "luffy_full": {
-      "label": "Luffy full body",
-      "eye_source": "target",
-      "eye_protection": 1.0,
-      "prompt_context": "small front-facing smiling face; preserve straw hat, red jacket, yellow sash, body, and background",
-      "absent_accessories": [
-        "eyeglasses",
-        "earrings",
-        "necklaces"
-      ],
-      "expected_preserved_materials": [
-        "headwear",
-        "clothing"
-      ]
-    }
+  "vegeta": {
+   "label": "Vegeta close portrait",
+   "mesh_identity_strength": 0.85,
+   "eye_source": "target",
+   "eye_protection": 1.0,
+   "prompt_context": "stern expression and three-quarter head angle, 1990s Dragon Ball Z cel-animation material, thick angular black ink contours, flat two-tone cel shading; preserve sharp black hair and blue armor",
+   "absent_accessories": [
+    "eyeglasses",
+    "headwear",
+    "earrings",
+    "necklaces"
+   ],
+   "expected_preserved_materials": [
+    "clothing"
+   ]
   },
-  "rubric": {
-    "identity": "1-5 - does the edited zone read as Carey?",
-    "integration": "1-5 - does the face share the target linework and cel shading with no seam?",
-    "preservation": "1-5 - are all pixels outside the saved soft zone unchanged?"
+  "luffy_close": {
+   "label": "Luffy grin close portrait",
+   "eye_source": "target",
+   "eye_protection": 1.0,
+   "prompt_context": "broad grin and front head angle; preserve straw hat and red jacket",
+   "absent_accessories": [
+    "eyeglasses",
+    "earrings",
+    "necklaces"
+   ],
+   "expected_preserved_materials": [
+    "headwear",
+    "clothing"
+   ],
+   "mesh_identity_strength": 0.4
+  },
+  "luffy_full": {
+   "label": "Luffy full body",
+   "eye_source": "target",
+   "eye_protection": 1.0,
+   "prompt_context": "small front-facing smiling face; preserve straw hat, red jacket, yellow sash, body, and background",
+   "absent_accessories": [
+    "eyeglasses",
+    "earrings",
+    "necklaces"
+   ],
+   "expected_preserved_materials": [
+    "headwear",
+    "clothing"
+   ],
+   "mesh_identity_strength": 0.4
   }
+ },
+ "rubric": {
+  "identity": "1-5 - does the edited zone read as Carey?",
+  "integration": "1-5 - does the face share the target linework and cel shading with no seam?",
+  "preservation": "1-5 - are all pixels outside the saved soft zone unchanged?"
+ }
 }
