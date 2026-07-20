@@ -1,0 +1,86 @@
+{
+  "_comment": "realistic_reactor_refine lane (2026-07-20). Preferred conductor lane for STABLE, FRONT-FACING, REALISTIC human targets. Pipeline: rank identity references -> ReActor identity transfer (inswapper_128.onnx) -> facial-hair-aware mask -> LOW-denoise cleanup (0.20-0.35, never 0.55) -> automatic identity+facial-hair+seam verification with explicit status codes. Builds on byrdcast_swap_v0 (reuses detection, reference ranking, ReActor route, embedding cosine).",
+  "version": "0.1.0",
+  "license": {
+    "non_commercial": true,
+    "scope": "private-local-experiment-only",
+    "reason": "inswapper_128.onnx / InsightFace / ReActor carry non-commercial research licenses. Per DECISIONS 2026-07-15/16 the monetized product path is the Free Swap Stack (own LoRA / IP-Adapter plus-face); this lane is for private identity work only and its non_commercial flag is stamped on every sidecar.",
+    "monetization_lane": "quality_photo_anchored (IP-Adapter plus-face, Apache-2.0) or a trained identity LoRA"
+  },
+  "conductor": {
+    "preferred_for": {
+      "target_class": "realistic",
+      "requires_stable_geometry": true,
+      "requires_frontal": true,
+      "max_yaw_asymmetry": 0.28
+    },
+    "fallback_order_after_this": [
+      "quality_photo_anchored",
+      "quality_lora_mesh",
+      "reviewed_zone"
+    ],
+    "never_route_stable_realistic_directly_into": "anime_face_zone_edit"
+  },
+  "identity_source": {
+    "profile_references_subdir": "references",
+    "min_reference_face_px": 96,
+    "_comment_weights": "Stage 1 ranking. Reuses byrdcast score_reference (lighting, quality, face_angle when both poses measured); frontal + sharpness + facial completeness weighted up for a clean front-facing transfer.",
+    "weights": {
+      "face_angle": 0.30,
+      "quality": 0.25,
+      "lighting": 0.15,
+      "facial_completeness": 0.20,
+      "pose_similarity": 0.10
+    }
+  },
+  "reactor": {
+    "workflow": "workflows/reactor_faceswap_api.json",
+    "swap_model": "inswapper_128.onnx",
+    "face_restore_model": "GFPGANv1.4.pth",
+    "_comment_restore": "GFPGAN optional + conservative: low visibility so it cannot invent beard texture or drift identity. Stage 4 refine is the real cleanup.",
+    "face_restore_visibility": 0.5,
+    "codeformer_weight": 0.5,
+    "replace_regions": ["eyes", "brows", "nose", "cheeks", "mouth", "lips", "mustache", "beard", "sideburns", "chin", "jawline", "ears_when_safe"],
+    "preserve_regions": ["head_angle", "gaze_direction", "eyelid_openness", "expression", "mouth_openness", "lighting", "scene", "body", "clothes", "scalp_hair", "headwear"]
+  },
+  "facial_hair_mask": {
+    "_comment": "Stage 3. Separates scalp hair/headwear (OUTSIDE the identity zone) from facial hair (INSIDE). Beard/mustache/sideburns/chin/cheeks/jawline are inside the replacement/cleanup zone so the new identity's facial hair replaces the target's. The lower-face boundary is feathered WITHOUT blending the old beard back over the new identity.",
+    "lower_face_start_frac": 0.42,
+    "lower_face_extend_frac": 0.30,
+    "sideburn_band_frac": 0.18,
+    "scalp_exclude_top_frac": 0.30,
+    "feather_px": 8,
+    "lower_boundary_feather_px": 6,
+    "protect_scalp_and_headwear": true
+  },
+  "refine": {
+    "_comment": "Stage 4. LOW-denoise cleanup over the ReActor result so seams/skin match WITHOUT regenerating the target person. Carey's selected reference anchors identity; the target supplies only pose/expression/lighting/structure. Hard band 0.20-0.35; 0.55 is refused because it can rebuild the target identity.",
+    "workflow": "workflows/sd15_face_zone_ipadapter_api.json",
+    "denoise_min": 0.20,
+    "denoise_max": 0.35,
+    "denoise_default": 0.28,
+    "denoise_refuse_at_or_above": 0.50,
+    "identity_anchor": "selected_reference",
+    "structure_source": "target",
+    "use_facedetailer_only_if_it_helps_seams": true,
+    "gfpgan": {"optional": true, "conservative": true, "may_invent_beard": false, "may_change_identity": false}
+  },
+  "verification": {
+    "_comment": "Stage 5. A completed ComfyUI job is NOT an accepted result. Compare final face vs Carey's reference set and emit explicit status codes. Any FAIL keeps the artifact as evidence (status=rejected), never a normal draft.",
+    "identity_cosine_pass": 0.32,
+    "identity_cosine_strong": 0.45,
+    "seam_energy_fail_above": 40.0,
+    "doubled_beard_edge_fail": true,
+    "statuses": ["IDENTITY_PASS", "IDENTITY_FAIL", "FACIAL_HAIR_FAIL", "SEAM_FAIL", "FACE_DETECTION_FAIL"]
+  },
+  "debug_artifacts": [
+    "selected_identity_reference",
+    "target_face_crop",
+    "initial_reactor_result",
+    "facial_identity_mask",
+    "mask_overlay",
+    "refined_output",
+    "identity_verification_report",
+    "conductor_report"
+  ]
+}

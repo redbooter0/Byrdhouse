@@ -1662,6 +1662,103 @@ def main():
               and '"edit_applied"' in (ROOT / "scripts" / "byrdfacezone.py")
                   .read_text(encoding="utf-8-sig"))
 
+        # ── realistic_reactor_refine lane (2026-07-20) ──────────────────────
+        # Preferred conductor lane for stable, front-facing, realistic human
+        # targets. Pure-function proof of the Stage 3 mask policy, Stage 4
+        # denoise clamp, Stage 5 verifier, and the conductor routing — zero GPU.
+        print("== realistic_reactor_refine lane")
+        lane_cfg_path = ROOT / "configs" / "image" / "realistic_reactor_refine.json"
+        check("lane config exists and is valid JSON", lane_cfg_path.is_file())
+        lane_cfg = json.loads(lane_cfg_path.read_text(encoding="utf-8-sig"))
+        check("lane config is flagged non-commercial / private-experiment",
+              lane_cfg["license"]["non_commercial"] is True
+              and "private-local-experiment" in lane_cfg["license"]["scope"])
+        check("lane config keeps the cleanup denoise in the 0.20-0.35 band",
+              lane_cfg["refine"]["denoise_min"] == 0.20
+              and lane_cfg["refine"]["denoise_max"] == 0.35
+              and lane_cfg["refine"]["denoise_refuse_at_or_above"] <= 0.50)
+
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import realistic_reactor_refine as rrr
+        import byrdswap as bswap
+
+        # Stage 4: denoise clamp — refuse the identity-regenerating 0.55, keep 0.28
+        rc = lane_cfg["refine"]
+        d_hi = rrr.clamp_refine_denoise(0.55, rc)
+        d_ok = rrr.clamp_refine_denoise(0.28, rc)
+        d_lo = rrr.clamp_refine_denoise(0.10, rc)
+        check("denoise 0.55 is refused (would regenerate the target identity)",
+              d_hi["refused"] is True and d_hi["denoise"] <= 0.35)
+        check("denoise 0.28 passes through unchanged",
+              d_ok["denoise"] == 0.28 and d_ok["refused"] is False)
+        check("denoise 0.10 clamps up into the band",
+              d_lo["denoise"] == 0.20 and d_lo["clamped"] is True)
+
+        # Stage 5: verifier — every status code reachable, accept only on clean pass
+        vc = lane_cfg["verification"]
+        v_pass = rrr.verify_identity(0.50, True, 10.0, False, vc)
+        v_idf = rrr.verify_identity(0.10, True, 10.0, False, vc)
+        v_unm = rrr.verify_identity(None, True, 10.0, False, vc)
+        v_hair = rrr.verify_identity(0.50, True, 10.0, True, vc)
+        v_seam = rrr.verify_identity(0.50, True, 99.0, False, vc)
+        v_noface = rrr.verify_identity(0.50, False, 10.0, False, vc)
+        check("verifier: clean pass -> IDENTITY_PASS accepted",
+              v_pass["primary_status"] == "IDENTITY_PASS" and v_pass["accepted"] is True)
+        check("verifier: low similarity -> IDENTITY_FAIL rejected",
+              v_idf["primary_status"] == "IDENTITY_FAIL" and v_idf["accepted"] is False)
+        check("verifier: unmeasured identity fails closed",
+              v_unm["primary_status"] == "IDENTITY_FAIL" and v_unm["accepted"] is False)
+        check("verifier: doubled beard -> FACIAL_HAIR_FAIL not accepted",
+              "FACIAL_HAIR_FAIL" in v_hair["statuses"] and v_hair["accepted"] is False)
+        check("verifier: high seam energy -> SEAM_FAIL not accepted",
+              "SEAM_FAIL" in v_seam["statuses"] and v_seam["accepted"] is False)
+        check("verifier: no face -> FACE_DETECTION_FAIL, identity not judged",
+              v_noface["primary_status"] == "FACE_DETECTION_FAIL"
+              and "IDENTITY_PASS" not in v_noface["statuses"]
+              and v_noface["accepted"] is False)
+
+        # Stage 3: facial-hair-aware mask — facial hair INSIDE, scalp OUTSIDE
+        box = [120, 120, 280, 320]
+        masks = rrr.build_facial_identity_mask((400, 500), box, lane_cfg["facial_hair_mask"])
+        bw, bh = box[2] - box[0], box[3] - box[1]
+        cx = (box[0] + box[2]) // 2
+        chin = masks["identity"].getpixel((cx, box[3] - int(bh * 0.05)))
+        scalp_in_ident = masks["identity"].getpixel((cx, box[1] + int(bh * 0.08)))
+        scalp_in_scalp = masks["scalp_exclude"].getpixel((cx, box[1] + int(bh * 0.08)))
+        sideburn = masks["identity"].getpixel((box[0] + int(bw * 0.03), box[1] + int(bh * 0.6)))
+        check("mask: chin/beard is inside the identity zone", chin > 160)
+        check("mask: scalp is OUTSIDE the identity zone", scalp_in_ident < 96)
+        check("mask: scalp is inside the scalp-exclude zone", scalp_in_scalp > 160)
+        check("mask: sideburn is inside the identity zone", sideburn > 120)
+
+        # Conductor routing — realism/frontal signals + lane order
+        def _rep(stability=0.8, yaw=0.1, parser="selfie_multiclass", flags=None):
+            return {"faces": [{"index": 0, "flags": flags or [],
+                               "checks": {"geometry_stability": stability,
+                                          "yaw_asymmetry": yaw, "parser": parser}}]}
+        p_real = bswap.plan_ladder(_rep(), reactor_available=True, has_references=True,
+                                   identity_photo="p.jpg")
+        check("conductor: stable+frontal+realistic -> realistic_reactor_refine is FIRST",
+              p_real["lanes"] and p_real["lanes"][0]["lane"] == "realistic_reactor_refine"
+              and "quality_photo_anchored" in [l["lane"] for l in p_real["lanes"]])
+        p_anime = bswap.plan_ladder(_rep(parser="parsenet-anime-fallback"),
+                                    reactor_available=True, has_references=True,
+                                    identity_photo="p.jpg", lora="carey_v2")
+        check("conductor: anime target never gets the reactor lane",
+              "realistic_reactor_refine" not in [l["lane"] for l in p_anime["lanes"]]
+              and p_anime["realism"] == "stylized")
+        p_noreactor = bswap.plan_ladder(_rep(), reactor_available=False,
+                                        has_references=True, identity_photo="p.jpg")
+        check("conductor: no ReActor installed -> lane skipped, photo-anchored still runs",
+              "realistic_reactor_refine" in [s["lane"] for s in p_noreactor["skipped"]]
+              and [l["lane"] for l in p_noreactor["lanes"]] == ["quality_photo_anchored"])
+        p_profile = bswap.plan_ladder(_rep(yaw=0.45, flags=["strong_profile — strains"]),
+                                      reactor_available=True, has_references=True,
+                                      identity_photo="p.jpg")
+        check("conductor: non-frontal/profile target does not get the reactor lane",
+              p_profile["frontal"] is False
+              and "realistic_reactor_refine" not in [l["lane"] for l in p_profile["lanes"]])
+
         print("== stats + report + dashboard")
         st = api("/stats")
         check("stats counts artifacts", st["artifacts_total"] >= 4, str(st))

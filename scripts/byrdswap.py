@@ -95,11 +95,72 @@ def find_identity_photo(root: Path, profile: str = "me"):
     return None
 
 
+def _reactor_available(root: Path) -> bool:
+    """The realistic lane needs the ReActor node reachable in ComfyUI. Checked
+    against the live server (like byrdcast); False when ComfyUI is down or the
+    node is absent, so the conductor cleanly falls back instead of guessing."""
+    try:
+        import byrdcast_swap as bcs
+        comfy = bcs.comfy_url(root)
+        return bool(comfy) and bcs.comfy_has_node(comfy, "ReActorFaceSwap")
+    except Exception:
+        return False
+
+
+def _first_face(face_report: dict, face_index: int = 0) -> dict:
+    faces = {f.get("index"): f for f in face_report.get("faces", [])}
+    return faces.get(face_index) or (face_report.get("faces") or [{}])[0]
+
+
+def classify_realism(face_report: dict, face_index: int = 0) -> str:
+    """'realistic' | 'stylized' | 'unknown' from the examiner's own signals.
+
+    The examiner's semantic parser falls back to the eval-only anime parser on
+    stylized art; when it stays on the real-photo selfie parser the target is a
+    real/photoreal face. A recorded face embedding (insightface) is a second
+    realistic signal (anime faces rarely embed). Unknown when neither is present
+    — the conductor then does NOT claim a realistic target and keeps the safe
+    (free) lane order.
+    """
+    face = _first_face(face_report, face_index)
+    checks = dict(face.get("checks") or {})
+    parser = str(checks.get("parser") or "").lower()
+    if "anime" in parser or "parsenet" in parser:
+        return "stylized"
+    if face.get("embedding") or checks.get("has_embedding"):
+        return "realistic"
+    if parser and "selfie" in parser:
+        return "realistic"
+    return "unknown"
+
+
+def is_frontal(face_report: dict, face_index: int = 0, max_yaw: float = 0.28) -> bool:
+    """Front-facing when the examiner's yaw proxy is low and no strong_profile
+    flag is set. Fail-safe: unknown yaw -> not frontal (conductor won't claim it)."""
+    face = _first_face(face_report, face_index)
+    checks = dict(face.get("checks") or {})
+    if "strong_profile" in " ".join(face.get("flags") or []):
+        return False
+    yaw = checks.get("yaw_asymmetry")
+    if yaw is None:
+        return False
+    return float(yaw) <= max_yaw
+
+
 def plan_ladder(face_report: dict, face_index: int = 0, lora: str | None = None,
                 identity_photo: str | None = None,
-                ipadapter_graph_exists: bool = True) -> dict:
+                ipadapter_graph_exists: bool = True,
+                reactor_available: bool = False,
+                has_references: bool = False) -> dict:
     """Pure decision function: examiner report -> ordered lane plan.
-    Never touches the network/GPU, so the bot's judgment is unit-testable."""
+    Never touches the network/GPU, so the bot's judgment is unit-testable.
+
+    For a STABLE, FRONT-FACING, REALISTIC human target the preferred lane is
+    realistic_reactor_refine (explicit identity transfer + facial-hair mask +
+    low-denoise cleanup + verification) — a stable realistic target must NOT be
+    sent straight into the anime edit lane without an identity transfer. The
+    free/license-clean quality_photo_anchored stays as the fallback below it.
+    """
     gate = byrdimage.geometry_gate(face_report, face_index)
     lanes, skipped = [], []
     if not gate["mesh_case_allowed"]:
@@ -112,6 +173,20 @@ def plan_ladder(face_report: dict, face_index: int = 0, lora: str | None = None,
                     "facelab.ps1 zone -Image <target> -Mask <approved_mask.png>"
                     + (f" -Lora {lora}" if lora else " -Lora <preview-lora>"),
                 ]}
+    realism = classify_realism(face_report, face_index)
+    frontal = is_frontal(face_report, face_index)
+    # Preferred realistic lane: stable + frontal + realistic + ReActor installed.
+    if realism == "realistic" and frontal and reactor_available and has_references:
+        lanes.append({"lane": "realistic_reactor_refine",
+                      "why": "stable front-facing realistic target: ReActor identity "
+                             "transfer, facial-hair mask, low-denoise cleanup, verified",
+                      "engine": {"non_commercial": True}})
+    elif realism == "realistic" and frontal and reactor_available and not has_references:
+        skipped.append({"lane": "realistic_reactor_refine",
+                        "why_skipped": "no reference photo in profiles/me/references"})
+    elif realism == "realistic" and frontal and not reactor_available:
+        skipped.append({"lane": "realistic_reactor_refine",
+                        "why_skipped": "ReActor/inswapper not installed (Face Lab preflight)"})
     if ipadapter_graph_exists and identity_photo:
         lanes.append({"lane": "quality_photo_anchored",
                       "why": "license-clean identity from a real photo; no LoRA needed",
@@ -132,7 +207,8 @@ def plan_ladder(face_report: dict, face_index: int = 0, lora: str | None = None,
         skipped.append({"lane": "quality_lora_mesh",
                         "why_skipped": "no deployed identity LoRA; pass --lora to use a private preview"})
         skipped.append({"lane": "auto_facedetailer", "why_skipped": "same — needs an explicit LoRA"})
-    plan = {"gate": gate, "lanes": lanes, "skipped": skipped}
+    plan = {"gate": gate, "lanes": lanes, "skipped": skipped,
+            "realism": realism, "frontal": frontal}
     if not lanes:
         plan["stop_reason"] = ("no runnable lane: add a reference photo to "
                                "profiles/me/references (free lane) or pass --lora")
@@ -198,8 +274,14 @@ def run(argv=None) -> int:
 
     # 2. decide
     photo = find_identity_photo(root, args.profile)
+    refs_dir = root / "profiles" / args.profile / "references"
+    has_refs = refs_dir.is_dir() and any(
+        p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".bmp")
+        for p in refs_dir.iterdir()) if refs_dir.is_dir() else False
+    reactor_available = _reactor_available(root)
     plan = plan_ladder(report, lora=args.lora, identity_photo=photo,
-                       ipadapter_graph_exists=(root / PHOTO_ANCHOR_WORKFLOW).is_file())
+                       ipadapter_graph_exists=(root / PHOTO_ANCHOR_WORKFLOW).is_file(),
+                       reactor_available=reactor_available, has_references=has_refs)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_log = {"target": str(target), "started": stamp, "plan": plan, "attempts": []}
     out_dir = root / "logs" / "byrdswap"
@@ -232,6 +314,21 @@ def run(argv=None) -> int:
         print(f"[byrdswap] === attempting {name} ===")
         attempt = {"lane": name, "started": datetime.now().isoformat()}
         try:
+            if name == "realistic_reactor_refine":
+                import realistic_reactor_refine as rrr
+                rc = rrr.run(["--image", str(target), "--profile", args.profile,
+                              "--project", args.project, "--root", str(root)])
+                # rc: 0 accepted, 1 verified-but-rejected, 2/3 could-not-run
+                attempt.update({"result": "ok" if rc == 0 else "rejected", "exit": rc})
+                run_log["attempts"].append(attempt)
+                if rc == 0:
+                    run_log["outcome"] = {"lane": name, "exit": rc}
+                    save()
+                    print(f"[byrdswap] DONE via {name} (verified identity)")
+                    print(f"[byrdswap] report: {report_file}")
+                    return 0
+                print(f"[byrdswap] {name} did not pass verification (exit {rc}) — falling back")
+                continue
             if name in ("quality_photo_anchored", "quality_lora_mesh"):
                 job_id, saved = byrdimage.edit_face_zone(
                     root, args.recipe, target, args.project,

@@ -16,6 +16,9 @@ Every lane, by hand, for the founder or Codex:
     auto     -Image X [-Lora name] [-Prompt "..."]
                                     backup: detector finds the face, redraws as you
     swap     -Image X [-Blend 0.35] backup (private experiments): ReActor + blend
+    reactor  -Image X [-Denoise 0.28] realistic targets: ReActor identity transfer +
+                                    facial-hair mask + low-denoise cleanup + verify
+                                    (NON-COMMERCIAL / private-experiment only)
     collect  [-Dataset carey_face]  move newest generated images into the dataset
     train    [-Dataset carey_face]  new versioned LoRA (never overwrites)
     help                            this text
@@ -138,6 +141,21 @@ switch ($Command.ToLower()) {
         & $sysPython $preflightPy --run $Image --blend $Blend
         exit $LASTEXITCODE
     }
+    "reactor" {
+        # realistic_reactor_refine: the preferred lane for a STABLE, FRONT-FACING,
+        # REALISTIC human target. Ranks the identity references, ReActor identity
+        # transfer (inswapper_128), facial-hair-aware mask, LOW-denoise cleanup
+        # (0.20-0.35), then verifies vs Carey with explicit status codes. The
+        # conductor (facelab run) auto-picks this lane for such targets; this verb
+        # forces it. NON-COMMERCIAL / private-experiment only (inswapper license).
+        Need-Image
+        $args2 = @((Join-Path $root "scripts\realistic_reactor_refine.py"),
+                   "--image", $Image, "--project", $Project, "--root", $root)
+        if ($Denoise -gt 0) { $args2 += @("--denoise", "$Denoise") }
+        if ($Quick) { $args2 += "--plan" }
+        & $comfyPython @args2
+        exit $LASTEXITCODE
+    }
     "collect" {
         & powershell -ExecutionPolicy Bypass -File (Join-Path $root "scripts\collect-training-images.ps1") -Name $Dataset
         exit $LASTEXITCODE
@@ -147,6 +165,6 @@ switch ($Command.ToLower()) {
         exit $LASTEXITCODE
     }
     default {
-        Get-Content $PSCommandPath | Select-Object -First 28 | ForEach-Object { $_ -replace "^#? ?", "" }
+        Get-Content $PSCommandPath | Select-Object -First 31 | ForEach-Object { $_ -replace "^#? ?", "" }
     }
 }
