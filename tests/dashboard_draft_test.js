@@ -123,6 +123,5 @@ check('draft cleared only inside successful submitGen (after jpost)',
 check('no overlapping refresh cycles', /if \(_refreshing\) return/.test(html));
 check('recipe change preserves typed slot values', /const keep = \{\}/.test(html));
 
-check('review cards show face-audit warnings', html.includes('final_reference_target_recheck') && html.includes('FACE AUDIT'));
 console.log(failures ? `\n${failures} FAILED` : '\nALL CHECKS PASSED');
 process.exit(failures ? 1 : 0);

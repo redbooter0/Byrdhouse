@@ -1626,7 +1626,7 @@ def main():
         fsrc = byrdswap.finish_source(fin_img)
         check("finish re-renders from the immutable original with the same seed",
               fsrc["original"] == "E:/originals/vegeta.jpg" and fsrc["seed"] == 99
-              and fsrc["recipe"] == "anime_face_zone_edit.v2"
+              and fsrc["recipe"] == "anime_face_zone_edit@2"
               and fsrc["engine"] == {"crop_size": 640})
         bare = ROOT / "artifacts" / "bare.png"
         bare.write_bytes(b"png")

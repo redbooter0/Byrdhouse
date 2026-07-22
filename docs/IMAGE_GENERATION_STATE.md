@@ -361,3 +361,26 @@ Codified in `scripts/byrdswap.py` (the conductor):
 
 Hardware-unverified until the PC runs it; record results here.
 2026-07-21 - Realistic-photo face swap correction: rejected the bad LeBron anime-painted output from `quality_photo_anchored` (`job_19f87bfb826pwcfm4`) because the conductor had fallen through to `anime_face_zone_edit@2` with a shonen prompt and denoise 0.55. Patched `byrdswap.py` so realistic human photos no longer use the anime face-zone fallback; they must pass `realistic_reactor_refine` or stop. Verified direct private ReActor baseline with no blend on the front-facing LeBron target: `artifacts/sandbox/2026-07/20260721_swap_job_19f87c54e8abe6jbl_00001_.png`. `facelab_preflight.py` logging is ASCII-safe on Windows.
+
+## 2026-07-22 - RTX 3070 anime target closure run
+
+The live GAMING worker completed the bounded Vegeta/Luffy hardware sweep after the face-zone belt repairs. This is an implementation milestone, not a visual-identity approval: anime outputs that cannot produce a reliable ArcFace/CLIP identity measurement remain `needs_review`. Framing or a brown skin recolor is never accepted as proof of Carey likeness.
+
+### Repairs proven on hardware
+
+- FINISH now preserves the canonical recipe selector (`anime_face_zone_edit@1`, not the invalid `.v1` form) and always rebuilds generation 1 from the recorded immutable target.
+- A reviewed manual recovery ellipse is a hard upper bound. Semantic parsing may refine/subtract inside it but cannot flood beyond it, and it no longer invents unreviewed ear boxes.
+- Temporary top padding is working space only. It never replaces the immutable source, and the compositor clamps every generated/mask/protected layer back to the original source dimensions.
+- Border contact above 5 percent is a hard rejection. Exact outside-mask preservation remains mandatory.
+- `engine.ipadapter_weight` is job-scoped and recorded, so identity influence can be swept without editing the workflow JSON.
+- Every candidate now receives a separate `likeness_acceptance` result. An unavailable anime embedding fails closed to `needs_review`; `output_acceptance` cannot stand in for identity.
+
+### Recorded candidates
+
+- Vegeta strongest structural candidate: `artifacts/careyrpg/2026-07/20260722_anime_face_zone_edit_job_19f8ae98a70ny49tr_00001_.png` (mesh 0.85, 1024x568, border leak 0, outside-mask preservation true, target eyes restored, framing true). Visual Carey likeness remains founder review.
+- Luffy strongest identity-influence candidate: `artifacts/careyrpg/2026-07/20260722_anime_face_zone_edit_job_19f8af4239akvphcs_00001_.png` (IP-Adapter Plus Face weight 1.10, 1024x568, border leak 0.0286, outside-mask preservation true). The target crop still triggers `face_cropped_bottom`; visual Carey likeness remains founder review.
+- Comparison sheet: `artifacts/image_lab/2026-07/vegeta_luffy_final_comparison_20260722.jpg`.
+
+### Release verdict
+
+The universal mask/composite/card path is hardware-proven and the full integration suite is green. Gojo remains the visual benchmark. Vegeta and Luffy are intentionally not marked approved until the founder accepts their likeness at normal viewing size. ParseNet and Meina remain private-local-evaluation dependencies pending commercial license replacement/review.

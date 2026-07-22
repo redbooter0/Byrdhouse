@@ -94,7 +94,7 @@ def finish_source(image: Path) -> dict:
             "lora": rep.get("lora", card.get("lora")),
             "preset": rep.get("target_preset", card.get("target_preset") or "auto"),
             "engine": dict(rep.get("engine") or {}),
-            "recipe": f"{rid}.v{rver}" if rver else rid,
+            "recipe": f"{rid}@{rver}" if rver else rid,
             "from_job": card.get("job_id")}
 
 

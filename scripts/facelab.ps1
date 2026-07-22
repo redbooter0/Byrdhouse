@@ -16,6 +16,9 @@ Every lane, by hand, for the founder or Codex:
     auto     -Image X [-Lora name] [-Prompt "..."]
                                     backup: detector finds the face, redraws as you
     swap     -Image X [-Blend 0.35] backup (private experiments): ReActor + blend
+    reactor  -Image X [-Denoise 0.28] realistic targets: ReActor identity transfer +
+                                    facial-hair mask + low-denoise cleanup + verify
+                                    (NON-COMMERCIAL / private-experiment only)
     collect  [-Dataset carey_face]  move newest generated images into the dataset
     train    [-Dataset carey_face]  new versioned LoRA (never overwrites)
     help                            this text
@@ -28,12 +31,6 @@ param(
     [string]$Mask,
     [string]$Preset = "auto",
     [string]$Workflow,
-    [string]$Recipe,
-    [long]$Seed = 0,
-    [string]$IdentityPhoto,
-    [string]$IdentityReference,
-    [switch]$TargetCropSeed,
-    [switch]$PreserveTargetFeatures,
     [int]$FaceIndex = 0,
     [string]$Lora,
     [string]$Prompt,
@@ -58,7 +55,7 @@ $byrdimage = Join-Path $root "scripts\byrdimage.py"
 $preflightPy = Join-Path $root "scripts\facelab_preflight.py"
 
 function Need-Image {
-    if (-not $Image) { Write-Host "-Image <path> is required for this command" -ForegroundColor Red; exit 1 }
+    if (-not $Image) { Write-Host '-Image <path> is required for this command' -ForegroundColor Red; exit 1 }
     if (-not (Test-Path $Image)) { Write-Host "image not found: $Image" -ForegroundColor Red; exit 1 }
 }
 if (-not $Purpose) { $Purpose = "$Command via facelab.ps1" }
@@ -75,24 +72,47 @@ switch ($Command.ToLower()) {
         & $comfyPython @args2
         exit $LASTEXITCODE
     }
+    "run" {
+        Need-Image
+        $args2 = @((Join-Path $root "scripts\byrdswap.py"), "--image", $Image, "--root", $root)
+        if ($Lora) { $args2 += @("--lora", $Lora) }
+        if ($Preset -ne "auto") { $args2 += @("--preset", $Preset) }
+        if ($Quick) { $args2 += "--plan" }
+        & $comfyPython @args2
+        exit $LASTEXITCODE
+    }
+    "finish" {
+        Need-Image
+        $args2 = @((Join-Path $root "scripts\byrdswap.py"), "--image", $Image, "--root", $root, "--finish")
+        if ($Lora) { $args2 += @("--lora", $Lora) }
+        & $comfyPython @args2
+        exit $LASTEXITCODE
+    }
     "quality" {
         Need-Image
+        $workflowAliases = @{
+            'diffdiff'       = 'workflows/sd15_face_zone_diffdiff_api.json'
+            'diffdiff-canny' = 'workflows/sd15_face_zone_diffdiff_canny_api.json'
+            'controlnet'     = 'workflows/sd15_face_zone_controlnet_api.json'
+            'ipadapter'      = 'workflows/sd15_face_zone_ipadapter_api.json'
+        }
+        if ($Workflow -and $workflowAliases.ContainsKey($Workflow.ToLower())) {
+            $Workflow = $workflowAliases[$Workflow.ToLower()]
+        }
+        $identityPhoto = Get-ChildItem (Join-Path $root 'profiles\me\references') -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like 'me_photo_*' -or $_.Extension -in '.jpg', '.jpeg', '.png' } |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
         $args2 = @($byrdimage, "--edit-face-zone", $Image, "--face-preset", $Preset,
                    "--face-index", "$FaceIndex", "--project", $Project, "--purpose", $Purpose)
+        if ($identityPhoto) { $args2 += @("--identity-photo", $identityPhoto.FullName) }
         if ($Workflow) { $args2 += @("--workflow", $Workflow) }
-        if ($Recipe) { $args2 += @("--face-recipe", $Recipe) }
-        if ($Seed -gt 0) { $args2 += @("--face-seed", "$Seed") }
-        if ($IdentityPhoto) { $args2 += @("--identity-photo", $IdentityPhoto) }
-        if ($IdentityReference) { $args2 += @("--identity-reference", $IdentityReference) }
-        if ($TargetCropSeed) { $args2 += "--target-crop-seed" }
-        if ($PreserveTargetFeatures) { $args2 += "--preserve-target-features" }
         if ($Lora) { $args2 += @("--lora", $Lora) }
         & $sysPython @args2
         exit $LASTEXITCODE
     }
     "zone" {
         Need-Image
-        if (-not $Mask) { Write-Host "-Mask <path> is required (white = change zone)" -ForegroundColor Red; exit 1 }
+        if (-not $Mask) { Write-Host '-Mask <path> is required (white = change zone)' -ForegroundColor Red; exit 1 }
         $args2 = @($byrdimage, "--swap-target", $Image, "--swap-mask", $Mask,
                    "--project", $Project, "--purpose", $Purpose)
         if ($Lora) { $args2 += @("--lora", $Lora) }
@@ -103,8 +123,12 @@ switch ($Command.ToLower()) {
     }
     "auto" {
         Need-Image
+        $identityPhoto = Get-ChildItem (Join-Path $root 'profiles\me\references') -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like 'me_photo_*' -or $_.Extension -in '.jpg', '.jpeg', '.png' } |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
         $args2 = @($byrdimage, "--swap-target", $Image, "--auto",
                    "--project", $Project, "--purpose", $Purpose)
+        if ($identityPhoto) { $args2 += @("--identity-photo", $identityPhoto.FullName) }
         if ($Lora) { $args2 += @("--lora", $Lora) }
         if ($Prompt) { $args2 += @("--prompt", $Prompt) }
         & $sysPython @args2
@@ -113,6 +137,15 @@ switch ($Command.ToLower()) {
     "swap" {
         Need-Image
         & $sysPython $preflightPy --run $Image --blend $Blend
+        exit $LASTEXITCODE
+    }
+    "reactor" {
+        Need-Image
+        $args2 = @((Join-Path $root "scripts\realistic_reactor_refine.py"),
+                   "--image", $Image, "--project", $Project, "--root", $root)
+        if ($Denoise -gt 0) { $args2 += @("--denoise", "$Denoise") }
+        if ($Quick) { $args2 += "--plan" }
+        & $comfyPython @args2
         exit $LASTEXITCODE
     }
     "collect" {
@@ -124,6 +157,6 @@ switch ($Command.ToLower()) {
         exit $LASTEXITCODE
     }
     default {
-        Get-Content $PSCommandPath | Select-Object -First 28 | ForEach-Object { $_ -replace "^#? ?", "" }
+        Get-Content $PSCommandPath | Select-Object -First 31 | ForEach-Object { $_ -replace '^#? ?', '' }
     }
 }
