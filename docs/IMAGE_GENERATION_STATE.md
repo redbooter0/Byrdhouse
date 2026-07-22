@@ -360,3 +360,4 @@ Codified in `scripts/byrdswap.py` (the conductor):
   command for the Vegeta.
 
 Hardware-unverified until the PC runs it; record results here.
+2026-07-21 - Realistic-photo face swap correction: rejected the bad LeBron anime-painted output from `quality_photo_anchored` (`job_19f87bfb826pwcfm4`) because the conductor had fallen through to `anime_face_zone_edit@2` with a shonen prompt and denoise 0.55. Patched `byrdswap.py` so realistic human photos no longer use the anime face-zone fallback; they must pass `realistic_reactor_refine` or stop. Verified direct private ReActor baseline with no blend on the front-facing LeBron target: `artifacts/sandbox/2026-07/20260721_swap_job_19f87c54e8abe6jbl_00001_.png`. `facelab_preflight.py` logging is ASCII-safe on Windows.

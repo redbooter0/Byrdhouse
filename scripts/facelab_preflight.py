@@ -1,12 +1,12 @@
 """
-facelab_preflight.py — prove the face-swap FUNCTION works on this machine.
+facelab_preflight.py - prove the face-swap FUNCTION works on this machine.
 
 Runs on BYRD-GAMING against the REAL ComfyUI (MINI/router/dashboard not needed):
 
   1. Asks ComfyUI itself whether the ReActor node pack is installed
      (GET /object_info/ReActorFaceSwap) and which swap/restore models it can see.
   2. Cross-checks our workflow JSONs input-by-input against the LIVE node schema,
-     so a ReActor version drift is caught here — not as a cryptic job failure.
+     so a ReActor version drift is caught here - not as a cryptic job failure.
   3. Checks a face photo exists in profiles/me/references.
   4. --run: performs a REAL swap through byrdimage.faceswap() and prints the
      output PNG path. That is the function, end to end, on real pixels.
@@ -29,13 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import byrdimage  # noqa: E402
 
-# Windows consoles often default to cp1252, which can't encode the ✓/✗
-# markers below and would crash mid-check instead of reporting exit 2.
-if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
-    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-
 PROBLEMS = []
-WARNINGS = []
 
 
 def say(msg):
@@ -44,17 +38,11 @@ def say(msg):
 
 def problem(msg, fix):
     PROBLEMS.append(msg)
-    print(f"[facelab] ✗ {msg}\n          fix: {fix}")
-
-
-def warning(msg, fix):
-    """Report a missing optional lane without disabling direct swap."""
-    WARNINGS.append(msg)
-    print(f"[facelab] ! {msg}\n          optional fix: {fix}")
+    print(f"[facelab] ERROR: {msg}\n          fix: {fix}")
 
 
 def ok(msg):
-    print(f"[facelab] ✓ {msg}")
+    print(f"[facelab] OK: {msg}")
 
 
 def get_json(url, timeout=15):
@@ -92,25 +80,25 @@ def main():
     img_cfg = cfg.get("image", {})
     say(f"ComfyUI: {comfy}")
 
-    # ── 1. is ComfyUI up, and is ReActor installed? ──────────────────────────
+    # -- 1. is ComfyUI up, and is ReActor installed? --------------------------
     try:
         info = get_json(f"{comfy}/object_info/ReActorFaceSwap")
     except Exception as e:
-        say(f"✗ ComfyUI unreachable at {comfy}: {e}")
+        say(f"ERROR: ComfyUI unreachable at {comfy}: {e}")
         say("  start it first (start-byrdhouse.ps1 or the ComfyUI launcher), then rerun")
         sys.exit(2)
     spec = info.get("ReActorFaceSwap")
     if not spec:
         problem("ReActor node pack is NOT installed in this ComfyUI",
-                "ComfyUI Manager → search 'ReActor' → Install → restart ComfyUI "
+                "ComfyUI Manager -> search 'ReActor' -> Install -> restart ComfyUI "
                 "(or git clone https://github.com/Gourieff/ComfyUI-ReActor into "
-                "custom_nodes and run install.bat) — see docs/MODELS.md")
+                "custom_nodes and run install.bat) - see docs/MODELS.md")
         finish()
 
     live = node_inputs(spec)
     ok("ReActor node pack installed")
 
-    # ── 2. swap/restore models the live node can actually see ────────────────
+    # -- 2. swap/restore models the live node can actually see ----------------
     swap_models = live.get("swap_model") if isinstance(live.get("swap_model"), list) else []
     if any("inswapper_128" in str(m) for m in swap_models):
         ok("inswapper_128.onnx visible to ReActor")
@@ -127,7 +115,7 @@ def main():
                 "download GFPGANv1.4.pth into ComfyUI\\models\\facerestore_models, "
                 "or set image.faceswap_restore to one you have ('none' works too)")
 
-    # ── 3. our graphs must match the LIVE node schema (version-drift guard) ──
+    # -- 3. our graphs must match the LIVE node schema (version-drift guard) --
     for wf_key, wf_default in (("faceswap_workflow", "workflows/reactor_faceswap_api.json"),
                                ("faceswap_blend_workflow", "workflows/reactor_faceswap_blend_api.json")):
         wf_rel = img_cfg.get(wf_key, wf_default)
@@ -141,12 +129,12 @@ def main():
         unknown = [k for k in unknown if k not in live]
         if unknown:
             problem(f"{wf_rel}: node inputs {unknown} not accepted by the installed ReActor",
-                    "the node pack version changed its schema — update the workflow "
+                    "the node pack version changed its schema - update the workflow "
                     "or the node pack so they agree")
         else:
             ok(f"{wf_rel} matches the installed ReActor schema")
 
-    # ── 3b. AUTO route: FaceDetailer + face detector (the daily driver) ──────
+    # -- 3b. AUTO route: FaceDetailer + face detector (the daily driver) ------
     try:
         fd_info = get_json(f"{comfy}/object_info/FaceDetailer")
         det_info = get_json(f"{comfy}/object_info/UltralyticsDetectorProvider")
@@ -161,29 +149,26 @@ def main():
         if seg_info.get("BboxDetectorSEGS"):
             ok("zone preview nodes available (BboxDetectorSEGS)")
         else:
-            reporter = problem if args.route == "auto" and args.run else warning
-            reporter("BboxDetectorSEGS missing — the zone-preview route needs it",
-                     "it ships with Impact Pack; update the pack via ComfyUI Manager")
+            problem("BboxDetectorSEGS missing - the CPU zone-preview route needs it",
+                    "it ships with Impact Pack; update the pack via ComfyUI Manager")
         det_live = node_inputs(det_info["UltralyticsDetectorProvider"])
         det_models = det_live.get("model_name") if isinstance(det_live.get("model_name"), list) else []
         det_want = img_cfg.get("faceswap_detector", "bbox/face_yolov8m.pt")
         if any(det_want in str(m) for m in det_models):
             ok(f"face detector {det_want} available")
         else:
-            reporter = problem if args.route == "auto" and args.run else warning
-            reporter(f"face detector {det_want} not visible ({det_models[:5] or 'none'})",
+            problem(f"face detector {det_want} not visible ({det_models[:5] or 'none'})",
                     "ComfyUI Manager -> Model Manager -> install face_yolov8m.pt "
                     "(goes to models\\ultralytics\\bbox), or set image.faceswap_detector "
                     "to one you have")
     else:
-        reporter = problem if args.route == "auto" and args.run else warning
-        reporter("Impact Pack nodes missing — the AUTO route (one-step 'redraw as me') needs them",
+        problem("Impact Pack nodes missing - the AUTO route (one-step 'redraw as me') needs them",
                 "ComfyUI Manager -> install 'ComfyUI Impact Pack' AND 'ComfyUI Impact Subpack', "
                 "restart ComfyUI (the face_yolov8m.pt detector installs with the Subpack)")
 
-    # ── 3c. quality lane v2: ControlNet-guided cleanup (the GPU that earns
-    #        its keep — canny edges hold identity while denoise 0.55 redraws
-    #        the full zone). Core nodes; only the model file is a download. ──
+    # -- 3c. quality lane v2: ControlNet-guided cleanup (the GPU that earns
+    #        its keep - canny edges hold identity while denoise 0.55 redraws
+    #        the full zone). Core nodes; only the model file is a download. --
     try:
         cn_info = get_json(f"{comfy}/object_info/ControlNetLoader")
     except Exception:
@@ -194,13 +179,17 @@ def main():
         if any("control_v11p_sd15_canny" in str(m) for m in cn_models):
             ok("ControlNet canny model available (guided face-zone cleanup v2)")
         else:
-            warning("control_v11p_sd15_canny.safetensors not in models\\controlnet — "
-                    "the v3 guided cleanup (anime_face_zone_edit@3) needs it",
+            problem("control_v11p_sd15_canny.safetensors not in models\\controlnet - "
+                    "the v3 guided cleanup (anime_face_zone_edit@3) AND the COMBINED "
+                    "diffdiff-canny graph (sd15_face_zone_diffdiff_canny_api.json) need it; "
+                    "byrdimage now refuses those graphs before submit while it is missing. "
+                    "The TRUE diffdiff graph (sd15_face_zone_diffdiff_api.json) needs NO "
+                    "ControlNet and keeps working",
                     "download from huggingface.co/lllyasviel/ControlNet-v1-1 "
                     "(control_v11p_sd15_canny.safetensors, openrail/commercial-OK) into "
-                    "ComfyUI\\models\\controlnet — see docs/MODELS.md")
+                    "ComfyUI\\models\\controlnet - see docs/MODELS.md")
 
-    # ── 3d. avenue checks: diff-diffusion (core) + IP-Adapter PLUS FACE ──────
+    # -- 3d. avenue checks: diff-diffusion (core) + IP-Adapter PLUS FACE ------
     try:
         dd_info = get_json(f"{comfy}/object_info/DifferentialDiffusion")
     except Exception:
@@ -208,8 +197,8 @@ def main():
     if dd_info.get("DifferentialDiffusion"):
         ok("DifferentialDiffusion available (avenue A: seam-killer variant)")
     else:
-        warning("DifferentialDiffusion node missing — avenue A needs it",
-                "it is a CORE ComfyUI node — update ComfyUI itself (git pull / "
+        problem("DifferentialDiffusion node missing - avenue A needs it",
+                "it is a CORE ComfyUI node - update ComfyUI itself (git pull / "
                 "update_comfyui.bat), no pack or model required")
     try:
         ipa_info = get_json(f"{comfy}/object_info/IPAdapterUnifiedLoader")
@@ -218,13 +207,13 @@ def main():
     if ipa_info.get("IPAdapterUnifiedLoader"):
         ok("IPAdapter nodes available (avenue B: real-photo identity anchor)")
     else:
-        warning("ComfyUI_IPAdapter_plus missing — avenue B (IP-Adapter PLUS FACE) needs it",
+        problem("ComfyUI_IPAdapter_plus missing - avenue B (IP-Adapter PLUS FACE) needs it",
                 "ComfyUI Manager -> install 'ComfyUI_IPAdapter_plus' (cubiq), restart; "
                 "models: ip-adapter-plus-face_sd15.safetensors -> models\\ipadapter and "
                 "the SD1.5 CLIP-ViT-H image encoder -> models\\clip_vision "
-                "(h94/IP-Adapter, Apache-2.0 — docs/MODELS.md)")
+                "(h94/IP-Adapter, Apache-2.0 - docs/MODELS.md)")
 
-    # ── 4. face photo ─────────────────────────────────────────────────────────
+    # -- 4. face photo ---------------------------------------------------------
     refs = root / "profiles" / "me" / "references"
     photos = [f for f in refs.glob("*") if f.suffix.lower() in (".jpg", ".jpeg", ".png")] \
         if refs.is_dir() else []
@@ -237,9 +226,9 @@ def main():
     if not args.run:
         finish()
 
-    # ── 5. the PROOF: a real swap through the real function ──────────────────
+    # -- 5. the PROOF: a real swap through the real function ------------------
     if PROBLEMS:
-        say("not running the swap — fix the ✗ items above first")
+        say("not running the swap - fix the ✗ items above first")
         sys.exit(2)
     target = Path(args.run)
     if args.route == "auto":
@@ -258,10 +247,9 @@ def main():
 
 def finish():
     if PROBLEMS:
-        say(f"NOT READY — {len(PROBLEMS)} problem(s) listed above")
+        say(f"NOT READY - {len(PROBLEMS)} problem(s) listed above")
         sys.exit(2)
-    suffix = f" ({len(WARNINGS)} optional lane warning(s))" if WARNINGS else ""
-    say(f"READY — the direct face-swap function is proven on this machine{suffix}")
+    say("READY - the face-swap function is proven on this machine" )
     sys.exit(0)
 
 

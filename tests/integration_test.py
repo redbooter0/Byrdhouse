@@ -761,8 +761,11 @@ def main():
         check("faceswap artifact archived with a card", len(swaps) == 1, str(len(swaps)))
         if swaps:
             meta = json.loads(swaps[0]["meta"])
+            face_source = str(meta.get("face_source", ""))
             check("swap card records face source + target + reactor workflow",
-                  meta.get("face_source", "").endswith("front.jpg")
+                  face_source
+                  and "profiles" in face_source
+                  and "references" in face_source
                   and meta.get("swap_target")
                   and "reactor_faceswap_api" in meta.get("workflow", ""), str(meta))
             check("direct swap card is honest: no seed, no checkpoint",
@@ -1740,7 +1743,8 @@ def main():
                                    identity_photo="p.jpg")
         check("conductor: stable+frontal+realistic -> realistic_reactor_refine is FIRST",
               p_real["lanes"] and p_real["lanes"][0]["lane"] == "realistic_reactor_refine"
-              and "quality_photo_anchored" in [l["lane"] for l in p_real["lanes"]])
+              and "quality_photo_anchored" not in [l["lane"] for l in p_real["lanes"]]
+              and "quality_photo_anchored" in [s["lane"] for s in p_real["skipped"]])
         p_anime = bswap.plan_ladder(_rep(parser="parsenet-anime-fallback"),
                                     reactor_available=True, has_references=True,
                                     identity_photo="p.jpg", lora="carey_v2")
@@ -1749,15 +1753,17 @@ def main():
               and p_anime["realism"] == "stylized")
         p_noreactor = bswap.plan_ladder(_rep(), reactor_available=False,
                                         has_references=True, identity_photo="p.jpg")
-        check("conductor: no ReActor installed -> lane skipped, photo-anchored still runs",
+        check("conductor: no ReActor installed -> realistic photo stops instead of anime fallback",
               "realistic_reactor_refine" in [s["lane"] for s in p_noreactor["skipped"]]
-              and [l["lane"] for l in p_noreactor["lanes"]] == ["quality_photo_anchored"])
+              and "quality_photo_anchored" in [s["lane"] for s in p_noreactor["skipped"]]
+              and p_noreactor["lanes"] == [])
         p_profile = bswap.plan_ladder(_rep(yaw=0.45, flags=["strong_profile — strains"]),
                                       reactor_available=True, has_references=True,
                                       identity_photo="p.jpg")
         check("conductor: non-frontal/profile target does not get the reactor lane",
               p_profile["frontal"] is False
-              and "realistic_reactor_refine" not in [l["lane"] for l in p_profile["lanes"]])
+              and "realistic_reactor_refine" not in [l["lane"] for l in p_profile["lanes"]]
+              and "quality_photo_anchored" not in [l["lane"] for l in p_profile["lanes"]])
 
         # ── examiner-schema normalization (2026-07-20 baseline stall) ────────
         # The REAL report nests geometry_stability/parser under "thorough" and
