@@ -1,0 +1,64 @@
+{
+  "_comment": "Identity IMG2IMG (the 'make this image look like me/them' route). Mirror of sdxl_ipadapter_face_api.json with the EmptyLatentImage swapped for a loaded SOURCE IMAGE -> VAEEncode -> RepeatLatentBatch, so composition/pose/scene come from the source at the chosen denoise while IP-Adapter FaceID (PLUS FACE preset) holds the SUBJECT's face from a real ground-truth photo. byrdimage.identity_variation() fills both LoadImage nodes BY TITLE (SOURCE IMAGE vs IDENTITY PHOTO — never wire them blind, they are different pictures), plus prompt/seed/denoise/checkpoint/batch/prefix at submit. Needs ComfyUI_IPAdapter_plus + the FaceID SDXL models, same as the t2i face graph. Subject identity LoRA (profile identity pack) is spliced in by insert_lora when installed.",
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" },
+    "_meta": { "title": "IDENTITY PHOTO" }
+  },
+  "20": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" },
+    "_meta": { "title": "SOURCE IMAGE" }
+  },
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "juggernautXL_v9.safetensors" }
+  },
+  "12": {
+    "class_type": "IPAdapterUnifiedLoader",
+    "inputs": { "preset": "PLUS FACE (portrait)", "model": ["4", 0] }
+  },
+  "13": {
+    "class_type": "IPAdapterAdvanced",
+    "inputs": {
+      "weight": 0.85, "weight_type": "linear", "combine_embeds": "concat",
+      "start_at": 0.0, "end_at": 1.0, "embeds_scaling": "V only",
+      "model": ["12", 0], "ipadapter": ["12", 1], "image": ["1", 0]
+    }
+  },
+  "21": {
+    "class_type": "VAEEncode",
+    "inputs": { "pixels": ["20", 0], "vae": ["4", 2] }
+  },
+  "22": {
+    "class_type": "RepeatLatentBatch",
+    "inputs": { "samples": ["21", 0], "amount": 1 }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] },
+    "_meta": { "title": "POSITIVE" }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["4", 1] },
+    "_meta": { "title": "NEGATIVE" }
+  },
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0, "steps": 30, "cfg": 7.0, "sampler_name": "dpmpp_2m",
+      "scheduler": "karras", "denoise": 0.5,
+      "model": ["13", 0], "positive": ["6", 0], "negative": ["7", 0],
+      "latent_image": ["22", 0]
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["3", 0], "vae": ["4", 2] }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": { "filename_prefix": "byrdhouse_idvar", "images": ["8", 0] }
+  }
+}

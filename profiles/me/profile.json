@@ -32,6 +32,11 @@
     ]
   },
 
+  "identity_packs": {
+    "_note": "Per-model-family identity adapters for THIS subject (handoff §3 model packs). The worker injects the matching pack into any identity recipe that declares model_family — but only when the LoRA file is actually installed on the machine; otherwise the run proceeds on FaceID reference conditioning alone and says so. sdxl pack activates automatically once carey_sdxl_identity_v1 is trained and installed.",
+    "sdxl": { "lora": "carey_sdxl_identity_v1", "strength": 0.85, "clip_strength": 0.85 },
+    "sd15": { "lora": "carey_meina_sd15_v1", "strength": 0.9, "clip_strength": 0.9 }
+  },
   "identity_notes": {
     "skin_tone": "",
     "hairstyle": "",

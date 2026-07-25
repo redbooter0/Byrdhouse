@@ -306,6 +306,85 @@ def register_cards(job, cards):
                                   "path": card["path"]}})
 
 
+def sync_profile_references(profile_id):
+    """Profiles created/photo-uploaded through the dashboard live on the ROUTER
+    host — but generation runs on THIS machine. Pull any reference photo this
+    machine is missing (by artifact id) into the local profile dir, creating the
+    profile skeleton if needed, and merge the router's ground-truth list into the
+    local profile.json. Best-effort and additive: a hand-built local profile
+    (like 'me' on GAMING) is never overwritten, only extended."""
+    try:
+        entry = next((p for p in api("/profiles") if p.get("id") == profile_id), None)
+    except Exception as e:
+        log(f"profile sync skipped ({e})")
+        return
+    if not entry:
+        return
+    ra = entry.get("reference_artifacts") or {}
+    pdir = ROOT / "profiles" / profile_id
+    refs_dir = pdir / "references"
+    pfile = pdir / "profile.json"
+    if not ra and pfile.exists():
+        return  # nothing routable to fetch; local profile is the truth
+    refs_dir.mkdir(parents=True, exist_ok=True)
+    if pfile.exists():
+        profile = json.loads(pfile.read_text(encoding="utf-8-sig"))
+    else:
+        profile = {"id": profile_id,
+                   "display_name": entry.get("display_name", profile_id),
+                   "references": {"ground_truth": [], "default_set": [],
+                                  "available": []},
+                   "identity_packs": entry.get("identity_packs", {})}
+    refs = profile.setdefault("references", {})
+    fetched = 0
+    for name, aid in ra.items():
+        dest = refs_dir / name
+        if not dest.exists():
+            try:
+                fetch_artifact_file(aid, refs_dir).rename(dest)
+                fetched += 1
+            except Exception as e:
+                log(f"profile '{profile_id}': fetch of {name} failed ({e})")
+                continue
+        for key, names in (("available", [name]),
+                           ("ground_truth",
+                            [name] if name in entry.get("ground_truth_names", [])
+                            else [])):
+            lst = refs.setdefault(key, [])
+            for n in names:
+                if n not in lst:
+                    lst.append(n)
+    pfile.write_text(json.dumps(profile, indent=2), encoding="utf-8")
+    if fetched:
+        log(f"profile '{profile_id}': synced {fetched} reference photo(s) from the router")
+
+
+def _profile_identity_pack(profile_id, family):
+    """The subject's model pack for an engine family (profile.json
+    identity_packs.<family>), but only if the LoRA is actually installed on THIS
+    machine — a pack that exists on paper but not on disk must mean 'FaceID-only
+    run', never a dead job. Returns the pack dict or None."""
+    if not family:
+        return None
+    pfile = ROOT / "profiles" / str(profile_id) / "profile.json"
+    if not pfile.exists():
+        return None
+    try:
+        pack = json.loads(pfile.read_text(encoding="utf-8-sig")) \
+            .get("identity_packs", {}).get(family)
+    except Exception:
+        return None
+    if not pack or not pack.get("lora"):
+        return None
+    try:
+        byrdimage.resolve_lora(ROOT, pack["lora"])
+    except SystemExit:
+        log(f"profile '{profile_id}' {family} pack '{pack['lora']}' not installed "
+            f"on this machine — running on reference conditioning only")
+        return None
+    return pack
+
+
 def resolve_profile_reference(root, profile_id, ground_truth_only=False):
     """Find the face reference photo for a subject profile.
 
@@ -423,6 +502,19 @@ def run_generate(job) -> None:
     # quietly conditioning the likeness on generated support material.
     ref_policy = (recipe_data.get("reference_policy") or {}).get("source", "")
     gt_only = ref_policy == "ground_truth"
+    if profile_id:
+        # Dashboard-created subjects live on the router host first — pull any
+        # missing reference photos to this machine before resolving.
+        sync_profile_references(profile_id)
+        # The subject's own model pack for this engine family (handoff §3: the
+        # profile is the identity truth). Explicit payload lora always wins.
+        pack = None if p.get("lora") else _profile_identity_pack(
+            profile_id, recipe_data.get("model_family"))
+        if pack:
+            p["lora"] = pack["lora"]
+            p["lora_strength"] = pack.get("strength", 0.9)
+            log(f"identity pack for '{profile_id}': {pack['lora']} "
+                f"@ {p['lora_strength']}")
     if not reference and profile_id:
         reference = resolve_profile_reference(ROOT, profile_id, ground_truth_only=gt_only)
         if gt_only and not reference:
@@ -438,7 +530,7 @@ def run_generate(job) -> None:
         aspect=p.get("aspect"), width=p.get("width"), height=p.get("height"),
         negative_extra=p.get("negative"), lora=p.get("lora"),
         lora_strength=float(p.get("lora_strength", 0.9)), seed=p.get("seed"),
-        reference=reference, engine=p.get("engine"))
+        reference=reference, subject_profile=profile_id, engine=p.get("engine"))
     cards = []
     for png, card in saved:
         card["path"] = str(png)
@@ -549,6 +641,60 @@ def run_faceswap(job) -> None:
         checkpoint=p.get("checkpoint"), lora=p.get("lora"),
         lora_strength=float(p.get("lora_strength", 0.9)),
         restore=p.get("restore"), seed=p.get("seed"), job_id=job["id"])
+    cards = []
+    for png, card in saved:
+        card["path"] = str(png)
+        cards.append(card)
+    register_cards(job, cards)
+
+
+def run_identity_variation(job) -> None:
+    """image.identity_variation: redraw an existing image AS a subject — the
+    'make this look like me / them' route. Source pixels set composition and
+    pose; the subject profile supplies the face (ground-truth photo via FaceID
+    + the profile's identity pack when installed). Fails closed without a real
+    photo of the subject: likeness is never conditioned on generated material."""
+    p = json.loads(job["payload"])
+    recipe = byrdimage.load_json(byrdimage.find_recipe(ROOT, p["recipe"]))
+    recipe_tag = f"{recipe['id']}@{recipe['version']}"
+    profile_id = p.get("subject_profile") or recipe.get("subject_profile") or "me"
+    sync_profile_references(profile_id)
+    gt_only = (recipe.get("reference_policy") or {}).get("source") == "ground_truth"
+    reference = resolve_profile_reference(ROOT, profile_id, ground_truth_only=gt_only)
+    if not reference:
+        raise RuntimeError(
+            f"identity variation needs a real (ground-truth) photo of "
+            f"'{profile_id}' — upload one through People / POST "
+            f"/profiles/{profile_id}/references first.")
+
+    source = p.get("source_path")
+    if not source and p.get("source_artifact"):
+        source = str(fetch_artifact_file(p["source_artifact"],
+                                         ROOT / "artifacts" / "_sources"))
+    if not source:
+        raise RuntimeError("identity variation needs source_path or source_artifact "
+                           "(the image to redraw)")
+
+    lora, strength, clip = p.get("lora"), float(p.get("lora_strength", 0.9)), None
+    if not lora:
+        pack = _profile_identity_pack(profile_id, recipe.get("model_family"))
+        if pack:
+            lora = pack["lora"]
+            strength = float(pack.get("strength", 0.9))
+            clip = pack.get("clip_strength")
+            log(f"identity pack for '{profile_id}': {lora} @ {strength}")
+
+    defaults = recipe.get("defaults", {})
+    _, saved = byrdimage.identity_variation(
+        ROOT, source, reference, p.get("project", "sandbox"),
+        p.get("purpose", f"identity variation as {profile_id}"),
+        recipe.get("workflow", "workflows/sdxl_ipadapter_face_img2img_api.json"),
+        recipe_tag, prompt=p.get("prompt"), negative=p.get("negative"),
+        denoise=float(p.get("denoise", defaults.get("denoise", 0.5))),
+        checkpoint=p.get("checkpoint") or defaults.get("checkpoint"),
+        lora=lora, lora_strength=strength, lora_clip_strength=clip,
+        batch=int(p.get("batch", defaults.get("batch", 1))),
+        seed=p.get("seed"), subject_profile=profile_id, job_id=job["id"])
     cards = []
     for png, card in saved:
         card["path"] = str(png)
@@ -962,6 +1108,7 @@ def run_export_csv(job) -> None:
 
 RUNNERS = {"image.generate": run_generate, "image.judge": run_judge,
            "image.identity_generate": run_generate,
+           "image.identity_variation": run_identity_variation,
            "image.caption": run_caption,
            "image.faceswap": run_faceswap,
            "image.refine": run_refine, "image.upscale": run_refine,

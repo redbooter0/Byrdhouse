@@ -250,23 +250,26 @@ def main():
         check("recolour guard fires on the numbers alone (no method_guess needed)",
               d5["decision"] == "reject", str(d5))
 
-        print("== identity core recipe (SDXL likeness route)")
-        idr = json.loads((ROOT / "recipes" / "identity_sdxl_t2i.v1.json")
+        print("== identity core recipe (SDXL likeness route, subject-agnostic v2)")
+        idr = json.loads((ROOT / "recipes" / "identity_sdxl_t2i.v2.json")
                          .read_text(encoding="utf-8-sig"))
         check("identity recipe routes to the IP-Adapter FaceID SDXL graph",
               idr["workflow"] == "workflows/sdxl_ipadapter_face_api.json"
               and (ROOT / idr["workflow"]).is_file())
-        check("identity recipe carries its own model pack (cannot run unconditioned)",
-              idr.get("identity", {}).get("lora") and idr["identity"].get("strength"))
+        check("identity v2 moved the model pack OFF the recipe and onto the profile",
+              "identity" not in idr and idr.get("model_family") == "sdxl")
         check("identity recipe demands GROUND-TRUTH (camera) reference conditioning",
               idr.get("reference_policy", {}).get("source") == "ground_truth")
         prof = json.loads((ROOT / "profiles" / "me" / "profile.json").read_text(encoding="utf-8-sig"))
         gt = prof["references"]["ground_truth"]
         check("profile declares real camera photos as ground truth (no generated faces)",
               gt and all("me_photo" in n for n in gt), str(gt))
+        check("profile carries per-family identity packs (subject owns its adapters)",
+              prof.get("identity_packs", {}).get("sdxl", {}).get("lora") == "carey_sdxl_identity_v1"
+              and prof["identity_packs"].get("sd15", {}).get("lora") == "carey_meina_sd15_v1")
         import byrdimage as _bi
-        check("identity recipe resolves by name through the recipe finder",
-              _bi.find_recipe(ROOT, "identity_sdxl_t2i").name == "identity_sdxl_t2i.v1.json")
+        check("bare identity recipe name resolves to the subject-agnostic v2",
+              _bi.find_recipe(ROOT, "identity_sdxl_t2i").name == "identity_sdxl_t2i.v2.json")
         # An identity recipe must never run unconditioned just because the caller
         # forgot the LoRA name — byrdimage adopts the recipe's own pack.
         src = (ROOT / "scripts" / "byrdimage.py").read_text(encoding="utf-8-sig")
@@ -277,6 +280,98 @@ def main():
         check("worker refuses a ground_truth recipe with no real reference photo",
               'ground_truth_only=gt_only' in wsrc
               and "requires a ground-truth (real camera) " in wsrc)
+
+        print("== multi-person: create a profile, upload a photo, generate as them")
+        gp = api("/profiles", {"display_name": "Guest Person"})
+        check("POST /profiles creates a subject profile",
+              gp.get("id") == "guest_person"
+              and (ROOT / "profiles" / "guest_person" / "profile.json").is_file(), str(gp))
+        guest_png = _tiny = None
+        import io as _io
+        from PIL import Image as _Img
+        buf = _io.BytesIO(); _Img.new("RGB", (256, 256), (150, 110, 90)).save(buf, "PNG")
+        rq = urllib.request.Request(
+            f"http://127.0.0.1:{RP}/profiles/guest_person/references/guest.png",
+            data=buf.getvalue(), method="POST",
+            headers={"Content-Type": "image/png", "Authorization": f"Bearer {TOKEN}"})
+        up = json.loads(urllib.request.urlopen(rq, timeout=15).read().decode())
+        check("photo upload lands on disk + registers a fetchable reference artifact",
+              up.get("id", "").startswith("ref_")
+              and (ROOT / "profiles" / "guest_person" / "references" / "guest.png").is_file(),
+              str(up))
+        plist = api("/profiles")
+        guest = next(p for p in plist if p["id"] == "guest_person")
+        check("GET /profiles exposes ground truth + fetch map for the worker sync",
+              guest["ground_truth_names"] == ["guest.png"]
+              and guest["reference_artifacts"].get("guest.png") == up["id"], str(guest))
+
+        api("/jobs", {"type": "image.generate", "project": "identity_lab",
+                      "required_mode": "IMAGE", "required_caps": ["comfyui"],
+                      "payload": {"recipe": "identity_sdxl_t2i",
+                                  "subject_profile": "guest_person",
+                                  "slots": {"setting": "a sunlit rooftop garden"},
+                                  "project": "identity_lab",
+                                  "purpose": "guest likeness t2i", "batch": 1, "seed": 9}})
+        run_worker()
+        garts = [a for a in api("/artifacts?limit=300")
+                 if json.loads(a["meta"] or "{}").get("subject_profile") == "guest_person"
+                 and json.loads(a["meta"] or "{}").get("recipe", "").startswith("identity_sdxl_t2i")]
+        check("the SAME identity recipe generates a different uploaded person",
+              len(garts) >= 1, str(len(garts)))
+        if garts:
+            gm = json.loads(garts[0]["meta"])
+            check("guest card: their photo conditioned it, no one else's LoRA leaked in",
+                  gm.get("reference", "").endswith("guest.png") and "lora" not in gm
+                  and "ipadapter_face" in gm.get("workflow", ""), str(gm)[:200])
+            check("unmeasured guest likeness is NOT auto-rejected (gate never rejects blind)",
+                  garts[0]["status"] != "rejected", garts[0]["status"])
+
+        api("/profiles", {"display_name": "No Photos Yet"})
+        api("/jobs", {"type": "image.generate", "project": "identity_lab",
+                      "required_mode": "IMAGE", "required_caps": ["comfyui"],
+                      "payload": {"recipe": "identity_sdxl_t2i",
+                                  "subject_profile": "no_photos_yet",
+                                  "slots": {"setting": "anywhere"},
+                                  "project": "identity_lab", "purpose": "must refuse"}})
+        run_worker()
+        refused_gen = [j for j in api("/jobs?type=image.generate&status=dead")
+                       if "must refuse" in j["payload"]]
+        check("a subject with no real photo REFUSES likeness generation (fail closed)",
+              refused_gen and "ground-truth" in (refused_gen[0]["error"] or ""),
+              (refused_gen[0]["error"] or "")[:120] if refused_gen else "no dead job")
+
+        print("== identity img2img (make THIS image look like me/them)")
+        iv_wf = json.loads((ROOT / "workflows" / "sdxl_ipadapter_face_img2img_api.json")
+                           .read_text(encoding="utf-8-sig"))
+        iv_wf.pop("_comment", None)
+        iv_titles = {v.get("_meta", {}).get("title") for v in iv_wf.values()
+                     if v.get("class_type") == "LoadImage"}
+        check("img2img identity graph titles its two image inputs (never wired blind)",
+              iv_titles == {"SOURCE IMAGE", "IDENTITY PHOTO"}, str(iv_titles))
+        check("img2img identity graph: source -> VAEEncode -> batch -> sampler + FaceID",
+              any(v["class_type"] == "VAEEncode" for v in iv_wf.values())
+              and any(v["class_type"] == "RepeatLatentBatch" for v in iv_wf.values())
+              and any(v["class_type"] == "IPAdapterUnifiedLoader" for v in iv_wf.values()))
+        iv_src = [a for a in api("/artifacts?limit=100")
+                  if a["kind"] == "image" and a["status"] == "approved" and a["path"]][0]
+        api("/jobs", {"type": "image.identity_variation", "project": "identity_lab",
+                      "required_mode": "IMAGE", "required_caps": ["comfyui"],
+                      "payload": {"recipe": "identity_sdxl_img2img",
+                                  "subject_profile": "guest_person",
+                                  "source_path": iv_src["path"],
+                                  "project": "identity_lab",
+                                  "purpose": "redraw as guest", "seed": 11}})
+        run_worker()
+        ivars = [a for a in api("/artifacts?limit=300")
+                 if json.loads(a["meta"] or "{}").get("recipe") == "identity_sdxl_img2img@1"]
+        check("identity variation redraws an existing image as the chosen subject",
+              len(ivars) >= 1, str(len(ivars)))
+        if ivars:
+            im = json.loads(ivars[0]["meta"])
+            check("variation card: source + reference + denoise + subject all recorded",
+                  im.get("source_image") and im.get("reference", "").endswith("guest.png")
+                  and im.get("denoise") == 0.5
+                  and im.get("subject_profile") == "guest_person", str(im)[:220])
 
         print("== identity PROBE (plain t2i — the test that had never been run)")
         probe = json.loads((ROOT / "recipes" / "carey_identity_probe.v1.json")
@@ -482,7 +577,10 @@ def main():
         api("/jobs", {"type": "image.generate", "required_mode": "IMAGE",
                       "payload": {"recipe": "nope", "slots": {}, "purpose": "fail"}})
         run_worker()
-        dead = [x for x in api("/jobs?type=image.generate") if x["status"] == "dead"]
+        # filter to THIS block's job — the multi-person section deliberately
+        # produces its own dead job (the no-real-photo refusal) earlier on
+        dead = [x for x in api("/jobs?type=image.generate")
+                if x["status"] == "dead" and "'nope'" in (x["error"] or "")]
         check("dead after retries", len(dead) == 1)
         check("real error message recorded", dead and "no recipe 'nope'" in (dead[0]["error"] or ""))
 

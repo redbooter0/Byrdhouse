@@ -402,7 +402,7 @@ function friendlyType(t) {
    ══════════════════════════════════════════════════ */
 V.create = async () => {
   const recipes = await jget('/recipes');
-  window._recipes = recipes.filter(r => r.kind === 'image.generate')
+  window._recipes = recipes.filter(r => r.kind === 'image.generate' || r.kind === 'image.identity_variation')
     .sort((a, b) => a.id === b.id ? b.version - a.version : a.id.localeCompare(b.id));
   return `
   <div class="grid">
@@ -655,6 +655,7 @@ function slotFields() {
       + '<div class="muted" style="font-size:11px;margin:4px 0 8px">Upload the matching target image below. This keeps its pose and redraws only the face.</div>';
   }
 }
+function isIdentityVariation(r) { return !!r && r.kind === 'image.identity_variation'; }
 function isTargetEditRecipe(r) {
   return !!(r && (r.runner === 'target_identity_edit' || r.runner === 'face_zone_identity_edit'));
 }
@@ -667,21 +668,65 @@ async function showRecipeInfo() {
   const ps = $('profileStatus');
   const srcLabel = $('srcLabel');
   if (srcLabel) srcLabel.textContent = isTargetEditRecipe(r)
-    ? 'Upload target image' : 'Upload source image';
+    ? 'Upload target image'
+    : isIdentityVariation(r) ? 'Upload the image to redraw as this person'
+    : 'Upload source image';
   if (!ps) return;
   if (r.subject_profile) {
     try {
       const profiles = await jget('/profiles');
-      const p = profiles.find(x => x.id === r.subject_profile);
-      if (p && p.has_references) {
-        ps.innerHTML = `<span style="color:var(--green)">Identity: ${esc(p.display_name)} (${p.references} photo${p.references>1?'s':''})</span>`;
-      } else if (p) {
-        ps.innerHTML = `<span style="color:var(--yellow)">Identity: ${esc(p.display_name)} — add reference photos first</span>`;
-      } else {
-        ps.innerHTML = `<span style="color:var(--red)">Profile "${esc(r.subject_profile)}" not found</span>`;
-      }
+      window._profiles = profiles;
+      const cur = (window._subjPick && profiles.find(x => x.id === window._subjPick))
+        ? window._subjPick : r.subject_profile;
+      // Who is in this image — any profile, not just the recipe's default.
+      // "Whoever else I upload": Add person creates a profile + takes photos.
+      const opts = profiles.map(x =>
+        `<option value="${esc(x.id)}"${x.id === cur ? ' selected' : ''}>` +
+        `${esc(x.display_name)} (${x.references} photo${x.references === 1 ? '' : 's'})</option>`).join('');
+      const p = profiles.find(x => x.id === cur);
+      const stat = p && p.ground_truth_names && p.ground_truth_names.length
+        ? `<span style="color:var(--green)">${p.ground_truth_names.length} real photo${p.ground_truth_names.length>1?'s':''} on file</span>`
+        : `<span style="color:var(--yellow)">needs a real photo — likeness jobs will refuse until one is added</span>`;
+      ps.innerHTML =
+        `<label style="margin-top:2px">Who is in this image</label>
+         <div class="row" style="gap:6px;align-items:center">
+           <select id="subjSel" onchange="window._subjPick=this.value;showRecipeInfo()">${opts}</select>
+           <button class="s" onclick="addPerson()">+ Add person</button>
+         </div>
+         <div id="subjStat" style="margin-top:3px">${stat}
+           <label class="s" style="cursor:pointer;color:var(--accent);margin-left:8px">add photos
+             <input type="file" accept="image/*" multiple style="display:none" onchange="uploadPersonPhotos(this)">
+           </label>
+         </div>`;
     } catch(e) { ps.innerHTML = ''; }
   } else { ps.innerHTML = ''; }
+}
+async function addPerson() {
+  const name = prompt('Name of the person (their photos stay local, never in git):');
+  if (!name || !name.trim()) return;
+  try {
+    const j = await jpost('/profiles', { display_name: name.trim() });
+    window._subjPick = j.id;
+    say(`profile "${name.trim()}" created — now add 3-7 clear real photos`);
+    showRecipeInfo();
+  } catch(e) { say('could not create profile: ' + e.message); }
+}
+async function uploadPersonPhotos(input) {
+  const pid = ($('subjSel') && $('subjSel').value) || 'me';
+  const files = Array.from(input.files || []);
+  if (!files.length) return;
+  say(`uploading ${files.length} photo(s) for ${pid}...`);
+  try {
+    for (const f of files) {
+      const name = f.name.replace(/[^\w. -]+/g, '_');
+      const r = await fetch(`/profiles/${encodeURIComponent(pid)}/references/${encodeURIComponent(name)}`, {
+        method: 'POST', headers: { 'Authorization': 'Bearer ' + _adminToken, 'X-Actor': 'dashboard' }, body: f });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || r.status);
+    }
+    say(`${files.length} photo(s) saved as ground truth for ${pid}`);
+    showRecipeInfo();
+  } catch(e) { say('photo upload failed: ' + e.message); }
 }
 function busyCards(jobs) {
   const gen = t => t==='image.generate'||t==='content.thumbnail'||t==='image.refine';
@@ -817,8 +862,10 @@ async function submitGen() {
     const srcArt = d.srcArtifact && d.srcArtifact.id ? d.srcArtifact : null;
     const cr = currentRecipe();
     const targetEdit = isTargetEditRecipe(cr);
+    const idVar = isIdentityVariation(cr);
     if (targetEdit && !srcArt) throw new Error('upload the target image first');
-    if (srcArt && !title && !targetEdit) throw new Error('a source image needs a title to composite');
+    if (idVar && !srcArt) throw new Error('upload the image to redraw as this person first');
+    if (srcArt && !title && !targetEdit && !idVar) throw new Error('a source image needs a title to composite');
     const payload = { recipe:d.recipe, slots:d.slots, project:d.project, purpose:d.purpose };
     if (title) payload.title = title;
     if (targetEdit) {
@@ -840,16 +887,20 @@ async function submitGen() {
     }
     const aspect = $('aspect') ? $('aspect').value : '';
     if (aspect) payload.aspect = aspect;
-    if (cr && cr.subject_profile) payload.subject_profile = cr.subject_profile;
-    const enhance = !targetEdit && $('enhance') && $('enhance').checked && !title && !srcArt && payload.slots.prompt;
-    const type = targetEdit ? 'image.generate' : (srcArt || title) ? 'content.thumbnail' : enhance ? 'content.enhance' : 'image.generate';
+    // The Who picker overrides the recipe's default subject — same recipe,
+    // any person with a profile ("whoever else I upload").
+    if (cr && cr.subject_profile)
+      payload.subject_profile = ($('subjSel') && $('subjSel').value) || cr.subject_profile;
+    const enhance = !targetEdit && !idVar && $('enhance') && $('enhance').checked && !title && !srcArt && payload.slots.prompt;
+    const type = idVar ? 'image.identity_variation'
+      : targetEdit ? 'image.generate' : (srcArt || title) ? 'content.thumbnail' : enhance ? 'content.enhance' : 'image.generate';
     if (!srcArt && type !== 'content.enhance') {
       const missing = missingRequiredSlots(d.slots);
       if (missing.length) throw new Error('fill required: ' + missing.join(', '));
     }
     await jpost('/jobs', { type, project:d.project,
-      required_mode: targetEdit ? 'IMAGE' : srcArt ? 'ANY' : enhance ? 'OPERATOR' : 'IMAGE',
-      required_caps: targetEdit ? ['comfyui'] : srcArt ? [] : enhance ? ['lmstudio'] : ['comfyui'], payload });
+      required_mode: (targetEdit || idVar) ? 'IMAGE' : srcArt ? 'ANY' : enhance ? 'OPERATOR' : 'IMAGE',
+      required_caps: (targetEdit || idVar) ? ['comfyui'] : srcArt ? [] : enhance ? ['lmstudio'] : ['comfyui'], payload });
     say('creating...');
     window._srcArtifact = null;
     clearDraft();

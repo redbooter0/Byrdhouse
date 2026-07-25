@@ -1,0 +1,34 @@
+{
+  "id": "identity_sdxl_t2i",
+  "version": 2,
+  "kind": "image.generate",
+  "subject_profile": "me",
+  "model_family": "sdxl",
+  "category": "Identity",
+  "_note": "THE LIKENESS CORE, now subject-agnostic (v2). v1 hard-coded Carey's LoRA into the recipe; v2 moves identity to the SUBJECT PROFILE (handoff §3: the profile is the identity truth, engines consume it through adapters). The worker resolves profiles/<subject>/profile.json -> identity_packs.sdxl for the LoRA and references.ground_truth for the FaceID photo, so the SAME recipe generates Carey or anyone added through People. subject_profile here is only the DEFAULT subject; the dashboard's Who picker overrides it per job. Geometry comes from the identity, never from a target — this is the structural opposite of the face-zone lane.",
+  "workflow": "workflows/sdxl_ipadapter_face_api.json",
+  "reference_policy": {
+    "source": "ground_truth",
+    "_rule": "Real camera photos only (profile references.ground_truth). The job REFUSES if the subject has none — likeness is never conditioned on generated material."
+  },
+  "template": "{shot} of a person, {expression}, {wardrobe}, {setting}, {lighting}, {style}, sharp detailed facial features, natural skin texture, high detail",
+  "negative": "text, letters, words, watermark, blurry, low quality, deformed face, distorted features, extra limbs, mutated hands, plastic skin, waxy, airbrushed, different person, mask, cgi doll",
+  "slots": {
+    "setting": { "required": true, "label": "Setting / scene (e.g. neon Tokyo street at night)" },
+    "wardrobe": { "required": false, "default": "a black bomber jacket over a plain tee", "label": "Wardrobe" },
+    "style": { "required": false, "default": "cinematic photography, 85mm, shallow depth of field", "label": "Style" }
+  },
+  "vary": {
+    "shot": ["a photorealistic portrait", "a cinematic medium shot", "a three-quarter portrait", "an environmental portrait"],
+    "expression": ["a calm confident expression", "a slight smile", "a focused serious look", "mid-laugh, genuine"],
+    "lighting": ["soft key light with warm rim", "moody low-key lighting", "golden hour backlight", "clean studio softbox light"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 30, "batch": 4 },
+  "rubric": {
+    "identity": "1-5 — is this immediately recognizable as the SUBJECT's real reference photos, at normal viewing size (not only zoomed)?",
+    "face_integrity": "1-5 — eyes, mouth, jaw, ears, hair and skin coherent; no melting, no doubled features",
+    "realism": "1-5 — natural skin texture and lighting; not plastic or airbrushed",
+    "scene_quality": "1-5 — composition, lighting and setting read as intentional",
+    "postability": "1-5"
+  }
+}

@@ -63,13 +63,14 @@ SOURCES = ROOT / "artifacts" / "_sources"  # dashboard-uploaded real source imag
 
 JOB_TYPES = {
     "image.generate", "image.judge", "image.caption", "image.identity_generate",
+    "image.identity_variation",
     "image.refine", "image.upscale", "image.faceswap",
     "video.i2v",
     "memory.save", "memory.import", "report.daily", "inventory.scan",
     "export.csv", "export.zip", "backup.nightly",
     "game.godot_task", "code.task",
 }
-REVIEW_TYPES = {"image.generate", "image.identity_generate",
+REVIEW_TYPES = {"image.generate", "image.identity_generate", "image.identity_variation",
                 "image.refine", "image.upscale", "image.faceswap",
                 "video.i2v"}  # done -> needs_review
 
@@ -732,10 +733,18 @@ class Handler(BaseHTTPRequestHandler):
                         refs_dir = pdir / "references"
                         photos = [f.name for f in refs_dir.iterdir()
                                   if f.suffix.lower() in (".jpg", ".jpeg", ".png")] if refs_dir.is_dir() else []
+                        refs = p.get("references", {})
                         out.append({"id": p.get("id", pdir.name),
                                     "display_name": p.get("display_name", pdir.name),
                                     "references": len(photos),
                                     "has_references": len(photos) > 0,
+                                    # what the worker's reference sync and the
+                                    # identity lane need: which photos are real
+                                    # (ground truth), how to fetch them, and
+                                    # which model packs this subject owns
+                                    "ground_truth_names": refs.get("ground_truth", []),
+                                    "reference_artifacts": refs.get("reference_artifacts", {}),
+                                    "identity_packs": p.get("identity_packs", {}),
                                     "preferences": p.get("preferences", {})})
                     except Exception:
                         continue
@@ -850,6 +859,86 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authed():
             return self._send({"error": "bad or missing bearer token"}, 401)
         path = urlparse(self.path).path.rstrip("/")
+
+        if path == "/profiles":
+            # Create a subject profile — "whoever else I upload". The profile is
+            # the identity truth (handoff §3): photos, ground-truth list, and
+            # per-model-family identity packs all live here; engines consume it.
+            try:
+                body = self._body()
+            except json.JSONDecodeError:
+                return self._send({"error": "invalid JSON"}, 400)
+            display = str(body.get("display_name", "")).strip()
+            if not display:
+                return self._send({"error": "display_name required"}, 400)
+            pid = str(body.get("id", "")).strip().lower() or \
+                re.sub(r"[^a-z0-9_-]+", "_", display.lower()).strip("_")
+            if not re.fullmatch(r"[a-z0-9_-]{1,40}", pid):
+                return self._send({"error": f"bad profile id '{pid}'"}, 400)
+            pdir = ROOT / "profiles" / pid
+            if (pdir / "profile.json").exists():
+                return self._send({"error": f"profile '{pid}' already exists"}, 409)
+            (pdir / "references").mkdir(parents=True, exist_ok=True)
+            profile = {
+                "id": pid, "display_name": display,
+                "created": now(),
+                "references": {
+                    "_ground_truth_rule": "Uploaded camera photos of the person. "
+                    "Generated/synthetic images must never be added to ground_truth.",
+                    "ground_truth": [], "default_set": [], "available": [],
+                    "reference_artifacts": {}},
+                "identity_packs": {},
+                "identity_notes": {"disallowed_transforms":
+                                   ["age regression", "gender swap"]},
+            }
+            (pdir / "profile.json").write_text(json.dumps(profile, indent=2),
+                                               encoding="utf-8")
+            event(self._actor(), "profile.create", pid, {"display_name": display})
+            return self._send({"id": pid, "display_name": display}, 201)
+
+        m = re.fullmatch(r"/profiles/([\w-]+)/references/([\w. -]+)", path)
+        if m:  # subject reference photo upload (body is image bytes)
+            pid, name = m.group(1), m.group(2)
+            pfile = ROOT / "profiles" / pid / "profile.json"
+            if not pfile.exists():
+                return self._send({"error": f"no profile '{pid}' — create it first"}, 404)
+            n = int(self.headers.get("Content-Length") or 0)
+            if not 0 < n <= 20_000_000:
+                return self._send({"error": "bad upload size"}, 400)
+            data = self.rfile.read(n)
+            dest = ROOT / "profiles" / pid / "references" / name
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(data)
+            # Register the photo as a fetchable artifact so the WORKER machine
+            # (where generation runs) can pull it — profiles uploaded through the
+            # dashboard land on this router host, not on GAMING's disk.
+            aid = new_id("ref")
+            card = {"artifact_id": aid, "job_id": None, "project": "profiles",
+                    "kind": "reference", "path": str(dest), "name": name,
+                    "subject_profile": pid,
+                    "purpose": f"identity reference photo for profile '{pid}'",
+                    "score": None, "tags": ["reference", pid], "caption": "",
+                    "status": "approved", "created_at": now()}
+            db().execute(
+                "INSERT OR REPLACE INTO artifacts(id,job_id,project_id,kind,path,meta,"
+                "tags,status,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                (aid, None, "profiles", "reference", str(dest), json.dumps(card),
+                 json.dumps(["reference", pid]), "approved", now()))
+            db().commit()
+            profile = json.loads(pfile.read_text(encoding="utf-8-sig"))
+            refs = profile.setdefault("references", {})
+            gt_flag = {k: v[0] for k, v in parse_qs(urlparse(self.path).query)
+                       .items()}.get("ground_truth", "1") != "0"
+            for key, include in (("available", True), ("ground_truth", gt_flag)):
+                lst = refs.setdefault(key, [])
+                if include and name not in lst:
+                    lst.append(name)
+            refs.setdefault("reference_artifacts", {})[name] = aid
+            pfile.write_text(json.dumps(profile, indent=2), encoding="utf-8")
+            event(self._actor(), "profile.reference", pid,
+                  {"name": name, "artifact": aid, "ground_truth": gt_flag})
+            return self._send({"id": aid, "profile": pid, "name": name,
+                               "ground_truth": gt_flag}, 201)
 
         m = re.fullmatch(r"/references/([\w-]+)/([\w. -]+)", path)
         if m:  # raw reference upload from the dashboard (body is image bytes)

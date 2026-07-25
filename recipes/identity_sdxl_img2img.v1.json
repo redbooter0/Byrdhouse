@@ -1,0 +1,27 @@
+{
+  "id": "identity_sdxl_img2img",
+  "version": 1,
+  "kind": "image.identity_variation",
+  "subject_profile": "me",
+  "model_family": "sdxl",
+  "category": "Identity",
+  "_note": "IMAGE -> IMAGE LIKENESS ('make this image look like me / them' — handoff §4.1 'Image -> variation of me' = MAIN ROUTE). Upload any image: its composition, pose and scene survive at the chosen denoise while the face is re-imagined as the SUBJECT — FaceID on a real ground-truth photo plus the profile's SDXL identity pack when installed. Denoise is the identity/fidelity dial: 0.3 stays close to the source, 0.5 balanced, 0.7+ re-imagines freely (more identity, less source). Unlike image.refine (no identity) and unlike the face-zone lane (target geometry pinned), the whole image is re-diffused so the subject's geometry can actually appear.",
+  "workflow": "workflows/sdxl_ipadapter_face_img2img_api.json",
+  "reference_policy": {
+    "source": "ground_truth",
+    "_rule": "Real camera photos only (profile references.ground_truth). The job REFUSES if the subject has none."
+  },
+  "template": "{prompt}",
+  "negative": "text, letters, watermark, blurry, low quality, deformed face, distorted features, different person, plastic skin",
+  "slots": {
+    "prompt": { "required": false, "default": "", "label": "Describe the result (blank = keep the source's own description)" }
+  },
+  "vary": {},
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 30, "batch": 2, "denoise": 0.5 },
+  "rubric": {
+    "identity": "1-5 — does the person now read as the SUBJECT at normal viewing size?",
+    "source_fidelity": "1-5 — did composition, pose and scene survive the redraw?",
+    "face_integrity": "1-5 — coherent eyes/mouth/jaw, no melting",
+    "postability": "1-5"
+  }
+}
