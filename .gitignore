@@ -75,6 +75,7 @@ artifacts/
 references/
 inbox/
 status.json
+docs/ASSET_INVENTORY.md
 
 # Identity profile reference photos (personal images, never committed).
 # The profile.json schema ships in the kit; actual photos stay on-machine.

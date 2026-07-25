@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import byrdimage  # noqa: E402
 import byrdjudge  # noqa: E402
 import byrdcaption  # noqa: E402
+import byrdinventory  # noqa: E402
 import compose_thumbnail  # noqa: E402
 
 ROOT = Path(os.environ.get("BYRDHOUSE_ROOT") or sys.exit("BYRDHOUSE_ROOT not set"))
@@ -583,11 +584,19 @@ def run_judge(job) -> None:
         return
     card.update(score=verdict["score"], tags=verdict["tags"], caption=verdict["caption"])
     card["rubric_scores"] = verdict["scores"]
+    identity = {k: verdict[k] for k in verdict if k.startswith("identity_")}
+    if identity:
+        card["identity"] = identity
+        log(f"identity {p['artifact_id']}: score={identity.get('identity_score')} "
+            f"backend={identity.get('identity_backend')} "
+            f"guess={identity.get('identity_method_guess')}")
     if card_path.exists():
         card_path.write_text(json.dumps(card, indent=2), encoding="utf-8")
-    api(f"/artifacts/{p['artifact_id']}/review",
-        {"action": "judge", "score": verdict["score"], "tags": verdict["tags"],
-         "caption": verdict["caption"]})
+    review = {"action": "judge", "score": verdict["score"], "tags": verdict["tags"],
+              "caption": verdict["caption"]}
+    if identity:
+        review["identity"] = identity
+    api(f"/artifacts/{p['artifact_id']}/review", review)
 
 
 def run_caption(job) -> None:
@@ -627,6 +636,24 @@ def run_caption(job) -> None:
         api(f"/artifacts/{p['artifact_id']}/review",
             {"action": "caption", "caption": result["caption"], "tags": result["tags"]})
     log(f"captioned {p.get('artifact_id') or image_path.name}: {result['caption'][:80]}")
+
+
+def run_inventory(job) -> None:
+    """inventory.scan: refresh ByrdHouse's memory of everything on this host —
+    models, custom nodes, workflows (API vs UI-format), recipes, profile
+    reference counts, artifacts — and flag dead weight the 8GB 3070 can't use.
+    Writes docs/ASSET_INVENTORY.md + artifacts/inventory.json and registers the
+    report as an approved artifact. Runs in ANY mode (no GPU)."""
+    inv = byrdinventory.scan_inventory(ROOT)
+    md_path, json_path = byrdinventory.write_reports(ROOT, inv)
+    log(f"inventory: {sum(d['count'] for d in inv['models'].values())} weights, "
+        f"{len(inv['custom_nodes'])} nodes, {inv['workflows']['count']} workflows, "
+        f"{len(inv['flags'])} flags")
+    api(f"/jobs/{job['id']}/artifacts", {"artifacts": [{
+        "job_id": job["id"], "project": "byrdhouse", "kind": "inventory",
+        "path": str(md_path), "purpose": "asset inventory (what ByrdHouse has)",
+        "status": "approved", "flags": inv["flags"],
+        "created_at": datetime.now(timezone.utc).isoformat()}]})
 
 
 def run_report(job) -> None:
@@ -829,7 +856,7 @@ RUNNERS = {"image.generate": run_generate, "image.judge": run_judge,
            "image.caption": run_caption,
            "image.faceswap": run_faceswap,
            "image.refine": run_refine, "image.upscale": run_refine,
-           "report.daily": run_report,
+           "report.daily": run_report, "inventory.scan": run_inventory,
            "content.enhance": run_content_enhance,
            "content.thumbnail": run_content_thumbnail,
            "content.package": run_content_package,

@@ -199,6 +199,49 @@ def main():
               and "merge_caption(caption, vl_context(" in lora_prep
               and "using template" in lora_prep)
 
+        print("== identity gate (verify_identity wired into the judge)")
+        idst = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "verify_identity.py"), "--selftest"],
+            capture_output=True, text=True, timeout=30)
+        check("verify_identity selftest passes (cosine math, no models)",
+              idst.returncode == 0, idst.stdout[:120])
+        import byrdjudge as _bj
+        prof_refs = ROOT / "profiles" / "me" / "references"
+        prof_refs.mkdir(parents=True, exist_ok=True)
+        # backend 'none' never reads pixels — only the presence of a ref matters
+        (prof_refs / "idref.png").write_bytes(b"ref-present")
+        id_card = {"recipe": "me_as_character@1", "subject_profile": "me",
+                   "kind": "image", "purpose": "identity test"}
+        idv = _bj.judge_card(ROOT, id_card, cap_src["path"])
+        check("identity card is measured honestly: no backend => unmeasured, not invented",
+              idv.get("identity_backend") == "none" and idv.get("identity_score") is None,
+              str({k: idv.get(k) for k in idv if k.startswith("identity")}))
+        game_card = {"recipe": "rpg_tier_list@2", "kind": "image"}
+        gv = _bj.judge_card(ROOT, game_card, cap_src["path"])
+        check("non-identity card gets NO identity fields (a game thumbnail has none)",
+              not any(k.startswith("identity_") for k in gv))
+
+        print("== inventory.scan (belt remembers every file it has)")
+        api("/jobs", {"type": "inventory.scan", "project": "byrdhouse",
+                      "required_mode": "ANY", "payload": {}})
+        run_worker()
+        invs = [a for a in api("/artifacts?limit=200") if a["kind"] == "inventory"]
+        check("inventory.scan registered an approved inventory artifact",
+              len(invs) >= 1 and invs[0]["status"] == "approved", str(len(invs)))
+        inv_json = ROOT / "artifacts" / "inventory.json"
+        check("inventory.json written to disk", inv_json.is_file())
+        if inv_json.is_file():
+            inv_data = json.loads(inv_json.read_text())
+            check("inventory captures models/workflows/recipes/profiles/flags",
+                  all(k in inv_data for k in
+                      ("models", "workflows", "recipes", "profiles", "flags"))
+                  and inv_data["workflows"]["count"] >= 1
+                  and inv_data["recipes"]["count"] >= 1)
+            check("inventory flags the UI-format flux2_klein workflows as dead weight",
+                  any("ui-format" in f.lower() or "flux2" in f.lower()
+                      for f in inv_data["flags"]),
+                  str(inv_data["flags"][:2]))
+
         # Idempotency: the same key submitted twice yields one job, not two
         k = "idem-test-key-1"
         j1 = api("/jobs", {"type": "report.daily", "idempotency_key": k})

@@ -65,7 +65,7 @@ JOB_TYPES = {
     "image.generate", "image.judge", "image.caption",
     "image.refine", "image.upscale", "image.faceswap",
     "video.i2v",
-    "memory.save", "memory.import", "report.daily",
+    "memory.save", "memory.import", "report.daily", "inventory.scan",
     "export.csv", "export.zip", "backup.nightly",
     "game.godot_task", "code.task",
 }
@@ -1052,11 +1052,14 @@ class Handler(BaseHTTPRequestHandler):
                 db().execute("UPDATE artifacts SET status=? WHERE id=?",
                              ("approved" if action == "approve" else "rejected", aid))
             elif action == "judge":
+                notes = {"caption": body.get("caption", ""),
+                         "notes": body.get("notes", "")}
+                if body.get("identity"):
+                    notes["identity"] = body.get("identity")  # identity gate result
                 db().execute(
                     "UPDATE artifacts SET score=?, tags=?, judge_notes=? WHERE id=?",
                     (body.get("score"), json.dumps(body.get("tags", [])),
-                     json.dumps({"caption": body.get("caption", ""),
-                                 "notes": body.get("notes", "")}), aid))
+                     json.dumps(notes), aid))
             elif action == "unjudged":
                 # score deliberately left null (no vision model) — record why so
                 # the gallery can flag it for manual review, don't invent a score
