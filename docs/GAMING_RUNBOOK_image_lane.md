@@ -17,6 +17,27 @@ on and runs the baseline. Then — and only then — the SDXL hero-lane switch.
 
 ---
 
+## Phase S — Stage the new lanes WITHOUT routing them in (the validation loop)
+
+The new lanes (identity t2i/img2img, People, video) live on PR #28 — not in
+production. Prove them on real hardware first, in an isolated staging copy:
+
+```powershell
+$env:BYRDHOUSE_ROOT = "E:\ByrdHouse"
+powershell -ExecutionPolicy Bypass -File E:\ByrdHouse\scripts\stage-byrdhouse.ps1
+```
+
+(One-time: pull this branch into production first so the script exists, or run it
+from any checkout of the branch.) It clones the branch to `E:\ByrdHouse-staging`
+with its own config/db/artifacts, points at your LIVE ComfyUI + LM Studio, and
+serves a second dashboard at **http://localhost:8788**. Production is untouched.
+Stop the production worker while testing — one 3070, one worker.
+
+Prove it from the web app, in order: 1) Create → `identity_sdxl_t2i` →
+likeness image in Library · 2) approve it · 3) **animate** on the approved card
+→ a playable clip. When it works how you want: merge the PR, `git pull` the
+production root, restart. Delete the staging folder any time.
+
 ## Phase 0 — Preflight (2 min)
 
 ```powershell

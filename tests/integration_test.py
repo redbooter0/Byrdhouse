@@ -480,6 +480,32 @@ def main():
                   and vm.get("source_artifact") == approved_still["id"], str(vm)[:200])
             check("video output collected despite a non-'images' output key",
                   (vids[0]["path"] or "").endswith(".webm"), str(vids[0]["path"]))
+            # The web app must be able to PLAY the clip: served as video/webm,
+            # and the worker's preview upload cached it WITH its extension so
+            # the 2-PC dashboard (router on MINI, clip on GAMING) works too.
+            with urllib.request.urlopen(
+                    f"http://127.0.0.1:{RP}/artifacts/{vids[0]['id']}/file",
+                    timeout=15) as r:
+                check("router serves the clip as video/webm (not a fake png)",
+                      r.headers.get("Content-Type") == "video/webm",
+                      str(r.headers.get("Content-Type")))
+            cached_clips = list((ROOT / "artifacts" / "_previews").glob(
+                f"{vids[0]['id']}.webm"))
+            check("clip preview cached with its media extension for 2-PC playback",
+                  len(cached_clips) == 1, str(cached_clips))
+
+        # The web app drives video end-to-end: structural proof the dashboard
+        # has the Animate contract (approved stills only) and real playback.
+        dash = (ROOT / "dashboard" / "index.html").read_text(encoding="utf-8-sig")
+        check("dashboard renders video artifacts with a playable <video> tag",
+              "<video src=\"/artifacts/${a.id}/file\" controls" in dash)
+        check("dashboard Animate lives only on APPROVED stills and queues video.i2v",
+              "a.status === 'approved'" in dash and "animateArt" in dash
+              and "type:'video.i2v', required_mode:'VIDEO'" in dash.replace('"', "'"))
+        check("staging bring-up script exists for not-routed-in-yet validation",
+              (ROOT / "scripts" / "stage-byrdhouse.ps1").is_file()
+              and "-staging" in (ROOT / "scripts" / "stage-byrdhouse.ps1")
+              .read_text(encoding="utf-8-sig"))
 
         print("== inventory.scan (belt remembers every file it has)")
         api("/jobs", {"type": "inventory.scan", "project": "byrdhouse",

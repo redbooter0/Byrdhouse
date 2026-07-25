@@ -107,13 +107,17 @@ def _preview_bytes(path, max_side=896):
 
 
 def upload_preview(artifact_id, path):
-    """Push the image bytes to the router so the dashboard can preview it —
-    artifact files live on this machine's disk, not the router's."""
+    """Push the media bytes to the router so the dashboard can preview it —
+    artifact files live on this machine's disk, not the router's. Content type
+    follows the file so a video clip is cached (and served back) as video."""
+    suffix = Path(path).suffix.lower()
+    ctype = {".webm": "video/webm", ".mp4": "video/mp4"}.get(suffix, "image/png")
+    data = Path(path).read_bytes() if ctype.startswith("video") else _preview_bytes(path)
     try:
         req = urllib.request.Request(
-            f"{ROUTER}/artifacts/{artifact_id}/file", data=_preview_bytes(path),
+            f"{ROUTER}/artifacts/{artifact_id}/file", data=data,
             method="POST",
-            headers={"Content-Type": "image/png",
+            headers={"Content-Type": ctype,
                      "Authorization": f"Bearer {TOKEN}", "X-Actor": WORKER_ID})
         with urllib.request.urlopen(req, timeout=60) as r:
             r.read()
@@ -888,6 +892,9 @@ def run_video_i2v(job) -> None:
     # handoff §7.3) is the next rung and lands separately.
     api(f"/jobs/{job['id']}/artifacts", {"artifacts": cards})
     for card in cards:
+        # ship the clip bytes to the router so the dashboard can PLAY it —
+        # in 2-PC mode the webm lives on this machine, not the router host
+        upload_preview(card["artifact_id"], card["path"])
         log(f"video archived {card['artifact_id']} "
             f"({card.get('duration_seconds')}s @ {card.get('fps')}fps)")
 

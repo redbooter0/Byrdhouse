@@ -118,6 +118,15 @@ def repo_build(start=None):
 
 BUILD = repo_build()
 
+MEDIA_CTYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                ".webp": "image/webp", ".gif": "image/gif",
+                ".webm": "video/webm", ".mp4": "video/mp4"}
+
+
+def media_ctype(name: str) -> str:
+    return MEDIA_CTYPES.get(Path(str(name)).suffix.lower(), "application/octet-stream")
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs(
   id TEXT PRIMARY KEY, type TEXT NOT NULL, project_id TEXT,
@@ -692,13 +701,15 @@ class Handler(BaseHTTPRequestHandler):
             row = db().execute("SELECT path FROM artifacts WHERE id=?", (m.group(1),)).fetchone()
             if row and row["path"] and Path(row["path"]).exists():
                 data = Path(row["path"]).read_bytes()
-                ctype = "image/png" if row["path"].endswith(".png") else "application/octet-stream"
-                return self._send(data, content_type=ctype)
+                return self._send(data, content_type=media_ctype(row["path"]))
             # artifact files live on the worker's disk — fall back to the
-            # preview copy the worker uploaded at registration time
-            cached = PREVIEWS / f"{m.group(1)}.png"
-            if row and cached.exists():
-                return self._send(cached.read_bytes(), content_type="image/png")
+            # preview copy the worker uploaded at registration time (extension
+            # preserved at upload so a video clip plays instead of downloading
+            # as a broken "png")
+            if row:
+                for cached in sorted(PREVIEWS.glob(f"{m.group(1)}.*")):
+                    return self._send(cached.read_bytes(),
+                                      content_type=media_ctype(cached.name))
             return self._send({"error": "file not on this host"}, 404)
 
         if path == "/references":
@@ -952,12 +963,17 @@ class Handler(BaseHTTPRequestHandler):
             return self._send({"ok": True, "tag": m.group(1), "name": m.group(2)}, 201)
 
         m = re.fullmatch(r"/artifacts/([\w.-]+)/file", path)
-        if m:  # raw image upload from the worker (body is bytes, not JSON)
+        if m:  # raw media upload from the worker (body is bytes, not JSON)
             n = int(self.headers.get("Content-Length") or 0)
             if not 0 < n <= 20_000_000:
                 return self._send({"error": "bad upload size"}, 400)
             PREVIEWS.mkdir(parents=True, exist_ok=True)
-            (PREVIEWS / f"{m.group(1)}.png").write_bytes(self.rfile.read(n))
+            # keep the media kind: a video clip cached as "<id>.png" would be
+            # served back as an unplayable image
+            ext = {"video/webm": ".webm", "video/mp4": ".mp4",
+                   "image/webp": ".webp"}.get(
+                (self.headers.get("Content-Type") or "").split(";")[0], ".png")
+            (PREVIEWS / f"{m.group(1)}{ext}").write_bytes(self.rfile.read(n))
             event(self._actor(), "artifact.preview", m.group(1), {"bytes": n})
             return self._send({"ok": True}, 201)
 

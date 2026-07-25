@@ -310,11 +310,18 @@ function artCard(a, opts) {
   opts = opts || {};
   const meta = JSON.parse(a.meta || '{}');
   let jn = {}; try { jn = JSON.parse(a.judge_notes || '{}') || {}; } catch (e) {}
-  const img = a.kind === 'image' || a.kind === 'thumbnail'
+  const isVideo = a.kind === 'video' || /\.(webm|mp4)$/i.test(a.path || '');
+  const img = isVideo
+    ? `<video src="/artifacts/${a.id}/file" controls preload="metadata" style="width:100%;border-radius:8px" onerror="this.style.display='none'"></video>`
+    : a.kind === 'image' || a.kind === 'thumbnail'
     ? `<img src="/artifacts/${a.id}/file" loading="lazy" onclick="zoom(this.src)" onerror="this.style.display='none'">` : '';
   const when = (a.job_finished_at || a.created_at || '').slice(5, 16).replace('T', ' ');
   const needsReview = a.status === 'needs_review';
   const cls = needsReview && opts.showApproval ? 'art approval-card' : 'art';
+  // Video begins only from an APPROVED still (the belt refuses otherwise) —
+  // so the Animate button lives exactly and only where that contract is met.
+  const canAnimate = !isVideo && a.status === 'approved'
+    && (a.kind === 'image' || a.kind === 'thumbnail');
   return `<div class="${cls}">
     ${needsReview && opts.showApproval ? '<span class="badge">NEEDS YOUR REVIEW</span>' : ''}
     ${img}<div class="m">
@@ -322,13 +329,28 @@ function artCard(a, opts) {
     ${a.score != null ? 'score <b>'+a.score+'</b> · ' : (jn.unjudged ? '<span style="color:var(--yellow)">waiting for judge</span> · ' : '')}<span class="pill">${esc(a.status)}</span>
     ${a.gen_seconds != null ? ' · ' + fmtDur(a.gen_seconds) : ''}<br>
     ${(meta.out_size || meta.size) ? '<span class="muted">' + esc(meta.out_size || meta.size) + '</span><br>' : ''}
+    ${isVideo && meta.duration_seconds ? '<span class="muted">' + meta.duration_seconds + 's @ ' + (meta.fps || '?') + 'fps · seed ' + esc(String(meta.seed ?? '')) + '</span><br>' : ''}
     ${esc(meta.purpose || meta.title || '')}
     <div class="row">
       <button class="s ok" ${a.status==='approved'?'disabled':''} onclick="review(this,'${a.id}','approve')">approve</button>
       <button class="s no" ${a.status==='rejected'?'disabled':''} onclick="review(this,'${a.id}','reject')">reject</button>
-      <button class="s" onclick="refineArt('${a.id}',0.4,1.5)" title="upscale 1.5x">upscale</button>
-      <button class="s" onclick="refineArt('${a.id}',0.55,1.0)" title="variations near this image">riff</button>
+      ${isVideo ? '' : `<button class="s" onclick="refineArt('${a.id}',0.4,1.5)" title="upscale 1.5x">upscale</button>
+      <button class="s" onclick="refineArt('${a.id}',0.55,1.0)" title="variations near this image">riff</button>`}
+      ${canAnimate ? `<button class="s" onclick="animateArt('${a.id}')" title="turn this approved still into a short local video clip (LTX)">animate</button>` : ''}
     </div></div></div>`;
+}
+async function animateArt(id) {
+  const motion = prompt('Motion for this clip (camera + subject):',
+    'slow cinematic push in, subtle natural movement, consistent face');
+  if (motion === null) return;
+  try {
+    await jpost('/jobs', { type:'video.i2v', required_mode:'VIDEO',
+      required_caps:['comfyui'],
+      payload:{ source_artifact:id, prompt:motion,
+                purpose:'animate approved still ' + id } });
+    say('video queued — the worker switches to VIDEO mode (LM Studio unloads first)');
+    render();
+  } catch (e) { say('error: ' + e.message); }
 }
 async function review(btn, id, action) {
   btn.disabled = true; btn.textContent = '...';
@@ -354,8 +376,8 @@ V.home = async () => {
   const pending = arts.filter(a => a.status === 'needs_review');
   const approved = arts.filter(a => a.status === 'approved').slice(0, 4);
   const inflight = jobs.filter(j => ['queued','claimed','running'].includes(j.status)
-    && (j.type === 'image.generate' || j.type === 'content.thumbnail' || j.type === 'image.refine'));
-  const recent = arts.filter(a => a.kind === 'image' || a.kind === 'thumbnail').slice(0, 6);
+    && ['image.generate','content.thumbnail','image.refine','video.i2v','image.identity_variation','image.identity_generate'].includes(j.type));
+  const recent = arts.filter(a => ['image','thumbnail','video'].includes(a.kind)).slice(0, 6);
 
   return `
   <div class="hero">
@@ -394,6 +416,10 @@ function friendlyType(t) {
   return { 'image.generate':'Image generation', 'content.thumbnail':'Thumbnail',
            'image.refine':'Upscale / riff', 'image.judge':'Auto-judging',
            'image.faceswap':'Face swap',
+           'image.identity_generate':'Likeness generation',
+           'image.identity_variation':'Redraw as person',
+           'image.caption':'Auto-caption', 'inventory.scan':'Asset inventory',
+           'video.i2v':'Video clip (from approved still)',
            'content.enhance':'Prompt enhancement', 'report.daily':'Daily report' }[t] || t;
 }
 
