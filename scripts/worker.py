@@ -28,7 +28,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import byrdimage  # noqa: E402
 import byrdjudge  # noqa: E402
 import byrdcaption  # noqa: E402
+import byrdidentity  # noqa: E402
 import byrdinventory  # noqa: E402
+import byrdvideo  # noqa: E402
 import compose_thumbnail  # noqa: E402
 
 ROOT = Path(os.environ.get("BYRDHOUSE_ROOT") or sys.exit("BYRDHOUSE_ROOT not set"))
@@ -245,15 +247,19 @@ class Gpu:
             return
         log(f"mode {self.mode} -> {target}")
         if self.enabled:
-            if target == "IMAGE":
+            # VIDEO needs the whole card exactly like IMAGE does (handoff §6:
+            # unload LM Studio and image models before LTX/Wan loads), so it runs
+            # the same verified-VRAM ritual rather than a second half-copy of it.
+            if target in ("IMAGE", "VIDEO"):
                 # Hard rule (v2 §7.1): a mode switch must VERIFY VRAM, never assume.
                 # If nvidia-smi is missing we cannot verify, so we refuse loudly
                 # rather than blindly loading ComfyUI onto an 8GB card that may
                 # still hold the LLM.
                 if not self.nvidia_smi:
                     raise RuntimeError(
-                        "cannot switch to IMAGE: nvidia-smi not found (set gpu.nvidia_smi "
-                        "in byrdhouse.config.json). VRAM cannot be verified.")
+                        f"cannot switch to {target}: nvidia-smi not found (set "
+                        "gpu.nvidia_smi in byrdhouse.config.json). VRAM cannot be "
+                        "verified.")
                 subprocess.run(["lms", "unload", "--all"], timeout=120)
                 threshold = int(CFG["gpu"].get("vram_free_threshold_mb", 1024))
                 # A healthy SDXL run on the 3070 wants most of the 8GB free after
@@ -300,15 +306,33 @@ def register_cards(job, cards):
                                   "path": card["path"]}})
 
 
-def resolve_profile_reference(root, profile_id):
-    """Find the default face reference photo from a subject profile."""
+def resolve_profile_reference(root, profile_id, ground_truth_only=False):
+    """Find the face reference photo for a subject profile.
+
+    Handoff §5.1: camera photographs define identity geometry; generated/anime
+    images are labelled SUPPORT and can never be ground truth. Identity
+    conditioning (IP-Adapter FaceID) must therefore prefer `references.
+    ground_truth` — conditioning identity on a synthetic face compounds drift,
+    which is one reason the likeness kept slipping."""
     pdir = root / "profiles" / profile_id
     pfile = pdir / "profile.json"
     if not pfile.exists():
         log(f"profile '{profile_id}' not found at {pdir}")
         return None
     profile = json.loads(pfile.read_text(encoding="utf-8"))
-    default_set = profile.get("references", {}).get("default_set", [])
+    refs = profile.get("references", {})
+    ground_truth = refs.get("ground_truth", [])
+    for name in ground_truth:
+        ref = pdir / "references" / name
+        if ref.exists():
+            log(f"profile '{profile_id}' ground-truth reference: {ref.name}")
+            return str(ref)
+    if ground_truth_only:
+        log(f"profile '{profile_id}': no ground-truth (real photo) reference "
+            f"available — refusing to condition identity on generated support "
+            f"material")
+        return None
+    default_set = refs.get("default_set", [])
     for name in default_set:
         ref = pdir / "references" / name
         if ref.exists():
@@ -394,8 +418,19 @@ def run_generate(job) -> None:
     profile_id = p.get("subject_profile")
     if not profile_id:
         profile_id = recipe_data.get("subject_profile")
+    # An identity recipe may demand camera-photo conditioning only (handoff §5.1).
+    # If the profile has no real ground-truth photo we fail loudly rather than
+    # quietly conditioning the likeness on generated support material.
+    ref_policy = (recipe_data.get("reference_policy") or {}).get("source", "")
+    gt_only = ref_policy == "ground_truth"
     if not reference and profile_id:
-        reference = resolve_profile_reference(ROOT, profile_id)
+        reference = resolve_profile_reference(ROOT, profile_id, ground_truth_only=gt_only)
+        if gt_only and not reference:
+            raise RuntimeError(
+                f"recipe '{p['recipe']}' requires a ground-truth (real camera) "
+                f"reference photo, but profile '{profile_id}' has none listed in "
+                f"references.ground_truth. Add real photos — identity must not be "
+                f"conditioned on generated support material.")
     job_id, saved = byrdimage.generate(
         ROOT, p["recipe"], p.get("slots", {}), p.get("project", "sandbox"),
         p.get("purpose", "unspecified"), batch=p.get("batch"),
@@ -598,6 +633,20 @@ def run_judge(job) -> None:
         review["identity"] = identity
     api(f"/artifacts/{p['artifact_id']}/review", review)
 
+    # The ACCEPTANCE GATE (handoff §4.2): measuring identity is not enough — a
+    # recolour must not sit in needs_review looking like a candidate. Fail closed
+    # on a proven recolor/no-identity result; never auto-reject what we couldn't
+    # measure, and never silently auto-approve either.
+    if identity:
+        decision = byrdidentity.evaluate(card, identity, CFG)
+        card["identity_gate"] = decision
+        if card_path.exists():
+            card_path.write_text(json.dumps(card, indent=2), encoding="utf-8")
+        log(f"identity gate {p['artifact_id']}: {byrdidentity.summary_line(decision)}")
+        if decision["decision"] == "reject":
+            api(f"/artifacts/{p['artifact_id']}/review",
+                {"action": "reject", "reason": "; ".join(decision["reasons"])})
+
 
 def run_caption(job) -> None:
     """image.caption: describe an existing artifact with the LM Studio vision
@@ -636,6 +685,65 @@ def run_caption(job) -> None:
         api(f"/artifacts/{p['artifact_id']}/review",
             {"action": "caption", "caption": result["caption"], "tags": result["tags"]})
     log(f"captioned {p.get('artifact_id') or image_path.name}: {result['caption'][:80]}")
+
+
+def run_video_i2v(job) -> None:
+    """video.i2v: animate ONE APPROVED identity still (handoff §7).
+
+    VIDEO RULE — the first frame must already be an approved identity artifact.
+    We do not ask the video model to rediscover the subject: if the source still
+    is not approved, this refuses. That keeps drift a video problem instead of an
+    identity problem, and stops a rejected recolour from becoming a rejected
+    video 20 minutes later."""
+    p = json.loads(job["payload"])
+    still = p.get("still_path")
+    source_artifact = p.get("source_artifact")
+
+    if source_artifact:
+        arts = api(f"/artifacts?id={source_artifact}")
+        art = arts[0] if arts else None
+        if not art:
+            raise RuntimeError(f"video.i2v: no such source artifact {source_artifact}")
+        if art.get("status") != "approved":
+            raise RuntimeError(
+                f"video.i2v REFUSED: source still {source_artifact} is "
+                f"'{art.get('status')}', not 'approved'. The first frame must be an "
+                f"approved identity artifact — approve the still in the Library "
+                f"first, or fix the identity before spending VIDEO mode on it.")
+        if not still:
+            still = art.get("path")
+            if not still or not Path(still).exists():
+                still = str(fetch_artifact_file(source_artifact, ROOT / "artifacts" / "_sources"))
+    elif not p.get("allow_unapproved"):
+        raise RuntimeError(
+            "video.i2v REFUSED: pass source_artifact (an APPROVED still) so the "
+            "clip is traceable to a judged identity. Only an explicit "
+            "allow_unapproved=true may animate a loose file, and that clip is "
+            "marked as such on its card.")
+    if not still:
+        raise RuntimeError("video.i2v needs still_path or source_artifact")
+
+    _, saved = byrdvideo.animate(
+        ROOT, still, p.get("project", "careyrpg"),
+        p.get("purpose", "identity still -> motion"),
+        prompt=p.get("prompt", ""), negative=p.get("negative"),
+        seed=p.get("seed"), width=p.get("width"), height=p.get("height"),
+        length=p.get("length"), fps=p.get("fps"), steps=p.get("steps"),
+        cfg_scale=p.get("cfg"), workflow=p.get("workflow"),
+        job_id=job["id"], source_artifact=source_artifact)
+    cards = []
+    for path, card in saved:
+        card["path"] = str(path)
+        if not source_artifact:
+            card["unapproved_source"] = True
+        cards.append(card)
+    # Video cards register like any artifact, but they are NOT auto-judged: the
+    # image judge scores stills. Frame-level drift examination (video.examine,
+    # handoff §7.3) is the next rung and lands separately.
+    api(f"/jobs/{job['id']}/artifacts", {"artifacts": cards})
+    for card in cards:
+        log(f"video archived {card['artifact_id']} "
+            f"({card.get('duration_seconds')}s @ {card.get('fps')}fps)")
 
 
 def run_inventory(job) -> None:
@@ -853,10 +961,12 @@ def run_export_csv(job) -> None:
 
 
 RUNNERS = {"image.generate": run_generate, "image.judge": run_judge,
+           "image.identity_generate": run_generate,
            "image.caption": run_caption,
            "image.faceswap": run_faceswap,
            "image.refine": run_refine, "image.upscale": run_refine,
            "report.daily": run_report, "inventory.scan": run_inventory,
+           "video.i2v": run_video_i2v,
            "content.enhance": run_content_enhance,
            "content.thumbnail": run_content_thumbnail,
            "content.package": run_content_package,
@@ -866,8 +976,13 @@ RUNNERS = {"image.generate": run_generate, "image.judge": run_judge,
 
 def desired_mode(gpu: Gpu) -> str:
     """v2 §7: enter IMAGE when >=3 image jobs queued OR oldest older than 10 min;
-    otherwise OPERATOR (judging happens there)."""
+    otherwise OPERATOR (judging happens there). VIDEO wins outright when queued —
+    a clip is a long, deliberate, founder-initiated run and the 3070 cannot hold a
+    video model beside anything else (handoff §6), so we do not batch-wait it."""
     queued = api("/jobs?status=queued&limit=100")
+    video_jobs = [j for j in queued if j["required_mode"] == "VIDEO"]
+    if video_jobs:
+        return "VIDEO"
     image_jobs = [j for j in queued if j["required_mode"] == "IMAGE"]
     operator_jobs = [j for j in queued if j["required_mode"] in ("OPERATOR", "ANY")]
     if image_jobs:

@@ -330,6 +330,18 @@ def generate(root, recipe_name, slots, project, purpose,
 
     defaults = recipe.get("defaults", {})
     engine = engine or {}
+    # An identity recipe declares its own model pack (handoff §3: the subject
+    # profile is the identity truth, engines consume it through adapters). If the
+    # caller didn't name a LoRA, use the recipe's — so the identity lane can never
+    # silently run unconditioned just because nobody typed the filename.
+    recipe_identity = recipe.get("identity") or {}
+    if not lora and recipe_identity.get("lora"):
+        lora = recipe_identity["lora"]
+        if recipe_identity.get("strength") is not None:
+            lora_strength = float(recipe_identity["strength"])
+        if recipe_identity.get("clip_strength") is not None:
+            lora_clip_strength = float(recipe_identity["clip_strength"])
+        print(f"[byrdimage] identity pack from recipe: {lora}")
     ckpt_requested = checkpoint or engine.get("checkpoint") or defaults.get("checkpoint") or die("no checkpoint")
     checkpoint, ckpt_matched = resolve_checkpoint_info(root, ckpt_requested, comfy=comfy)
     batch = batch or defaults.get("batch", 1)

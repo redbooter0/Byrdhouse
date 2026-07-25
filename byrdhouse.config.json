@@ -66,6 +66,20 @@
     "judge_model": "qwen/qwen3-vl-4b",
     "caption_model": ""
   },
+  "video": {
+    "_comment": "Video lane (handoff §7). VIDEO RULE: a clip animates an APPROVED identity still — video.i2v refuses an unapproved source. workflow must be an API-format graph; every graph under Video/Workflows/ is a UI export and cannot be POSTed to ComfyUI /prompt. length must satisfy (length-1) % 8 == 0 for LTX. Keep 768x512 @ 97 frames as the 8GB baseline before trying anything larger.",
+    "workflow": "workflows/ltx_i2v_api.json",
+    "length": 97,
+    "fps": 24
+  },
+  "identity": {
+    "_comment": "Identity ACCEPTANCE GATE thresholds (scripts/byrdidentity.py). arcface is authoritative (may accept/reject on score); clip is advisory only (whole-image similarity is not identity and never rejects alone). The recolor guard is authoritative and backend-independent: output ~identical to the target AND identity at the floor = a recoloured target, not a likeness — the exact 2026-07-22 Vegeta failure.",
+    "arcface_reject_below": 0.28,
+    "arcface_accept_at": 0.4,
+    "recolor_target_similarity": 0.92,
+    "recolor_identity_ceiling": 0.2,
+    "clip_flag_below": 0.6
+  },
   "memory": {
     "_comment": "Used by byrd-status for the SQLite-vs-Qdrant drift check. Fill in real values on BYRD-MINI; leave placeholders elsewhere and the check reports 'not configured' (yellow).",
     "sqlite_db": "CHANGE_ME_e.g._D:/ByrdHouse/SQLite/byrdhouse_memory.db",

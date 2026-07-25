@@ -62,14 +62,15 @@ REFERENCES = ROOT / "references"  # founder-loved thumbnails the judge scores ag
 SOURCES = ROOT / "artifacts" / "_sources"  # dashboard-uploaded real source images
 
 JOB_TYPES = {
-    "image.generate", "image.judge", "image.caption",
+    "image.generate", "image.judge", "image.caption", "image.identity_generate",
     "image.refine", "image.upscale", "image.faceswap",
     "video.i2v",
     "memory.save", "memory.import", "report.daily", "inventory.scan",
     "export.csv", "export.zip", "backup.nightly",
     "game.godot_task", "code.task",
 }
-REVIEW_TYPES = {"image.generate", "image.refine", "image.upscale", "image.faceswap",
+REVIEW_TYPES = {"image.generate", "image.identity_generate",
+                "image.refine", "image.upscale", "image.faceswap",
                 "video.i2v"}  # done -> needs_review
 
 # The worker heartbeats from a dedicated thread (worker.py) every ~30s even
@@ -1049,6 +1050,18 @@ class Handler(BaseHTTPRequestHandler):
             if not art:
                 return self._send({"error": "no such artifact"}, 404)
             if action in ("approve", "reject"):
+                # A reject may carry WHY (the identity gate sends its reasons) —
+                # keep it on the card so a rejection is evidence, not a dead end.
+                if body.get("reason"):
+                    try:
+                        notes = json.loads(art["judge_notes"] or "{}")
+                    except (TypeError, ValueError):
+                        notes = {}
+                    if not isinstance(notes, dict):
+                        notes = {}
+                    notes["reject_reason"] = str(body["reason"])[:2000]
+                    db().execute("UPDATE artifacts SET judge_notes=? WHERE id=?",
+                                 (json.dumps(notes), aid))
                 db().execute("UPDATE artifacts SET status=? WHERE id=?",
                              ("approved" if action == "approve" else "rejected", aid))
             elif action == "judge":

@@ -1,0 +1,94 @@
+{
+  "_comment": "LTX-Video image-to-video, API format (POST-able to ComfyUI /prompt). Converted node-for-node from Video/Workflows/ltxv_i2v_simple_0.9.5.json, which is a ComfyUI *UI* export ({nodes,links}) and therefore could never be submitted to /prompt — the same trap as the flux2_klein graphs. Every class_type, input wiring and default here is taken from that UI graph's links + widgets_values, not invented. byrdvideo.py fills image/prompt/negative/seed/width/height/length/fps/filename_prefix at submit time. VIDEO gpu mode: unload LM Studio and image models first (handoff §6).",
+  "38": {
+    "class_type": "CLIPLoader",
+    "inputs": { "clip_name": "t5xxl_fp16.safetensors", "type": "ltxv", "device": "default" },
+    "_meta": { "title": "LTX TEXT ENCODER" }
+  },
+  "44": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": { "ckpt_name": "ltx-video-2b-v0.9.5.safetensors" },
+    "_meta": { "title": "LTX VIDEO CHECKPOINT" }
+  },
+  "78": {
+    "class_type": "LoadImage",
+    "inputs": { "image": "" },
+    "_meta": { "title": "APPROVED IDENTITY STILL" }
+  },
+  "82": {
+    "class_type": "LTXVPreprocess",
+    "inputs": { "image": ["78", 0], "img_compression": 40 },
+    "_meta": { "title": "LTXV PREPROCESS" }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "", "clip": ["38", 0] },
+    "_meta": { "title": "POSITIVE" }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": { "text": "low quality, worst quality, deformed, distorted, disfigured, motion smear, motion artifacts, fused fingers, bad anatomy, weird hand, ugly", "clip": ["38", 0] },
+    "_meta": { "title": "NEGATIVE" }
+  },
+  "95": {
+    "class_type": "LTXVImgToVideo",
+    "inputs": {
+      "positive": ["6", 0],
+      "negative": ["7", 0],
+      "vae": ["44", 2],
+      "image": ["82", 0],
+      "width": 768,
+      "height": 512,
+      "length": 97,
+      "batch_size": 1
+    },
+    "_meta": { "title": "IMG TO VIDEO" }
+  },
+  "69": {
+    "class_type": "LTXVConditioning",
+    "inputs": { "positive": ["95", 0], "negative": ["95", 1], "frame_rate": 25 },
+    "_meta": { "title": "LTXV CONDITIONING" }
+  },
+  "71": {
+    "class_type": "LTXVScheduler",
+    "inputs": {
+      "steps": 30,
+      "max_shift": 2.05,
+      "base_shift": 0.95,
+      "stretch": true,
+      "terminal": 0.1,
+      "latent": ["95", 2]
+    },
+    "_meta": { "title": "LTXV SCHEDULER" }
+  },
+  "73": {
+    "class_type": "KSamplerSelect",
+    "inputs": { "sampler_name": "euler" },
+    "_meta": { "title": "SAMPLER" }
+  },
+  "72": {
+    "class_type": "SamplerCustom",
+    "inputs": {
+      "add_noise": true,
+      "noise_seed": 0,
+      "cfg": 3,
+      "model": ["44", 0],
+      "positive": ["69", 0],
+      "negative": ["69", 1],
+      "sampler": ["73", 0],
+      "sigmas": ["71", 0],
+      "latent_image": ["95", 2]
+    },
+    "_meta": { "title": "SAMPLER CUSTOM" }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": { "samples": ["72", 0], "vae": ["44", 2] },
+    "_meta": { "title": "VAE DECODE" }
+  },
+  "86": {
+    "class_type": "SaveWEBM",
+    "inputs": { "images": ["8", 0], "filename_prefix": "byrdhouse_video", "codec": "vp9", "fps": 24, "crf": 12 },
+    "_meta": { "title": "SAVE VIDEO" }
+  }
+}

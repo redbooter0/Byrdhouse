@@ -6,6 +6,14 @@
 
   "references": {
     "_setup": "Place 5-7 clear photos in profiles/me/references/ on your machine. Name them descriptively (front.jpg, left_angle.jpg, etc). The worker picks from default_set when a 'me' recipe runs.",
+    "_ground_truth_rule": "Handoff 2026-07-25 §5.1: CAMERA PHOTOGRAPHS define identity geometry. Generated/synthetic/anime images are SUPPORT buckets and can never be ground truth. Identity conditioning (IP-Adapter FaceID, identity recipes) resolves ground_truth FIRST — conditioning a likeness on an AI-generated face compounds drift. Keep only real photos in this list.",
+    "ground_truth": [
+      "me_photo_04.jpg",
+      "me_photo_01.jpg",
+      "me_photo_02.jpg",
+      "me_photo_03.jpg",
+      "me_photo_05.jpg"
+    ],
     "default_set": [
       "ai_identity_front_v1.png",
       "ai_identity_threequarter_left_v1.png",

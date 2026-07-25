@@ -221,6 +221,128 @@ def main():
         check("non-identity card gets NO identity fields (a game thumbnail has none)",
               not any(k.startswith("identity_") for k in gv))
 
+        print("== identity ACCEPTANCE GATE (fail closed on a recolour)")
+        import byrdidentity
+        gate_cfg = json.loads((ROOT / "byrdhouse.config.json").read_text())
+        # The exact 2026-07-22 Vegeta failure: ~identical to the target, no identity.
+        vegeta = {"identity_score": 0.11, "identity_backend": "arcface",
+                  "identity_method_guess": "recolor_only",
+                  "identity_target_similarity": 0.977}
+        d = byrdidentity.evaluate({}, vegeta, gate_cfg)
+        check("gate REJECTS a recolour (the Vegeta failure)",
+              d["decision"] == "reject" and "RECOLOR-ONLY" in d["reasons"][0], str(d))
+        d2 = byrdidentity.evaluate({}, {"identity_score": 0.52, "identity_backend": "arcface",
+                                        "identity_target_similarity": 0.4}, gate_cfg)
+        check("gate ACCEPTS a real likeness", d2["decision"] == "accept", str(d2))
+        d3 = byrdidentity.evaluate({}, {"identity_score": None, "identity_backend": "none"},
+                                   gate_cfg)
+        check("gate leaves an UNMEASURED result for human review (never auto-passes)",
+              d3["decision"] == "review", str(d3))
+        # CLIP is whole-image similarity, not identity — it must never reject alone
+        d4 = byrdidentity.evaluate({}, {"identity_score": 0.31, "identity_backend": "clip",
+                                        "identity_target_similarity": 0.5}, gate_cfg)
+        check("advisory backend (clip) flags but can never reject on score alone",
+              d4["decision"] == "review" and "advisory" in d4["reasons"][0], str(d4))
+        # the recolor guard is behavioral: it fires on the numbers even when the
+        # method_guess is absent, because near-identity to the target proves it
+        d5 = byrdidentity.evaluate({}, {"identity_score": 0.05, "identity_backend": "arcface",
+                                        "identity_target_similarity": 0.99}, gate_cfg)
+        check("recolour guard fires on the numbers alone (no method_guess needed)",
+              d5["decision"] == "reject", str(d5))
+
+        print("== identity core recipe (SDXL likeness route)")
+        idr = json.loads((ROOT / "recipes" / "identity_sdxl_t2i.v1.json")
+                         .read_text(encoding="utf-8-sig"))
+        check("identity recipe routes to the IP-Adapter FaceID SDXL graph",
+              idr["workflow"] == "workflows/sdxl_ipadapter_face_api.json"
+              and (ROOT / idr["workflow"]).is_file())
+        check("identity recipe carries its own model pack (cannot run unconditioned)",
+              idr.get("identity", {}).get("lora") and idr["identity"].get("strength"))
+        check("identity recipe demands GROUND-TRUTH (camera) reference conditioning",
+              idr.get("reference_policy", {}).get("source") == "ground_truth")
+        prof = json.loads((ROOT / "profiles" / "me" / "profile.json").read_text(encoding="utf-8-sig"))
+        gt = prof["references"]["ground_truth"]
+        check("profile declares real camera photos as ground truth (no generated faces)",
+              gt and all("me_photo" in n for n in gt), str(gt))
+        import byrdimage as _bi
+        check("identity recipe resolves by name through the recipe finder",
+              _bi.find_recipe(ROOT, "identity_sdxl_t2i").name == "identity_sdxl_t2i.v1.json")
+        # An identity recipe must never run unconditioned just because the caller
+        # forgot the LoRA name — byrdimage adopts the recipe's own pack.
+        src = (ROOT / "scripts" / "byrdimage.py").read_text(encoding="utf-8-sig")
+        check("byrdimage adopts the recipe's identity pack when no LoRA is passed",
+              'recipe_identity = recipe.get("identity") or {}' in src
+              and 'if not lora and recipe_identity.get("lora")' in src)
+        wsrc = (ROOT / "scripts" / "worker.py").read_text(encoding="utf-8-sig")
+        check("worker refuses a ground_truth recipe with no real reference photo",
+              'ground_truth_only=gt_only' in wsrc
+              and "requires a ground-truth (real camera) " in wsrc)
+
+        print("== video lane (LTX i2v, gated on an APPROVED still)")
+        ltx = json.loads((ROOT / "workflows" / "ltx_i2v_api.json").read_text(encoding="utf-8-sig"))
+        ltx.pop("_comment", None)
+        check("LTX graph is API format, not a UI export (UI exports cannot POST)",
+              "nodes" not in ltx and "links" not in ltx
+              and all(isinstance(v, dict) and "class_type" in v for v in ltx.values()))
+        ltx_classes = {v["class_type"] for v in ltx.values()}
+        check("LTX graph keeps the real LTX node contract",
+              {"LTXVImgToVideo", "LTXVConditioning", "LTXVScheduler", "SamplerCustom",
+               "LTXVPreprocess", "VAEDecode", "LoadImage"} <= ltx_classes,
+              str(sorted(ltx_classes)))
+        i2v = next(v for v in ltx.values() if v["class_type"] == "LTXVImgToVideo")
+        check("LTX img2video is wired to the preprocessed still and the VAE",
+              i2v["inputs"]["image"][0] ==
+              next(k for k, v in ltx.items() if v["class_type"] == "LTXVPreprocess")
+              and i2v["inputs"]["vae"][0] ==
+              next(k for k, v in ltx.items() if v["class_type"] == "CheckpointLoaderSimple"))
+        check("LTX frame length satisfies (length-1) % 8 == 0",
+              (i2v["inputs"]["length"] - 1) % 8 == 0, str(i2v["inputs"]["length"]))
+        # The shipped baseline must still be recognised as un-POSTable — this is
+        # the documented reason video never ran, so it stays asserted.
+        ui_ltx = json.loads((REPO / "Video" / "Workflows" /
+                             "ltxv_i2v_simple_0.9.5.json").read_text(encoding="utf-8-sig"))
+        check("the original LTX baseline is confirmed UI-format (why video never ran)",
+              "nodes" in ui_ltx and "links" in ui_ltx)
+
+        # VIDEO RULE: refuse to animate a still that is not approved
+        rejected_art = [a for a in api("/artifacts?limit=100")
+                        if a["status"] == "rejected"]
+        api("/jobs", {"type": "video.i2v", "project": "careyrpg",
+                      "required_mode": "VIDEO", "required_caps": ["comfyui"],
+                      "payload": {"source_artifact": rejected_art[0]["id"],
+                                  "project": "careyrpg", "purpose": "should refuse",
+                                  "prompt": "slow push in"}})
+        run_worker()
+        refused = [j for j in api("/jobs?type=video.i2v")
+                   if j["status"] in ("dead", "failed")]
+        check("video.i2v REFUSES an unapproved still (the VIDEO RULE)",
+              refused and "not 'approved'" in (refused[0]["error"] or ""),
+              str(refused[0]["error"])[:140] if refused else "no failed job")
+
+        # an APPROVED still animates and archives a carded video artifact
+        approved_still = [a for a in api("/artifacts?limit=100")
+                          if a["status"] == "approved" and a["kind"] == "image"
+                          and a["path"]][0]
+        api("/jobs", {"type": "video.i2v", "project": "careyrpg",
+                      "required_mode": "VIDEO", "required_caps": ["comfyui"],
+                      "payload": {"source_artifact": approved_still["id"],
+                                  "project": "careyrpg", "purpose": "identity still -> motion",
+                                  "prompt": "slow cinematic push in, subtle head turn",
+                                  "seed": 7}})
+        run_worker()
+        vids = [a for a in api("/artifacts?limit=200") if a["kind"] == "video"]
+        check("approved still animates into a carded video artifact",
+              len(vids) == 1, str(len(vids)))
+        if vids:
+            vm = json.loads(vids[0]["meta"])
+            check("video card records engine/seed/frames/fps/duration + source lineage",
+                  vm.get("engine") == "ltx-video" and vm.get("seed") == 7
+                  and vm.get("length_frames") and vm.get("fps")
+                  and vm.get("duration_seconds")
+                  and vm.get("source_artifact") == approved_still["id"], str(vm)[:200])
+            check("video output collected despite a non-'images' output key",
+                  (vids[0]["path"] or "").endswith(".webm"), str(vids[0]["path"]))
+
         print("== inventory.scan (belt remembers every file it has)")
         api("/jobs", {"type": "inventory.scan", "project": "byrdhouse",
                       "required_mode": "ANY", "payload": {}})
