@@ -27,6 +27,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import byrdimage  # noqa: E402
 import byrdjudge  # noqa: E402
+import byrdcaption  # noqa: E402
 import compose_thumbnail  # noqa: E402
 
 ROOT = Path(os.environ.get("BYRDHOUSE_ROOT") or sys.exit("BYRDHOUSE_ROOT not set"))
@@ -589,6 +590,45 @@ def run_judge(job) -> None:
          "caption": verdict["caption"]})
 
 
+def run_caption(job) -> None:
+    """image.caption: describe an existing artifact with the LM Studio vision
+    model (OPERATOR mode, same lane as the judge) and write the caption + tags
+    back onto its card. Deliberate dataset/library work — NOT auto-enqueued after
+    every generation the way the judge is. No vision model => honestly skip."""
+    p = json.loads(job["payload"])
+    image_path = Path(p["path"])
+    card_path = image_path.with_suffix(image_path.suffix + ".json")
+    card = json.loads(card_path.read_text(encoding="utf-8-sig")) if card_path.exists() else dict(p)
+    cm = byrdcaption._caption_model(CFG)  # caption_model or judge_model
+    if cm and not cm.startswith("CHANGE_ME") and cm not in _loaded_models():
+        _lms_unload_all()
+        _lms_load(cm)
+    # else: caption with whatever vision model is loaded (byrdcaption enforces vision)
+    try:
+        result = byrdcaption.caption_image(
+            ROOT, image_path, trigger=p.get("trigger", ""),
+            style=p.get("style", "lora"), max_words=int(p.get("max_words", 40)),
+            context=p.get("context", ""))
+    except byrdcaption.NoVisionModel as e:
+        # A caption is only trustworthy from a model that can see the image —
+        # leave the artifact uncaptioned rather than inventing words.
+        log(f"SKIP caption {p.get('artifact_id')}: {e}")
+        if p.get("artifact_id"):
+            api(f"/artifacts/{p['artifact_id']}/review",
+                {"action": "uncaptioned", "reason": str(e)})
+        return
+    card["caption"] = result["caption"]
+    if result["tags"]:
+        card["tags"] = result["tags"]
+    card["caption_model"] = result["model"]
+    if card_path.exists():
+        card_path.write_text(json.dumps(card, indent=2), encoding="utf-8")
+    if p.get("artifact_id"):
+        api(f"/artifacts/{p['artifact_id']}/review",
+            {"action": "caption", "caption": result["caption"], "tags": result["tags"]})
+    log(f"captioned {p.get('artifact_id') or image_path.name}: {result['caption'][:80]}")
+
+
 def run_report(job) -> None:
     report = api("/reports/daily")
     out_dir = ROOT / "artifacts" / "reports" / f"{datetime.now():%Y-%m}"
@@ -786,6 +826,7 @@ def run_export_csv(job) -> None:
 
 
 RUNNERS = {"image.generate": run_generate, "image.judge": run_judge,
+           "image.caption": run_caption,
            "image.faceswap": run_faceswap,
            "image.refine": run_refine, "image.upscale": run_refine,
            "report.daily": run_report,

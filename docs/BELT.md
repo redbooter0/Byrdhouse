@@ -37,6 +37,15 @@ patterns, and we can add the rest one compounding piece at a time.**
 - **Learn loop** (`/learn`) — projects approve/reject history into approval-rate
   rankings by recipe/checkpoint/palette/lighting. Reverse-engineered RLHF from
   data we already store.
+- **Caption / describe lane** (`image.caption`, `scripts/byrdcaption.py`) — the
+  belt's answer to ComfyUI-Ollama-Describer *without a second LLM server*: the
+  SAME LM Studio vision model the judge uses (`gpu.caption_model` →
+  `gpu.judge_model`) turns an image into a trigger-anchored caption + tags,
+  written back onto the card via `/artifacts/<id>/review action=caption`
+  (merges into `judge_notes`, never clobbers the judge score). The CLI
+  bulk-captions a folder to kohya `.txt`; `prepare-carey-lora-dataset.py
+  --vl-captions` layers it over the audited template captions. No vision model →
+  honestly `uncaptioned`, never invented — the judge's honesty rule, reused.
 
 ### Reserved (columns already migrated in, logic pending a greenlight)
 - **`parent_id` — job chaining / DAG.** Today a generate job *imperatively*

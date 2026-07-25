@@ -51,12 +51,13 @@ def _looks_vision(model_id: str) -> bool:
     return any(h in m for h in VISION_HINTS)
 
 
-def _pick_judge_model(lms: str, preferred: str) -> str:
+def _pick_judge_model(lms: str, preferred: str, label: str = "judge") -> str:
     """Judging REQUIRES a vision-capable model. Preferred judge_model wins when
     loaded; a genuinely vision-capable loaded model may stand in; otherwise
     (nothing loaded) JIT-load the configured judge. If none of those hold —
     a non-vision model is loaded and no vision judge is configured/available —
-    raise NoVisionModel so the artifact stays honestly unjudged."""
+    raise NoVisionModel so the artifact stays honestly unjudged. Shared by the
+    caption lane (byrdcaption); `label` only tags the log line."""
     try:
         with urllib.request.urlopen(f"{lms}/models", timeout=8) as r:
             loaded = [m["id"] for m in json.loads(r.read().decode()).get("data", [])]
@@ -68,7 +69,7 @@ def _pick_judge_model(lms: str, preferred: str) -> str:
     vision_loaded = [m for m in loaded if _looks_vision(m)]
     if vision_loaded:
         if preferred_ok:
-            print(f"[judge] '{preferred}' not loaded — using vision model '{vision_loaded[0]}'")
+            print(f"[{label}] '{preferred}' not loaded — using vision model '{vision_loaded[0]}'")
         return vision_loaded[0]
     if preferred_ok and not loaded:
         return preferred  # nothing loaded — let LM Studio JIT-load the configured judge

@@ -125,6 +125,80 @@ def main():
         check("approve flow", approved["status"] == "approved")
         api(f"/artifacts/{arts[1]['id']}/review", {"action": "reject"})
 
+        print("== image.caption (describe lane — reuses the vision model, no Ollama)")
+        cap_src = arts[0]  # approved, judged 4.2, real png on disk
+        api("/jobs", {"type": "image.caption", "project": "careyrpg",
+                      "required_mode": "OPERATOR", "required_caps": ["lmstudio"],
+                      "payload": {"artifact_id": cap_src["id"], "path": cap_src["path"],
+                                  "trigger": "careybh person", "style": "lora"}})
+        run_worker()
+        capped = [a for a in api("/artifacts?limit=80") if a["id"] == cap_src["id"]][0]
+        cap_notes = json.loads(capped["judge_notes"] or "{}")
+        check("caption lane wrote a trigger-anchored caption onto the artifact",
+              cap_notes.get("caption", "").startswith("careybh person")
+              and "A test verdict" in cap_notes.get("caption", ""), str(cap_notes))
+        check("caption lane preserved the judge score (merge, no clobber)",
+              capped["score"] == 4.2 and capped["status"] == "approved",
+              f"{capped['score']}/{capped['status']}")
+        cap_card = json.loads(
+            Path(cap_src["path"] + ".json").read_text(encoding="utf-8-sig"))
+        check("caption is written back onto the sidecar card + records the model",
+              cap_card.get("caption", "").startswith("careybh person")
+              and cap_card.get("caption_model") == "mock-vl", str(cap_card.get("caption")))
+
+        # Direct library call: trigger-anchored lora caption, plain natural sentence
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import byrdcaption
+        dres = byrdcaption.caption_image(ROOT, cap_src["path"],
+                                         trigger="careybh person", style="lora")
+        check("byrdcaption.caption_image returns a trigger-anchored caption + tags",
+              dres["caption"].startswith("careybh person")
+              and "A test verdict" in dres["caption"] and dres["tags"], str(dres))
+        dnat = byrdcaption.caption_image(ROOT, cap_src["path"], style="natural")
+        check("natural style returns the bare sentence when no trigger is given",
+              dnat["caption"] == "A test verdict.", str(dnat))
+
+        # CLI: the bulk captioner writes a .caption.json card + kohya .txt sidecar
+        cli = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "byrdcaption.py"),
+             cap_src["path"], "--trigger", "careybh person", "--style", "lora",
+             "--write-txt"],
+            env={**os.environ, "BYRDHOUSE_ROOT": str(ROOT)},
+            capture_output=True, text=True, timeout=60)
+        cap_json = Path(cap_src["path"] + ".caption.json")
+        cap_txt = Path(cap_src["path"]).with_suffix(".txt")
+        check("byrdcaption CLI writes .caption.json card + kohya .txt",
+              cli.returncode == 0 and cap_json.is_file() and cap_txt.is_file(),
+              cli.stderr[:200])
+        if cap_txt.is_file():
+            check("kohya .txt holds the trigger-anchored caption",
+                  cap_txt.read_text().startswith("careybh person"),
+                  cap_txt.read_text()[:80])
+
+        # No vision model => honestly uncaptioned, never an invented caption
+        byrdjudge_mod = __import__("byrdjudge")
+        orig_pick = byrdjudge_mod._pick_judge_model
+        def _no_vision(*a, **k):
+            raise byrdcaption.NoVisionModel("no vision model in test")
+        byrdjudge_mod._pick_judge_model = _no_vision
+        try:
+            raised = False
+            try:
+                byrdcaption.caption_image(ROOT, cap_src["path"], trigger="careybh person")
+            except byrdcaption.NoVisionModel:
+                raised = True
+            check("caption refuses to invent when no vision model is available", raised)
+        finally:
+            byrdjudge_mod._pick_judge_model = orig_pick
+
+        # LoRA dataset prep exposes the opt-in VL describer with a template fallback
+        lora_prep = (ROOT / "scripts" / "prepare-carey-lora-dataset.py").read_text(
+            encoding="utf-8-sig")
+        check("LoRA dataset prep offers opt-in VL captions over the template",
+              "--vl-captions" in lora_prep and "def vl_context(" in lora_prep
+              and "merge_caption(caption, vl_context(" in lora_prep
+              and "using template" in lora_prep)
+
         # Idempotency: the same key submitted twice yields one job, not two
         k = "idem-test-key-1"
         j1 = api("/jobs", {"type": "report.daily", "idempotency_key": k})

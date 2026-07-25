@@ -25,7 +25,7 @@ Endpoints (v2 §6):                                          access
   GET  /artifacts?project=&status=&id=&limit=               open
   GET  /artifacts/<id>/file image bytes (local or preview)  open
   POST /artifacts/<id>/file upload preview bytes (worker)   token
-  POST /artifacts/<id>/review {action:approve|reject|judge} token
+  POST /artifacts/<id>/review {action:approve|reject|judge|caption} token
   POST /artifacts/<id>/refine {strength,scale,prompt,lora}   token
   GET  /recipes             list recipe files               open
   POST /chat                {messages:[...]} -> operator    token
@@ -62,7 +62,8 @@ REFERENCES = ROOT / "references"  # founder-loved thumbnails the judge scores ag
 SOURCES = ROOT / "artifacts" / "_sources"  # dashboard-uploaded real source images
 
 JOB_TYPES = {
-    "image.generate", "image.judge", "image.refine", "image.upscale", "image.faceswap",
+    "image.generate", "image.judge", "image.caption",
+    "image.refine", "image.upscale", "image.faceswap",
     "video.i2v",
     "memory.save", "memory.import", "report.daily",
     "export.csv", "export.zip", "backup.nightly",
@@ -1062,6 +1063,32 @@ class Handler(BaseHTTPRequestHandler):
                 db().execute(
                     "UPDATE artifacts SET judge_notes=? WHERE id=?",
                     (json.dumps({"unjudged": body.get("reason", "no vision model")}), aid))
+            elif action in ("caption", "uncaptioned"):
+                # The caption lane (image.caption) annotates an artifact without
+                # scoring it — merge into judge_notes so a judge score is never
+                # clobbered. 'uncaptioned' records why no caption was written
+                # (no vision model), same honesty rule as 'unjudged'.
+                try:
+                    notes = json.loads(art["judge_notes"] or "{}")
+                except (TypeError, ValueError):
+                    notes = {}
+                if not isinstance(notes, dict):
+                    notes = {}
+                if action == "caption":
+                    notes["caption"] = body.get("caption", "")
+                    notes.pop("uncaptioned", None)
+                    tags = body.get("tags")
+                    if tags is not None:
+                        db().execute(
+                            "UPDATE artifacts SET tags=?, judge_notes=? WHERE id=?",
+                            (json.dumps(tags), json.dumps(notes), aid))
+                    else:
+                        db().execute("UPDATE artifacts SET judge_notes=? WHERE id=?",
+                                     (json.dumps(notes), aid))
+                else:
+                    notes["uncaptioned"] = body.get("reason", "no vision model")
+                    db().execute("UPDATE artifacts SET judge_notes=? WHERE id=?",
+                                 (json.dumps(notes), aid))
             else:
                 return self._send({"error": f"bad action '{action}'"}, 400)
             db().commit()
