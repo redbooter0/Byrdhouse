@@ -278,6 +278,49 @@ def main():
               'ground_truth_only=gt_only' in wsrc
               and "requires a ground-truth (real camera) " in wsrc)
 
+        print("== identity PROBE (plain t2i — the test that had never been run)")
+        probe = json.loads((ROOT / "recipes" / "carey_identity_probe.v1.json")
+                           .read_text(encoding="utf-8-sig"))
+        check("probe is plain text-to-image: no target-edit runner, no mask",
+              "runner" not in probe and probe["workflow"] == "workflows/sdxl_base_api.json")
+        check("probe prompt carries the training trigger phrase",
+              "careybh person" in probe["template"])
+        check("probe declares SD1.5 native resolution",
+              probe["defaults"]["width"] == 512 and probe["defaults"]["height"] == 512)
+        # A recipe's native resolution must actually apply, or an SD1.5 recipe
+        # renders at the SDXL default and mushes — which reads as a bad LoRA.
+        check("recipe-declared resolution is honoured by the dims resolver",
+              _bi.pick_dims(None, probe["defaults"]["width"],
+                            probe["defaults"]["height"]) == (512, 512))
+        # Stage the model files the probe needs, exactly as GAMING has them: the
+        # identity lane REFUSES to run unconditioned, so a missing LoRA is a hard
+        # failure by design (that is the point) — the test must supply one.
+        lora_dir = ROOT / "Generators" / "ComfyUI" / "models" / "loras"
+        lora_dir.mkdir(parents=True, exist_ok=True)
+        (lora_dir / "carey_meina_sd15_v1.safetensors").write_bytes(b"stub-lora")
+        ck_dir = ROOT / "Generators" / "ComfyUI" / "models" / "checkpoints"
+        ck_dir.mkdir(parents=True, exist_ok=True)
+        (ck_dir / "meina_v11.safetensors").write_bytes(b"stub-ckpt")
+        api("/jobs", {"type": "image.generate", "project": "identity_probe",
+                      "required_mode": "IMAGE", "required_caps": ["comfyui"],
+                      "payload": {"recipe": "carey_identity_probe@1", "slots": {},
+                                  "project": "identity_probe", "seed": 42, "batch": 1,
+                                  "purpose": "IDENTITY PROBE — t2i, no target"}})
+        run_worker()
+        probed = [a for a in api("/artifacts?limit=200")
+                  if json.loads(a["meta"] or "{}").get("recipe", "").startswith("carey_identity_probe")]
+        check("probe generates through the belt with a card", len(probed) >= 1, str(len(probed)))
+        if probed:
+            pm = json.loads(probed[0]["meta"])
+            check("probe card records the trigger prompt and its fixed seed",
+                  "careybh person" in pm.get("prompt", "") and pm.get("seed") == 42,
+                  str(pm.get("prompt", ""))[:80])
+            check("probe rendered at SD1.5 512px, not the SDXL default",
+                  pm.get("size") == "512x512", str(pm.get("size")))
+        # Tear down the probe's staged checkpoint so later assertions about which
+        # checkpoint is "the only installed one" still hold.
+        (ck_dir / "meina_v11.safetensors").unlink()
+
         print("== video lane (LTX i2v, gated on an APPROVED still)")
         ltx = json.loads((ROOT / "workflows" / "ltx_i2v_api.json").read_text(encoding="utf-8-sig"))
         ltx.pop("_comment", None)
@@ -463,7 +506,9 @@ def main():
         check("artifacts expose job timing", timed and all(
             a["job_queued_at"] and a["job_claimed_at"] and a["job_finished_at"]
             and isinstance(a["gen_seconds"], int) and a["gen_seconds"] >= 0 for a in timed))
-        card_meta = json.loads(timed[0]["meta"])
+        tier = [a for a in timed
+                if json.loads(a["meta"] or "{}").get("recipe", "").startswith("rpg_tier_list")]
+        card_meta = json.loads(tier[0]["meta"])
         check("card records requested slots", card_meta.get("slots", {}).get("game") == "Last Epoch")
 
         # Operator chat: router proxies to LM Studio with live belt context

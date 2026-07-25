@@ -319,6 +319,15 @@ def generate(root, recipe_name, slots, project, purpose,
             vary_picks[k] = random.choice(options)
     slots.update(vary_picks)
 
+    # A slot declared {"required": false, "default": "..."} must actually GET that
+    # default. Without this the recipe advertises an optional field and then dies
+    # with "unfilled slots" when the founder leaves it blank — the form says
+    # optional, the belt says no. Explicit values and vary picks still win.
+    for key, spec in (recipe.get("slots") or {}).items():
+        if isinstance(spec, dict) and spec.get("default") is not None \
+                and not str(slots.get(key, "")).strip():
+            slots[key] = spec["default"]
+
     template = recipe["template"]
     missing = [k for k in re.findall(r"\{(\w+)\}", template) if k not in slots]
     if missing:
@@ -361,7 +370,12 @@ def generate(root, recipe_name, slots, project, purpose,
     job_id = job_id or new_id("job")
     seed = int(seed) if seed else secrets.randbits(63)  # fix 1: random per job (or pinned for reruns)
     prefix = f"{datetime.now():%Y%m%d}_{recipe['id']}_{job_id}"  # fix 2: unique
-    gen_w, gen_h = pick_dims(aspect, width, height, img_cfg)
+    # A recipe may declare its NATIVE resolution (SD1.5 = 512, SDXL = 1024).
+    # Without this an SD1.5 recipe silently renders at the SDXL config default
+    # and falls apart — duplicated faces, mush — which looks like a bad LoRA but
+    # is really a wrong-resolution run. Explicit args and aspect presets still win.
+    gen_w, gen_h = pick_dims(aspect, width or defaults.get("width"),
+                             height or defaults.get("height"), img_cfg)
 
     # Hires workflows generate at a smaller base size and upscale within the
     # graph (LatentUpscaleBy). base_scale > 1 means EmptyLatentImage is set to
