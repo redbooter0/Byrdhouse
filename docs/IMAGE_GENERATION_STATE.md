@@ -13,6 +13,8 @@ Two things the belt was missing — the reasons every fix felt like a coin flip 
 
 **Why images "can't be produced" — confirmed by the inventory, not guessed.** All four `workflows/flux2_klein/*.json` are **UI-format exports** (`nodes`+`links`), which 400 the ComfyUI `/prompt` endpoint — they never ran. And the stack itself (Flux2 Klein 9B UNet + Qwen 8B encoder, fp8) is ~17B active params with fp8 that has **no speedup on Ampere** (the 3070 has no fp8 tensor cores) — it streams weights over PCIe and hangs past the router timeout. Flux2 is a cash-gated lane for the day a bigger card is bought, not a fix for the identity/masking problem beneath it.
 
+**Step-by-step GAMING runbook for all of the below:** `docs/GAMING_RUNBOOK_image_lane.md` (copy-paste, config-driven, by hand).
+
 **Recommended hero lane (staged, needs a GAMING run to confirm — do WO-0 first):**
 1. **WO-0 baseline before any change:** run the existing SDXL + Carey LoRA path on the five locked targets (Luffy, Vegeta, Gojo, a realistic portrait, a game character) with fixed seeds; archive as the baseline. Nothing can be proven to help until this exists — and the identity gate above is what makes "help" measurable.
 2. Move the hero lane back to **SDXL + Carey LoRA + IP-Adapter FaceID Plus v2 + a face-detailer pass** (~7GB, fits the 3070 with headroom). The `sdxl_ipadapter_face_api.json` graph and the `me_as_character` recipe already exist.
