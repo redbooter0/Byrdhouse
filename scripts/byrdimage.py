@@ -293,7 +293,7 @@ def generate(root, recipe_name, slots, project, purpose,
              aspect=None, width=None, height=None, negative_extra=None,
              lora=None, lora_strength=0.9, lora_clip_strength=None,
              seed=None, reference=None,
-             engine=None):
+             subject_profile=None, engine=None):
     """Run one image.generate: recipe -> ComfyUI -> archived PNGs + cards.
     Returns (job_id, [(png_path, card_dict), ...]). Raises SystemExit on
     validation errors (via die) — callers that need exceptions can catch it."""
@@ -319,6 +319,15 @@ def generate(root, recipe_name, slots, project, purpose,
             vary_picks[k] = random.choice(options)
     slots.update(vary_picks)
 
+    # A slot declared {"required": false, "default": "..."} must actually GET that
+    # default. Without this the recipe advertises an optional field and then dies
+    # with "unfilled slots" when the founder leaves it blank — the form says
+    # optional, the belt says no. Explicit values and vary picks still win.
+    for key, spec in (recipe.get("slots") or {}).items():
+        if isinstance(spec, dict) and spec.get("default") is not None \
+                and not str(slots.get(key, "")).strip():
+            slots[key] = spec["default"]
+
     template = recipe["template"]
     missing = [k for k in re.findall(r"\{(\w+)\}", template) if k not in slots]
     if missing:
@@ -330,8 +339,31 @@ def generate(root, recipe_name, slots, project, purpose,
 
     defaults = recipe.get("defaults", {})
     engine = engine or {}
+    # An identity recipe declares its own model pack (handoff §3: the subject
+    # profile is the identity truth, engines consume it through adapters). If the
+    # caller didn't name a LoRA, use the recipe's — so the identity lane can never
+    # silently run unconditioned just because nobody typed the filename.
+    recipe_identity = recipe.get("identity") or {}
+    if not lora and recipe_identity.get("lora"):
+        lora = recipe_identity["lora"]
+        if recipe_identity.get("strength") is not None:
+            lora_strength = float(recipe_identity["strength"])
+        if recipe_identity.get("clip_strength") is not None:
+            lora_clip_strength = float(recipe_identity["clip_strength"])
+        print(f"[byrdimage] identity pack from recipe: {lora}")
     ckpt_requested = checkpoint or engine.get("checkpoint") or defaults.get("checkpoint") or die("no checkpoint")
     checkpoint, ckpt_matched = resolve_checkpoint_info(root, ckpt_requested, comfy=comfy)
+    # A DIAGNOSTIC recipe may not accept a checkpoint fallback. Falling back can
+    # cross model families (an SD1.5 LoRA on an SDXL checkpoint renders mush),
+    # and mush in every cell reads as "the adapter never learned the face" —
+    # the most expensive wrong conclusion this repo can reach. Fail loudly.
+    if not ckpt_matched and recipe.get("require_exact_checkpoint"):
+        die(f"recipe '{recipe['id']}' requires the exact checkpoint "
+            f"'{ckpt_requested}' but it is not installed (resolved to "
+            f"'{checkpoint}'). This recipe is a diagnostic: a substituted "
+            f"checkpoint can cross model families and produce a false negative. "
+            f"Install '{ckpt_requested}' or pass --checkpoint with an installed "
+            f"model of the SAME family as the LoRA.")
     batch = batch or defaults.get("batch", 1)
     steps = int(engine.get("steps") or defaults.get("steps", 30))
 
@@ -349,7 +381,12 @@ def generate(root, recipe_name, slots, project, purpose,
     job_id = job_id or new_id("job")
     seed = int(seed) if seed else secrets.randbits(63)  # fix 1: random per job (or pinned for reruns)
     prefix = f"{datetime.now():%Y%m%d}_{recipe['id']}_{job_id}"  # fix 2: unique
-    gen_w, gen_h = pick_dims(aspect, width, height, img_cfg)
+    # A recipe may declare its NATIVE resolution (SD1.5 = 512, SDXL = 1024).
+    # Without this an SD1.5 recipe silently renders at the SDXL config default
+    # and falls apart — duplicated faces, mush — which looks like a bad LoRA but
+    # is really a wrong-resolution run. Explicit args and aspect presets still win.
+    gen_w, gen_h = pick_dims(aspect, width or defaults.get("width"),
+                             height or defaults.get("height"), img_cfg)
 
     # Hires workflows generate at a smaller base size and upscale within the
     # graph (LatentUpscaleBy). base_scale > 1 means EmptyLatentImage is set to
@@ -445,7 +482,10 @@ def generate(root, recipe_name, slots, project, purpose,
             "lora_clip_strength": (lora_strength if lora_clip_strength is None else lora_clip_strength)}
            if lora else {}),
         **({"reference": str(reference)} if reference else {}),
-        **({"subject_profile": recipe.get("subject_profile")} if recipe.get("subject_profile") else {}),
+        # The JOB's subject wins (the founder picked who is in this image);
+        # the recipe's subject_profile is only the default when none was passed.
+        **({"subject_profile": subject_profile or recipe.get("subject_profile")}
+           if (subject_profile or recipe.get("subject_profile")) else {}),
         **({"category": recipe.get("category")} if recipe.get("category") else {}),
         **({"checkpoint_requested": ckpt_requested, "checkpoint_fallback": True}
            if not ckpt_matched else {}),
@@ -1440,6 +1480,103 @@ def refine(root, source_path, project, purpose, prompt=None, negative=None,
         "scheduler": img_cfg.get("scheduler", "karras"),
         **size_fields,
         **({"lora": lora} if lora else {}),
+    }
+    return job_id, run_graph(root, comfy, graph, job_id, project, card_base)
+
+
+def identity_variation(root, source_path, reference_path, project, purpose,
+                       workflow_rel, recipe_tag, prompt=None, negative=None,
+                       denoise=0.5, checkpoint=None, lora=None,
+                       lora_strength=0.9, lora_clip_strength=None,
+                       batch=1, seed=None, subject_profile=None, job_id=None):
+    """Identity IMG2IMG: redraw an existing image AS a subject. Composition,
+    pose and scene come from the source at the chosen denoise; the face comes
+    from the subject — IP-Adapter FaceID on a real ground-truth photo, plus the
+    subject's identity LoRA when installed. This is the 'make this look like
+    me/them' route; unlike refine() it carries identity, and unlike the
+    face-zone lane the whole image is re-imagined so the LoRA's geometry can
+    actually appear."""
+    root = Path(root)
+    cfg = load_json(root / "byrdhouse.config.json")
+    comfy = cfg["services"]["comfyui"].rstrip("/")
+    img_cfg = cfg.get("image", {})
+    source = Path(source_path)
+    if not source.exists():
+        die(f"source image not found: {source}")
+    reference = Path(reference_path)
+    if not reference.exists():
+        die(f"identity reference photo not found: {reference}")
+
+    src_card = {}
+    card_path = source.with_suffix(source.suffix + ".json")
+    if card_path.exists():
+        src_card = load_json(card_path)
+    prompt = (prompt or "").strip() or src_card.get("prompt") \
+        or "the same scene and pose, natural photo, sharp detailed face"
+    if negative is None:
+        negative = ("text, letters, watermark, blurry, low quality, deformed "
+                    "face, distorted features, different person, plastic skin")
+    checkpoint = resolve_checkpoint(
+        root, checkpoint or img_cfg.get("checkpoint") or "juggernautXL_v9",
+        comfy=comfy)
+
+    job_id = job_id or new_id("job")
+    seed = int(seed) if seed is not None else secrets.randbits(63)
+    denoise = max(0.05, min(0.95, float(denoise)))
+    graph = load_json(root / workflow_rel)
+    graph.pop("_comment", None)
+
+    # Two LoadImage nodes with DIFFERENT jobs — wire them by title, never blind.
+    src_name = upload_image(comfy, source)
+    ref_name = upload_image(comfy, reference)
+    titles = {}
+    for node in graph.values():
+        if node.get("class_type") == "LoadImage":
+            titles[node.get("_meta", {}).get("title", "")] = node
+    if "SOURCE IMAGE" not in titles or "IDENTITY PHOTO" not in titles:
+        die(f"{workflow_rel} must title its LoadImage nodes 'SOURCE IMAGE' and "
+            f"'IDENTITY PHOTO' — found {sorted(titles)}")
+    titles["SOURCE IMAGE"]["inputs"]["image"] = src_name
+    titles["IDENTITY PHOTO"]["inputs"]["image"] = ref_name
+
+    prefix = f"{datetime.now():%Y%m%d}_idvar_{job_id}"
+    steps_used = 30
+    for node in graph.values():
+        ct, inputs = node.get("class_type"), node.get("inputs", {})
+        if ct == "RepeatLatentBatch":
+            inputs["amount"] = int(batch)
+        elif ct == "KSampler":
+            inputs["seed"] = seed
+            inputs["denoise"] = denoise
+            steps_used = int(inputs.get("steps", 30))
+        elif ct == "CheckpointLoaderSimple":
+            inputs["ckpt_name"] = checkpoint
+        elif ct == "SaveImage":
+            inputs["filename_prefix"] = prefix
+    for node in graph.values():
+        if node.get("class_type") != "KSampler":
+            continue
+        for socket, text in (("positive", prompt), ("negative", negative)):
+            ref = node["inputs"].get(socket)
+            target = graph.get(str(ref[0])) if isinstance(ref, list) and ref else None
+            if not target or target.get("class_type") != "CLIPTextEncode":
+                die(f"identity img2img KSampler {socket} not wired to CLIPTextEncode")
+            target["inputs"]["text"] = text
+    if lora:
+        insert_lora(graph, resolve_lora(root, lora), lora_strength,
+                    clip_strength=lora_clip_strength)
+
+    print(f"[byrdimage] identity variation of {source.name} as "
+          f"'{subject_profile or '?'}'  denoise {denoise}  seed {seed}")
+    card_base = {
+        "recipe": recipe_tag, "purpose": purpose,
+        "prompt": prompt, "negative": negative, "seed": seed,
+        "checkpoint": checkpoint, "workflow": workflow_rel,
+        "slots": {}, "vary_picks": {},
+        "source_image": str(source), "reference": str(reference),
+        "denoise": denoise, "steps": steps_used,
+        **({"lora": lora, "lora_model_strength": lora_strength} if lora else {}),
+        **({"subject_profile": subject_profile} if subject_profile else {}),
     }
     return job_id, run_graph(root, comfy, graph, job_id, project, card_base)
 

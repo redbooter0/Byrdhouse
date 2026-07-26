@@ -27,6 +27,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import byrdimage  # noqa: E402
 import byrdjudge  # noqa: E402
+import byrdcaption  # noqa: E402
+import byrdidentity  # noqa: E402
+import byrdinventory  # noqa: E402
+import byrdvideo  # noqa: E402
 import compose_thumbnail  # noqa: E402
 
 ROOT = Path(os.environ.get("BYRDHOUSE_ROOT") or sys.exit("BYRDHOUSE_ROOT not set"))
@@ -103,13 +107,17 @@ def _preview_bytes(path, max_side=896):
 
 
 def upload_preview(artifact_id, path):
-    """Push the image bytes to the router so the dashboard can preview it —
-    artifact files live on this machine's disk, not the router's."""
+    """Push the media bytes to the router so the dashboard can preview it —
+    artifact files live on this machine's disk, not the router's. Content type
+    follows the file so a video clip is cached (and served back) as video."""
+    suffix = Path(path).suffix.lower()
+    ctype = {".webm": "video/webm", ".mp4": "video/mp4"}.get(suffix, "image/png")
+    data = Path(path).read_bytes() if ctype.startswith("video") else _preview_bytes(path)
     try:
         req = urllib.request.Request(
-            f"{ROUTER}/artifacts/{artifact_id}/file", data=_preview_bytes(path),
+            f"{ROUTER}/artifacts/{artifact_id}/file", data=data,
             method="POST",
-            headers={"Content-Type": "image/png",
+            headers={"Content-Type": ctype,
                      "Authorization": f"Bearer {TOKEN}", "X-Actor": WORKER_ID})
         with urllib.request.urlopen(req, timeout=60) as r:
             r.read()
@@ -243,15 +251,19 @@ class Gpu:
             return
         log(f"mode {self.mode} -> {target}")
         if self.enabled:
-            if target == "IMAGE":
+            # VIDEO needs the whole card exactly like IMAGE does (handoff §6:
+            # unload LM Studio and image models before LTX/Wan loads), so it runs
+            # the same verified-VRAM ritual rather than a second half-copy of it.
+            if target in ("IMAGE", "VIDEO"):
                 # Hard rule (v2 §7.1): a mode switch must VERIFY VRAM, never assume.
                 # If nvidia-smi is missing we cannot verify, so we refuse loudly
                 # rather than blindly loading ComfyUI onto an 8GB card that may
                 # still hold the LLM.
                 if not self.nvidia_smi:
                     raise RuntimeError(
-                        "cannot switch to IMAGE: nvidia-smi not found (set gpu.nvidia_smi "
-                        "in byrdhouse.config.json). VRAM cannot be verified.")
+                        f"cannot switch to {target}: nvidia-smi not found (set "
+                        "gpu.nvidia_smi in byrdhouse.config.json). VRAM cannot be "
+                        "verified.")
                 subprocess.run(["lms", "unload", "--all"], timeout=120)
                 threshold = int(CFG["gpu"].get("vram_free_threshold_mb", 1024))
                 # A healthy SDXL run on the 3070 wants most of the 8GB free after
@@ -298,15 +310,112 @@ def register_cards(job, cards):
                                   "path": card["path"]}})
 
 
-def resolve_profile_reference(root, profile_id):
-    """Find the default face reference photo from a subject profile."""
+def sync_profile_references(profile_id):
+    """Profiles created/photo-uploaded through the dashboard live on the ROUTER
+    host — but generation runs on THIS machine. Pull any reference photo this
+    machine is missing (by artifact id) into the local profile dir, creating the
+    profile skeleton if needed, and merge the router's ground-truth list into the
+    local profile.json. Best-effort and additive: a hand-built local profile
+    (like 'me' on GAMING) is never overwritten, only extended."""
+    try:
+        entry = next((p for p in api("/profiles") if p.get("id") == profile_id), None)
+    except Exception as e:
+        log(f"profile sync skipped ({e})")
+        return
+    if not entry:
+        return
+    ra = entry.get("reference_artifacts") or {}
+    pdir = ROOT / "profiles" / profile_id
+    refs_dir = pdir / "references"
+    pfile = pdir / "profile.json"
+    if not ra and pfile.exists():
+        return  # nothing routable to fetch; local profile is the truth
+    refs_dir.mkdir(parents=True, exist_ok=True)
+    if pfile.exists():
+        profile = json.loads(pfile.read_text(encoding="utf-8-sig"))
+    else:
+        profile = {"id": profile_id,
+                   "display_name": entry.get("display_name", profile_id),
+                   "references": {"ground_truth": [], "default_set": [],
+                                  "available": []},
+                   "identity_packs": entry.get("identity_packs", {})}
+    refs = profile.setdefault("references", {})
+    fetched = 0
+    for name, aid in ra.items():
+        dest = refs_dir / name
+        if not dest.exists():
+            try:
+                fetch_artifact_file(aid, refs_dir).rename(dest)
+                fetched += 1
+            except Exception as e:
+                log(f"profile '{profile_id}': fetch of {name} failed ({e})")
+                continue
+        for key, names in (("available", [name]),
+                           ("ground_truth",
+                            [name] if name in entry.get("ground_truth_names", [])
+                            else [])):
+            lst = refs.setdefault(key, [])
+            for n in names:
+                if n not in lst:
+                    lst.append(n)
+    pfile.write_text(json.dumps(profile, indent=2), encoding="utf-8")
+    if fetched:
+        log(f"profile '{profile_id}': synced {fetched} reference photo(s) from the router")
+
+
+def _profile_identity_pack(profile_id, family):
+    """The subject's model pack for an engine family (profile.json
+    identity_packs.<family>), but only if the LoRA is actually installed on THIS
+    machine — a pack that exists on paper but not on disk must mean 'FaceID-only
+    run', never a dead job. Returns the pack dict or None."""
+    if not family:
+        return None
+    pfile = ROOT / "profiles" / str(profile_id) / "profile.json"
+    if not pfile.exists():
+        return None
+    try:
+        pack = json.loads(pfile.read_text(encoding="utf-8-sig")) \
+            .get("identity_packs", {}).get(family)
+    except Exception:
+        return None
+    if not pack or not pack.get("lora"):
+        return None
+    try:
+        byrdimage.resolve_lora(ROOT, pack["lora"])
+    except SystemExit:
+        log(f"profile '{profile_id}' {family} pack '{pack['lora']}' not installed "
+            f"on this machine — running on reference conditioning only")
+        return None
+    return pack
+
+
+def resolve_profile_reference(root, profile_id, ground_truth_only=False):
+    """Find the face reference photo for a subject profile.
+
+    Handoff §5.1: camera photographs define identity geometry; generated/anime
+    images are labelled SUPPORT and can never be ground truth. Identity
+    conditioning (IP-Adapter FaceID) must therefore prefer `references.
+    ground_truth` — conditioning identity on a synthetic face compounds drift,
+    which is one reason the likeness kept slipping."""
     pdir = root / "profiles" / profile_id
     pfile = pdir / "profile.json"
     if not pfile.exists():
         log(f"profile '{profile_id}' not found at {pdir}")
         return None
     profile = json.loads(pfile.read_text(encoding="utf-8"))
-    default_set = profile.get("references", {}).get("default_set", [])
+    refs = profile.get("references", {})
+    ground_truth = refs.get("ground_truth", [])
+    for name in ground_truth:
+        ref = pdir / "references" / name
+        if ref.exists():
+            log(f"profile '{profile_id}' ground-truth reference: {ref.name}")
+            return str(ref)
+    if ground_truth_only:
+        log(f"profile '{profile_id}': no ground-truth (real photo) reference "
+            f"available — refusing to condition identity on generated support "
+            f"material")
+        return None
+    default_set = refs.get("default_set", [])
     for name in default_set:
         ref = pdir / "references" / name
         if ref.exists():
@@ -392,8 +501,32 @@ def run_generate(job) -> None:
     profile_id = p.get("subject_profile")
     if not profile_id:
         profile_id = recipe_data.get("subject_profile")
+    # An identity recipe may demand camera-photo conditioning only (handoff §5.1).
+    # If the profile has no real ground-truth photo we fail loudly rather than
+    # quietly conditioning the likeness on generated support material.
+    ref_policy = (recipe_data.get("reference_policy") or {}).get("source", "")
+    gt_only = ref_policy == "ground_truth"
+    if profile_id:
+        # Dashboard-created subjects live on the router host first — pull any
+        # missing reference photos to this machine before resolving.
+        sync_profile_references(profile_id)
+        # The subject's own model pack for this engine family (handoff §3: the
+        # profile is the identity truth). Explicit payload lora always wins.
+        pack = None if p.get("lora") else _profile_identity_pack(
+            profile_id, recipe_data.get("model_family"))
+        if pack:
+            p["lora"] = pack["lora"]
+            p["lora_strength"] = pack.get("strength", 0.9)
+            log(f"identity pack for '{profile_id}': {pack['lora']} "
+                f"@ {p['lora_strength']}")
     if not reference and profile_id:
-        reference = resolve_profile_reference(ROOT, profile_id)
+        reference = resolve_profile_reference(ROOT, profile_id, ground_truth_only=gt_only)
+        if gt_only and not reference:
+            raise RuntimeError(
+                f"recipe '{p['recipe']}' requires a ground-truth (real camera) "
+                f"reference photo, but profile '{profile_id}' has none listed in "
+                f"references.ground_truth. Add real photos — identity must not be "
+                f"conditioned on generated support material.")
     job_id, saved = byrdimage.generate(
         ROOT, p["recipe"], p.get("slots", {}), p.get("project", "sandbox"),
         p.get("purpose", "unspecified"), batch=p.get("batch"),
@@ -401,7 +534,7 @@ def run_generate(job) -> None:
         aspect=p.get("aspect"), width=p.get("width"), height=p.get("height"),
         negative_extra=p.get("negative"), lora=p.get("lora"),
         lora_strength=float(p.get("lora_strength", 0.9)), seed=p.get("seed"),
-        reference=reference, engine=p.get("engine"))
+        reference=reference, subject_profile=profile_id, engine=p.get("engine"))
     cards = []
     for png, card in saved:
         card["path"] = str(png)
@@ -519,6 +652,60 @@ def run_faceswap(job) -> None:
     register_cards(job, cards)
 
 
+def run_identity_variation(job) -> None:
+    """image.identity_variation: redraw an existing image AS a subject — the
+    'make this look like me / them' route. Source pixels set composition and
+    pose; the subject profile supplies the face (ground-truth photo via FaceID
+    + the profile's identity pack when installed). Fails closed without a real
+    photo of the subject: likeness is never conditioned on generated material."""
+    p = json.loads(job["payload"])
+    recipe = byrdimage.load_json(byrdimage.find_recipe(ROOT, p["recipe"]))
+    recipe_tag = f"{recipe['id']}@{recipe['version']}"
+    profile_id = p.get("subject_profile") or recipe.get("subject_profile") or "me"
+    sync_profile_references(profile_id)
+    gt_only = (recipe.get("reference_policy") or {}).get("source") == "ground_truth"
+    reference = resolve_profile_reference(ROOT, profile_id, ground_truth_only=gt_only)
+    if not reference:
+        raise RuntimeError(
+            f"identity variation needs a real (ground-truth) photo of "
+            f"'{profile_id}' — upload one through People / POST "
+            f"/profiles/{profile_id}/references first.")
+
+    source = p.get("source_path")
+    if not source and p.get("source_artifact"):
+        source = str(fetch_artifact_file(p["source_artifact"],
+                                         ROOT / "artifacts" / "_sources"))
+    if not source:
+        raise RuntimeError("identity variation needs source_path or source_artifact "
+                           "(the image to redraw)")
+
+    lora, strength, clip = p.get("lora"), float(p.get("lora_strength", 0.9)), None
+    if not lora:
+        pack = _profile_identity_pack(profile_id, recipe.get("model_family"))
+        if pack:
+            lora = pack["lora"]
+            strength = float(pack.get("strength", 0.9))
+            clip = pack.get("clip_strength")
+            log(f"identity pack for '{profile_id}': {lora} @ {strength}")
+
+    defaults = recipe.get("defaults", {})
+    _, saved = byrdimage.identity_variation(
+        ROOT, source, reference, p.get("project", "sandbox"),
+        p.get("purpose", f"identity variation as {profile_id}"),
+        recipe.get("workflow", "workflows/sdxl_ipadapter_face_img2img_api.json"),
+        recipe_tag, prompt=p.get("prompt"), negative=p.get("negative"),
+        denoise=float(p.get("denoise", defaults.get("denoise", 0.5))),
+        checkpoint=p.get("checkpoint") or defaults.get("checkpoint"),
+        lora=lora, lora_strength=strength, lora_clip_strength=clip,
+        batch=int(p.get("batch", defaults.get("batch", 1))),
+        seed=p.get("seed"), subject_profile=profile_id, job_id=job["id"])
+    cards = []
+    for png, card in saved:
+        card["path"] = str(png)
+        cards.append(card)
+    register_cards(job, cards)
+
+
 def run_content_enhance(job) -> None:
     """OPERATOR-mode pass: the local model rewrites the founder's words into an
     SDXL-engineered prompt, then enqueues the actual generation. Two jobs
@@ -582,11 +769,152 @@ def run_judge(job) -> None:
         return
     card.update(score=verdict["score"], tags=verdict["tags"], caption=verdict["caption"])
     card["rubric_scores"] = verdict["scores"]
+    identity = {k: verdict[k] for k in verdict if k.startswith("identity_")}
+    if identity:
+        card["identity"] = identity
+        log(f"identity {p['artifact_id']}: score={identity.get('identity_score')} "
+            f"backend={identity.get('identity_backend')} "
+            f"guess={identity.get('identity_method_guess')}")
     if card_path.exists():
         card_path.write_text(json.dumps(card, indent=2), encoding="utf-8")
-    api(f"/artifacts/{p['artifact_id']}/review",
-        {"action": "judge", "score": verdict["score"], "tags": verdict["tags"],
-         "caption": verdict["caption"]})
+    review = {"action": "judge", "score": verdict["score"], "tags": verdict["tags"],
+              "caption": verdict["caption"]}
+    if identity:
+        review["identity"] = identity
+    api(f"/artifacts/{p['artifact_id']}/review", review)
+
+    # The ACCEPTANCE GATE (handoff §4.2): measuring identity is not enough — a
+    # recolour must not sit in needs_review looking like a candidate. Fail closed
+    # on a proven recolor/no-identity result; never auto-reject what we couldn't
+    # measure, and never silently auto-approve either.
+    if identity:
+        decision = byrdidentity.evaluate(card, identity, CFG)
+        card["identity_gate"] = decision
+        if card_path.exists():
+            card_path.write_text(json.dumps(card, indent=2), encoding="utf-8")
+        log(f"identity gate {p['artifact_id']}: {byrdidentity.summary_line(decision)}")
+        if decision["decision"] == "reject":
+            api(f"/artifacts/{p['artifact_id']}/review",
+                {"action": "reject", "reason": "; ".join(decision["reasons"])})
+
+
+def run_caption(job) -> None:
+    """image.caption: describe an existing artifact with the LM Studio vision
+    model (OPERATOR mode, same lane as the judge) and write the caption + tags
+    back onto its card. Deliberate dataset/library work — NOT auto-enqueued after
+    every generation the way the judge is. No vision model => honestly skip."""
+    p = json.loads(job["payload"])
+    image_path = Path(p["path"])
+    card_path = image_path.with_suffix(image_path.suffix + ".json")
+    card = json.loads(card_path.read_text(encoding="utf-8-sig")) if card_path.exists() else dict(p)
+    cm = byrdcaption._caption_model(CFG)  # caption_model or judge_model
+    if cm and not cm.startswith("CHANGE_ME") and cm not in _loaded_models():
+        _lms_unload_all()
+        _lms_load(cm)
+    # else: caption with whatever vision model is loaded (byrdcaption enforces vision)
+    try:
+        result = byrdcaption.caption_image(
+            ROOT, image_path, trigger=p.get("trigger", ""),
+            style=p.get("style", "lora"), max_words=int(p.get("max_words", 40)),
+            context=p.get("context", ""))
+    except byrdcaption.NoVisionModel as e:
+        # A caption is only trustworthy from a model that can see the image —
+        # leave the artifact uncaptioned rather than inventing words.
+        log(f"SKIP caption {p.get('artifact_id')}: {e}")
+        if p.get("artifact_id"):
+            api(f"/artifacts/{p['artifact_id']}/review",
+                {"action": "uncaptioned", "reason": str(e)})
+        return
+    card["caption"] = result["caption"]
+    if result["tags"]:
+        card["tags"] = result["tags"]
+    card["caption_model"] = result["model"]
+    if card_path.exists():
+        card_path.write_text(json.dumps(card, indent=2), encoding="utf-8")
+    if p.get("artifact_id"):
+        api(f"/artifacts/{p['artifact_id']}/review",
+            {"action": "caption", "caption": result["caption"], "tags": result["tags"]})
+    log(f"captioned {p.get('artifact_id') or image_path.name}: {result['caption'][:80]}")
+
+
+def run_video_i2v(job) -> None:
+    """video.i2v: animate ONE APPROVED identity still (handoff §7).
+
+    VIDEO RULE — the first frame must already be an approved identity artifact.
+    We do not ask the video model to rediscover the subject: if the source still
+    is not approved, this refuses. That keeps drift a video problem instead of an
+    identity problem, and stops a rejected recolour from becoming a rejected
+    video 20 minutes later."""
+    p = json.loads(job["payload"])
+    still = p.get("still_path")
+    source_artifact = p.get("source_artifact")
+
+    if source_artifact:
+        arts = api(f"/artifacts?id={source_artifact}")
+        art = arts[0] if arts else None
+        if not art:
+            raise RuntimeError(f"video.i2v: no such source artifact {source_artifact}")
+        if art.get("status") != "approved":
+            raise RuntimeError(
+                f"video.i2v REFUSED: source still {source_artifact} is "
+                f"'{art.get('status')}', not 'approved'. The first frame must be an "
+                f"approved identity artifact — approve the still in the Library "
+                f"first, or fix the identity before spending VIDEO mode on it.")
+        if not still:
+            still = art.get("path")
+            if not still or not Path(still).exists():
+                still = str(fetch_artifact_file(source_artifact, ROOT / "artifacts" / "_sources"))
+    elif not p.get("allow_unapproved"):
+        raise RuntimeError(
+            "video.i2v REFUSED: pass source_artifact (an APPROVED still) so the "
+            "clip is traceable to a judged identity. Only an explicit "
+            "allow_unapproved=true may animate a loose file, and that clip is "
+            "marked as such on its card.")
+    if not still:
+        raise RuntimeError("video.i2v needs still_path or source_artifact")
+
+    _, saved = byrdvideo.animate(
+        ROOT, still, p.get("project", "careyrpg"),
+        p.get("purpose", "identity still -> motion"),
+        prompt=p.get("prompt", ""), negative=p.get("negative"),
+        seed=p.get("seed"), width=p.get("width"), height=p.get("height"),
+        length=p.get("length"), fps=p.get("fps"), steps=p.get("steps"),
+        cfg_scale=p.get("cfg"), workflow=p.get("workflow"),
+        job_id=job["id"], source_artifact=source_artifact)
+    cards = []
+    for path, card in saved:
+        card["path"] = str(path)
+        if not source_artifact:
+            card["unapproved_source"] = True
+        cards.append(card)
+    # Video cards register like any artifact, but they are NOT auto-judged: the
+    # image judge scores stills. Frame-level drift examination (video.examine,
+    # handoff §7.3) is the next rung and lands separately.
+    api(f"/jobs/{job['id']}/artifacts", {"artifacts": cards})
+    for card in cards:
+        # ship the clip bytes to the router so the dashboard can PLAY it —
+        # in 2-PC mode the webm lives on this machine, not the router host
+        upload_preview(card["artifact_id"], card["path"])
+        log(f"video archived {card['artifact_id']} "
+            f"({card.get('duration_seconds')}s @ {card.get('fps')}fps)")
+
+
+def run_inventory(job) -> None:
+    """inventory.scan: refresh ByrdHouse's memory of everything on this host —
+    models, custom nodes, workflows (API vs UI-format), recipes, profile
+    reference counts, artifacts — and flag dead weight the 8GB 3070 can't use.
+    Writes docs/ASSET_INVENTORY.md + artifacts/inventory.json and registers the
+    report as an approved artifact. Runs in ANY mode (no GPU)."""
+    inv = byrdinventory.scan_inventory(ROOT)
+    md_path, json_path = byrdinventory.write_reports(ROOT, inv)
+    log(f"inventory: {sum(d['count'] for d in inv['models'].values())} weights, "
+        f"{len(inv['custom_nodes'])} nodes, {inv['workflows']['count']} workflows, "
+        f"{len(inv['flags'])} flags")
+    api(f"/jobs/{job['id']}/artifacts", {"artifacts": [{
+        "job_id": job["id"], "project": "byrdhouse", "kind": "inventory",
+        "path": str(md_path), "purpose": "asset inventory (what ByrdHouse has)",
+        "status": "approved", "flags": inv["flags"],
+        "created_at": datetime.now(timezone.utc).isoformat()}]})
 
 
 def run_report(job) -> None:
@@ -786,9 +1114,13 @@ def run_export_csv(job) -> None:
 
 
 RUNNERS = {"image.generate": run_generate, "image.judge": run_judge,
+           "image.identity_generate": run_generate,
+           "image.identity_variation": run_identity_variation,
+           "image.caption": run_caption,
            "image.faceswap": run_faceswap,
            "image.refine": run_refine, "image.upscale": run_refine,
-           "report.daily": run_report,
+           "report.daily": run_report, "inventory.scan": run_inventory,
+           "video.i2v": run_video_i2v,
            "content.enhance": run_content_enhance,
            "content.thumbnail": run_content_thumbnail,
            "content.package": run_content_package,
@@ -798,8 +1130,13 @@ RUNNERS = {"image.generate": run_generate, "image.judge": run_judge,
 
 def desired_mode(gpu: Gpu) -> str:
     """v2 §7: enter IMAGE when >=3 image jobs queued OR oldest older than 10 min;
-    otherwise OPERATOR (judging happens there)."""
+    otherwise OPERATOR (judging happens there). VIDEO wins outright when queued —
+    a clip is a long, deliberate, founder-initiated run and the 3070 cannot hold a
+    video model beside anything else (handoff §6), so we do not batch-wait it."""
     queued = api("/jobs?status=queued&limit=100")
+    video_jobs = [j for j in queued if j["required_mode"] == "VIDEO"]
+    if video_jobs:
+        return "VIDEO"
     image_jobs = [j for j in queued if j["required_mode"] == "IMAGE"]
     operator_jobs = [j for j in queued if j["required_mode"] in ("OPERATOR", "ANY")]
     if image_jobs:

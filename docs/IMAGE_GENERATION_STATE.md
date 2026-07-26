@@ -1,8 +1,24 @@
 # Image Generation State — read before changing the GAMING image lane
 
-**Last updated:** 2026-07-15 (EDT, CPU crop reroute + adapter crop-preflight gate verified on the hard Vegeta target; integration suite green)  
+**Last updated:** 2026-07-25 (EDT, identity gate + asset inventory landed; belt suite green. GPU-side hero-lane work below is UNTESTED on hardware — run it on GAMING before trusting.)  
 **Owner:** BYRD-GAMING (`E:\ByrdHouse`)  
 **Rule:** Read this file before changing an image model, graph, training set, or route. Update it after every real local test.
+
+## 2026-07-25 · Measurement + memory landed; the Flux2 dead end named
+
+Two things the belt was missing — the reasons every fix felt like a coin flip — are now in:
+
+- **Identity gate (the missing measurement).** `scripts/verify_identity.py` answers the only question that matters for a swap: *does the output carry Carey's identity, or is it a recolored target?* It's wired into `byrdjudge.judge_card` — identity cards (a `me_*`/faceswap/facezone recipe, a `subject_profile`, a swap target) now get `identity_score` + `method_guess` (`recolor_only` vs `ipadapter_like`) recorded on the card and via the router. ArcFace (real faces) → CLIP (crosses the anime gap) → **honest `unmeasured` when neither backend is installed** (never an invented number). Recorded, not yet gating — WO-3 locks the threshold once there's a baseline.
+- **Asset memory.** `scripts/byrdinventory.py` + the `inventory.scan` belt job walk the host and record every model/LoRA/custom-node/workflow/recipe/profile/artifact into `docs/ASSET_INVENTORY.md` + `artifacts/inventory.json`, flagging dead weight the 8GB 3070 can't use. **ByrdHouse now remembers what it has.**
+
+**Why images "can't be produced" — confirmed by the inventory, not guessed.** All four `workflows/flux2_klein/*.json` are **UI-format exports** (`nodes`+`links`), which 400 the ComfyUI `/prompt` endpoint — they never ran. And the stack itself (Flux2 Klein 9B UNet + Qwen 8B encoder, fp8) is ~17B active params with fp8 that has **no speedup on Ampere** (the 3070 has no fp8 tensor cores) — it streams weights over PCIe and hangs past the router timeout. Flux2 is a cash-gated lane for the day a bigger card is bought, not a fix for the identity/masking problem beneath it.
+
+**Step-by-step GAMING runbook for all of the below:** `docs/GAMING_RUNBOOK_image_lane.md` (copy-paste, config-driven, by hand).
+
+**Recommended hero lane (staged, needs a GAMING run to confirm — do WO-0 first):**
+1. **WO-0 baseline before any change:** run the existing SDXL + Carey LoRA path on the five locked targets (Luffy, Vegeta, Gojo, a realistic portrait, a game character) with fixed seeds; archive as the baseline. Nothing can be proven to help until this exists — and the identity gate above is what makes "help" measurable.
+2. Move the hero lane back to **SDXL + Carey LoRA + IP-Adapter FaceID Plus v2 + a face-detailer pass** (~7GB, fits the 3070 with headroom). The `sdxl_ipadapter_face_api.json` graph and the `me_as_character` recipe already exist.
+3. Free VRAM/perf that isn't a GPU purchase: run the display off the i9's iGPU (headless 3070), GGUF instead of fp8 if a larger model is ever needed, text-encoder on CPU, push non-diffusion work (segmentation/parsing/dedup) to BYRD-MINI. Training is rentable-by-the-hour (RunPod, ~$2 a LoRA) — inference stays on the 3070.
 
 ## Current verdict
 

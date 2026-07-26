@@ -21,6 +21,83 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+try:
+    import verify_identity  # noqa: E402 — identity gate; ML backend optional/guarded
+except Exception:  # pragma: no cover
+    verify_identity = None
+
+
+# Cards that represent identity work — a face swap, a "me" recipe, a face-zone
+# edit. Only these get an identity_score; a game thumbnail has no identity to
+# measure, so scoring it would be noise.
+IDENTITY_RECIPE_HINTS = ("me_as", "founder_me", "cinematic_me", "fantasy_me",
+                         "outfit_transfer_me", "thumbnail_me", "animated_me",
+                         "identity", "faceswap", "facezone", "face_zone")
+
+
+def _is_identity_card(card: dict) -> bool:
+    if card.get("subject_profile") or card.get("identity"):
+        return True
+    if any(card.get(k) for k in ("face_source", "face_artifact", "swap_target",
+                                 "mask_source", "target_artifact")):
+        return True
+    recipe = (card.get("recipe") or "").lower()
+    return any(h in recipe for h in IDENTITY_RECIPE_HINTS)
+
+
+def _score_identity(root, card: dict, image_path) -> dict:
+    """Measure whether the output actually carries the subject's identity (vs a
+    recolored target). Returns {} for non-identity cards. Guarded end-to-end: a
+    missing backend or reference library records the result as UNMEASURED
+    (identity_score None) rather than inventing a number — same honesty rule the
+    vision judge uses."""
+    if verify_identity is None or not _is_identity_card(card):
+        return {}
+    profile_id = card.get("subject_profile") or "me"
+    pdir = Path(root) / "profiles" / str(profile_id)
+    refs_dir = pdir / "references"
+    if not refs_dir.is_dir():
+        return {"identity_score": None, "identity_backend": "none",
+                "identity_note": f"no reference library at profiles/{profile_id}/references"}
+    # Score ONLY against camera ground truth. Scoring against the whole folder
+    # pulls in synthetic/generated portraits, so an adapter that drifted toward
+    # its own generated look would be scored as a success — the measurement
+    # would validate the exact failure it exists to catch. If a profile has
+    # declared no ground truth, say so rather than quietly grading on synthetics.
+    ground_truth = []
+    pfile = pdir / "profile.json"
+    if pfile.exists():
+        try:
+            ground_truth = [str(refs_dir / n) for n in
+                            json.loads(pfile.read_text(encoding="utf-8-sig"))
+                            .get("references", {}).get("ground_truth", [])
+                            if (refs_dir / n).is_file()]
+        except Exception:
+            ground_truth = []
+    if not ground_truth:
+        return {"identity_score": None, "identity_backend": "none",
+                "identity_note": (f"profile '{profile_id}' declares no camera "
+                                  "ground-truth photos — identity left unmeasured "
+                                  "rather than scored against generated material")}
+    source_target = (card.get("swap_target") or card.get("target")
+                     or card.get("source_image"))
+    if source_target and not Path(str(source_target)).exists():
+        source_target = None
+    try:
+        res = verify_identity.identity_score(
+            str(image_path), ground_truth, source_target=source_target)
+    except Exception as e:  # never let identity scoring break judging
+        return {"identity_score": None, "identity_backend": "none",
+                "identity_note": f"identity scoring error: {e}"}
+    if res.get("backend") == "none":
+        return {"identity_score": None, "identity_backend": "none",
+                "identity_note": "identity backend not installed (arcface/clip) — unmeasured"}
+    return {"identity_score": res.get("identity_score"),
+            "identity_backend": res.get("backend"),
+            "identity_method_guess": res.get("method_guess"),
+            "identity_target_similarity": res.get("target_similarity")}
+
 
 def _load(path):
     return json.loads(Path(path).read_text(encoding="utf-8-sig"))
@@ -51,12 +128,13 @@ def _looks_vision(model_id: str) -> bool:
     return any(h in m for h in VISION_HINTS)
 
 
-def _pick_judge_model(lms: str, preferred: str) -> str:
+def _pick_judge_model(lms: str, preferred: str, label: str = "judge") -> str:
     """Judging REQUIRES a vision-capable model. Preferred judge_model wins when
     loaded; a genuinely vision-capable loaded model may stand in; otherwise
     (nothing loaded) JIT-load the configured judge. If none of those hold —
     a non-vision model is loaded and no vision judge is configured/available —
-    raise NoVisionModel so the artifact stays honestly unjudged."""
+    raise NoVisionModel so the artifact stays honestly unjudged. Shared by the
+    caption lane (byrdcaption); `label` only tags the log line."""
     try:
         with urllib.request.urlopen(f"{lms}/models", timeout=8) as r:
             loaded = [m["id"] for m in json.loads(r.read().decode()).get("data", [])]
@@ -68,7 +146,7 @@ def _pick_judge_model(lms: str, preferred: str) -> str:
     vision_loaded = [m for m in loaded if _looks_vision(m)]
     if vision_loaded:
         if preferred_ok:
-            print(f"[judge] '{preferred}' not loaded — using vision model '{vision_loaded[0]}'")
+            print(f"[{label}] '{preferred}' not loaded — using vision model '{vision_loaded[0]}'")
         return vision_loaded[0]
     if preferred_ok and not loaded:
         return preferred  # nothing loaded — let LM Studio JIT-load the configured judge
@@ -178,12 +256,22 @@ def judge_card(root, card: dict, image_path) -> dict:
     if not m:
         raise RuntimeError(f"judge returned no JSON: {content[:200]}")
     verdict = json.loads(m.group(0))
-    return {
+    out = {
         "score": round(float(verdict.get("score", 0)), 1),
         "scores": verdict.get("scores", {}),
         "tags": [str(t) for t in verdict.get("tags", [])][:8],
         "caption": str(verdict.get("caption", ""))[:300],
     }
+    # Identity measurement (the belt's missing gate) — recorded, not yet gating.
+    identity = _score_identity(root, card, image_path)
+    if identity:
+        out.update(identity)
+        # A recolor-only result is the failure mode the founder keeps hitting —
+        # surface it as a tag so the gallery and learn loop can see it.
+        if identity.get("identity_method_guess") == "recolor_only" \
+                and "recolor-only" not in out["tags"]:
+            out["tags"] = (out["tags"] + ["recolor-only"])[:8]
+    return out
 
 
 def main():
@@ -204,8 +292,12 @@ def main():
         verdict = judge_card(root, card, image_path)
         card.update(score=verdict["score"], tags=verdict["tags"], caption=verdict["caption"])
         card["rubric_scores"] = verdict["scores"]
+        identity = {k: verdict[k] for k in verdict if k.startswith("identity_")}
+        if identity:
+            card["identity"] = identity
         card_path.write_text(json.dumps(card, indent=2), encoding="utf-8")
-        print(f"[judge]   score {verdict['score']}  tags {verdict['tags']}")
+        print(f"[judge]   score {verdict['score']}  tags {verdict['tags']}"
+              + (f"  identity {identity.get('identity_score')}" if identity else ""))
         done += 1
         if args.limit and done >= args.limit:
             break

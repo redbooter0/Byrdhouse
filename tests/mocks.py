@@ -73,6 +73,17 @@ class Comfy(BaseHTTPRequestHandler):
                 outputs[str(9 + i)] = {"images": [
                     {"filename": f"{prefix}_{j:05d}_.png", "subfolder": "", "type": "output"}
                     for j in range(batch)]}
+            # Video savers report their file under their own key, NOT "images"
+            # (SaveWEBM/VHS nodes differ by build). Deliberately use a non-images
+            # key here so the video collector's key-agnostic scan is exercised
+            # rather than assumed.
+            for i, node in enumerate(n for n in graph.values()
+                                     if n.get("class_type") in
+                                     ("SaveWEBM", "SaveAnimatedWEBP", "SaveVideo")):
+                prefix = node["inputs"].get("filename_prefix", "video")
+                outputs[f"vid{i}"] = {"video": [
+                    {"filename": f"{prefix}_{i:05d}_.webm", "subfolder": "",
+                     "type": "output"}]}
             return self._json({pid: {"status": {"status_str": "success"},
                                      "outputs": outputs}})
         if self.path.startswith("/view"):

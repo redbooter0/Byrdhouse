@@ -1,0 +1,39 @@
+{
+  "id": "identity_sdxl_t2i",
+  "version": 1,
+  "kind": "image.identity_generate",
+  "subject_profile": "me",
+  "category": "Identity",
+  "_note": "THE IDENTITY CORE (handoff 2026-07-25 §3.2, §4.1 'Text -> me in a scene' = MAIN ROUTE). Text-to-image likeness: SDXL builds the person from scratch, conditioned by the Carey SDXL LoRA plus IP-Adapter FaceID on a REAL ground-truth photo. This is structurally different from the face-zone lane: here the output's facial GEOMETRY comes from the identity, not from a target image. The mesh-seed zone lane warps Carey through the TARGET's 478-point grid, so its output geometry is always the target's and only colour transfers — which is why it produced recolours (2026-07-22 Vegeta). Use this recipe for likeness; use the zone lane for surgical edits on an existing picture, never for likeness.",
+  "workflow": "workflows/sdxl_ipadapter_face_api.json",
+  "identity": {
+    "_note": "The SDXL model pack for this subject. Resolved by byrdimage at submit time; the recipe carries it so the identity lane can never run unconditioned because nobody typed a filename. Replace with the promoted SDXL pack once it passes the §11.1 scorecard (>=80/100).",
+    "lora": "carey_sdxl_identity_v1",
+    "strength": 0.85,
+    "clip_strength": 0.85
+  },
+  "reference_policy": {
+    "source": "ground_truth",
+    "_rule": "Camera photos only (profile references.ground_truth). Never condition identity on generated/anime support material."
+  },
+  "template": "{shot} of a man, {expression}, {wardrobe}, {setting}, {lighting}, {style}, sharp detailed facial features, natural skin texture, high detail",
+  "negative": "text, letters, words, watermark, blurry, low quality, deformed face, distorted features, extra limbs, mutated hands, plastic skin, waxy, airbrushed, different person, mask, cgi doll",
+  "slots": {
+    "setting": { "required": true, "label": "Setting / scene (e.g. neon Tokyo street at night)" },
+    "wardrobe": { "required": false, "default": "a black bomber jacket over a plain tee", "label": "Wardrobe" },
+    "style": { "required": false, "default": "cinematic photography, 85mm, shallow depth of field", "label": "Style" }
+  },
+  "vary": {
+    "shot": ["a photorealistic portrait", "a cinematic medium shot", "a three-quarter portrait", "an environmental portrait"],
+    "expression": ["a calm confident expression", "a slight smile", "a focused serious look", "mid-laugh, genuine"],
+    "lighting": ["soft key light with warm rim", "moody low-key lighting", "golden hour backlight", "clean studio softbox light"]
+  },
+  "defaults": { "checkpoint": "juggernautXL_v9", "steps": 30, "batch": 4 },
+  "rubric": {
+    "identity": "1-5 — is this immediately recognizable as the same person as the REAL reference photos, at normal viewing size (not only zoomed)?",
+    "face_integrity": "1-5 — eyes, mouth, jaw, ears, hair and skin coherent; no melting, no doubled features",
+    "realism": "1-5 — natural skin texture and lighting; not plastic or airbrushed",
+    "scene_quality": "1-5 — composition, lighting and setting read as intentional",
+    "postability": "1-5"
+  }
+}

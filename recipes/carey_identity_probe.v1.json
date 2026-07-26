@@ -1,0 +1,49 @@
+{
+  "id": "carey_identity_probe",
+  "version": 1,
+  "kind": "image.generate",
+  "category": "Identity",
+  "_no_subject_profile": "Deliberate: this recipe does NOT declare subject_profile. A profile would auto-wire an IP-Adapter face reference, and a reference plus a LoRA is two identity sources \u2014 you could no longer tell which one produced the face. The probe must isolate ONE variable: the LoRA's own weights. (It also means this runs on the plain t2i graph, which has no LoadImage node.)",
+  "_note": "THE DECISIVE DIAGNOSTIC. Plain SD1.5 text-to-image: no target, no mask, no mesh, no img2img. Just the checkpoint + the Carey LoRA + the trigger phrase, drawing a face from scratch. This is the ONLY configuration in which an identity LoRA can express facial GEOMETRY, and until 2026-07-25 no recipe in this repo ran it \u2014 every LoRA recipe was a target-edit (anime_face_edit, anime_face_zone_edit v1/v2/v3), where the mesh/mask pins geometry to the target before the LoRA can contribute. That is why ~8 trained LoRAs produced no measurable progress. Run this FIRST. It answers one question: does the trained LoRA carry Carey at all? Everything downstream depends on that answer.",
+  "workflow": "workflows/sdxl_base_api.json",
+  "require_exact_checkpoint": true,
+  "_require_exact_checkpoint_note": "A diagnostic must never silently swap models. If 'meina' is absent, byrdimage's normal fallback could hand this SD1.5 LoRA an SDXL checkpoint; the result is mush in every cell, which reads as 'the LoRA never learned the face' and sends you into an unnecessary multi-day retrain. Fail loudly instead.",
+  "identity": {
+    "_note": "SD1.5 pack. The trigger phrase MUST appear in the prompt or the adapter barely fires \u2014 prepare-carey-lora-dataset.py captions every training image with 'careybh person'.",
+    "lora": "carey_meina_sd15_v1",
+    "strength": 0.9,
+    "clip_strength": 0.9
+  },
+  "template": "careybh person, {shot} of an adult Black man, {expression}, {lighting}, plain neutral background, sharp focus on the face, detailed facial features, photograph",
+  "negative": "cartoon, anime, illustration, painting, 3d render, cgi, doll, plastic skin, deformed face, distorted features, extra faces, multiple people, blurry, low quality, watermark, text, hat, sunglasses",
+  "slots": {
+    "shot": {
+      "required": false,
+      "default": "a head-and-shoulders portrait",
+      "label": "Shot"
+    },
+    "expression": {
+      "required": false,
+      "default": "neutral expression, looking straight at the camera",
+      "label": "Expression"
+    },
+    "lighting": {
+      "required": false,
+      "default": "even soft frontal lighting",
+      "label": "Lighting"
+    }
+  },
+  "vary": {},
+  "defaults": {
+    "checkpoint": "meina",
+    "steps": 28,
+    "batch": 4,
+    "width": 512,
+    "height": 512
+  },
+  "rubric": {
+    "identity": "1-5 \u2014 is this recognizably Carey compared to the REAL reference photos? 1 = a generic man, 5 = unmistakably him. This is the only score that matters here.",
+    "face_integrity": "1-5 \u2014 coherent eyes/mouth/jaw, no melting or doubled features",
+    "realism": "1-5 \u2014 reads as a photograph, not a render"
+  }
+}

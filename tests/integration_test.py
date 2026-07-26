@@ -125,6 +125,440 @@ def main():
         check("approve flow", approved["status"] == "approved")
         api(f"/artifacts/{arts[1]['id']}/review", {"action": "reject"})
 
+        print("== image.caption (describe lane — reuses the vision model, no Ollama)")
+        cap_src = arts[0]  # approved, judged 4.2, real png on disk
+        api("/jobs", {"type": "image.caption", "project": "careyrpg",
+                      "required_mode": "OPERATOR", "required_caps": ["lmstudio"],
+                      "payload": {"artifact_id": cap_src["id"], "path": cap_src["path"],
+                                  "trigger": "careybh person", "style": "lora"}})
+        run_worker()
+        capped = [a for a in api("/artifacts?limit=80") if a["id"] == cap_src["id"]][0]
+        cap_notes = json.loads(capped["judge_notes"] or "{}")
+        check("caption lane wrote a trigger-anchored caption onto the artifact",
+              cap_notes.get("caption", "").startswith("careybh person")
+              and "A test verdict" in cap_notes.get("caption", ""), str(cap_notes))
+        check("caption lane preserved the judge score (merge, no clobber)",
+              capped["score"] == 4.2 and capped["status"] == "approved",
+              f"{capped['score']}/{capped['status']}")
+        cap_card = json.loads(
+            Path(cap_src["path"] + ".json").read_text(encoding="utf-8-sig"))
+        check("caption is written back onto the sidecar card + records the model",
+              cap_card.get("caption", "").startswith("careybh person")
+              and cap_card.get("caption_model") == "mock-vl", str(cap_card.get("caption")))
+
+        # Direct library call: trigger-anchored lora caption, plain natural sentence
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import byrdcaption
+        dres = byrdcaption.caption_image(ROOT, cap_src["path"],
+                                         trigger="careybh person", style="lora")
+        check("byrdcaption.caption_image returns a trigger-anchored caption + tags",
+              dres["caption"].startswith("careybh person")
+              and "A test verdict" in dres["caption"] and dres["tags"], str(dres))
+        dnat = byrdcaption.caption_image(ROOT, cap_src["path"], style="natural")
+        check("natural style returns the bare sentence when no trigger is given",
+              dnat["caption"] == "A test verdict.", str(dnat))
+
+        # CLI: the bulk captioner writes a .caption.json card + kohya .txt sidecar
+        cli = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "byrdcaption.py"),
+             cap_src["path"], "--trigger", "careybh person", "--style", "lora",
+             "--write-txt"],
+            env={**os.environ, "BYRDHOUSE_ROOT": str(ROOT)},
+            capture_output=True, text=True, timeout=60)
+        cap_json = Path(cap_src["path"] + ".caption.json")
+        cap_txt = Path(cap_src["path"]).with_suffix(".txt")
+        check("byrdcaption CLI writes .caption.json card + kohya .txt",
+              cli.returncode == 0 and cap_json.is_file() and cap_txt.is_file(),
+              cli.stderr[:200])
+        if cap_txt.is_file():
+            check("kohya .txt holds the trigger-anchored caption",
+                  cap_txt.read_text().startswith("careybh person"),
+                  cap_txt.read_text()[:80])
+
+        # No vision model => honestly uncaptioned, never an invented caption
+        byrdjudge_mod = __import__("byrdjudge")
+        orig_pick = byrdjudge_mod._pick_judge_model
+        def _no_vision(*a, **k):
+            raise byrdcaption.NoVisionModel("no vision model in test")
+        byrdjudge_mod._pick_judge_model = _no_vision
+        try:
+            raised = False
+            try:
+                byrdcaption.caption_image(ROOT, cap_src["path"], trigger="careybh person")
+            except byrdcaption.NoVisionModel:
+                raised = True
+            check("caption refuses to invent when no vision model is available", raised)
+        finally:
+            byrdjudge_mod._pick_judge_model = orig_pick
+
+        # LoRA dataset prep exposes the opt-in VL describer with a template fallback
+        lora_prep = (ROOT / "scripts" / "prepare-carey-lora-dataset.py").read_text(
+            encoding="utf-8-sig")
+        check("LoRA dataset prep offers opt-in VL captions over the template",
+              "--vl-captions" in lora_prep and "def vl_context(" in lora_prep
+              and "merge_caption(caption, vl_context(" in lora_prep
+              and "using template" in lora_prep)
+
+        print("== identity gate (verify_identity wired into the judge)")
+        idst = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "verify_identity.py"), "--selftest"],
+            capture_output=True, text=True, timeout=30)
+        check("verify_identity selftest passes (cosine math, no models)",
+              idst.returncode == 0, idst.stdout[:120])
+        import byrdjudge as _bj
+        prof_refs = ROOT / "profiles" / "me" / "references"
+        prof_refs.mkdir(parents=True, exist_ok=True)
+        # backend 'none' never reads pixels — only the presence of a ref matters
+        (prof_refs / "idref.png").write_bytes(b"ref-present")
+        id_card = {"recipe": "me_as_character@1", "subject_profile": "me",
+                   "kind": "image", "purpose": "identity test"}
+        idv = _bj.judge_card(ROOT, id_card, cap_src["path"])
+        check("identity card is measured honestly: no backend => unmeasured, not invented",
+              idv.get("identity_backend") == "none" and idv.get("identity_score") is None,
+              str({k: idv.get(k) for k in idv if k.startswith("identity")}))
+        game_card = {"recipe": "rpg_tier_list@2", "kind": "image"}
+        gv = _bj.judge_card(ROOT, game_card, cap_src["path"])
+        check("non-identity card gets NO identity fields (a game thumbnail has none)",
+              not any(k.startswith("identity_") for k in gv))
+
+        print("== identity ACCEPTANCE GATE (fail closed on a recolour)")
+        import byrdidentity
+        gate_cfg = json.loads((ROOT / "byrdhouse.config.json").read_text())
+        # The exact 2026-07-22 Vegeta failure: ~identical to the target, no identity.
+        vegeta = {"identity_score": 0.11, "identity_backend": "arcface",
+                  "identity_method_guess": "recolor_only",
+                  "identity_target_similarity": 0.977}
+        d = byrdidentity.evaluate({}, vegeta, gate_cfg)
+        check("gate REJECTS a recolour (the Vegeta failure)",
+              d["decision"] == "reject" and "RECOLOR-ONLY" in d["reasons"][0], str(d))
+        d2 = byrdidentity.evaluate({}, {"identity_score": 0.52, "identity_backend": "arcface",
+                                        "identity_target_similarity": 0.4}, gate_cfg)
+        check("gate ACCEPTS a real likeness", d2["decision"] == "accept", str(d2))
+        d3 = byrdidentity.evaluate({}, {"identity_score": None, "identity_backend": "none"},
+                                   gate_cfg)
+        check("gate leaves an UNMEASURED result for human review (never auto-passes)",
+              d3["decision"] == "review", str(d3))
+        # The measurement must not grade against generated material: a profile
+        # whose references folder is full of synthetic portraits but which
+        # declares no camera ground truth is UNMEASURED, not "scored".
+        import byrdjudge as _bj2
+        synth_dir = ROOT / "profiles" / "synthonly" / "references"
+        synth_dir.mkdir(parents=True, exist_ok=True)
+        (synth_dir / "ai_identity_front_v1.png").write_bytes(b"synthetic")
+        (ROOT / "profiles" / "synthonly" / "profile.json").write_text(json.dumps(
+            {"id": "synthonly", "display_name": "Synth Only",
+             "references": {"ground_truth": [], "available": ["ai_identity_front_v1.png"]}}),
+            encoding="utf-8")
+        sres = _bj2._score_identity(ROOT, {"subject_profile": "synthonly",
+                                           "recipe": "identity_sdxl_t2i@2"},
+                                    cap_src["path"])
+        check("identity is NOT scored against generated material when no camera "
+              "ground truth exists (measurement can't validate its own drift)",
+              sres.get("identity_score") is None
+              and "ground-truth" in sres.get("identity_note", ""), str(sres))
+        # CLIP is whole-image similarity, not identity — it must never reject alone
+        d4 = byrdidentity.evaluate({}, {"identity_score": 0.31, "identity_backend": "clip",
+                                        "identity_target_similarity": 0.5}, gate_cfg)
+        check("advisory backend (clip) flags but can never reject on score alone",
+              d4["decision"] == "review" and "advisory" in d4["reasons"][0], str(d4))
+        # the recolor guard is behavioral: it fires on the numbers even when the
+        # method_guess is absent, because near-identity to the target proves it
+        d5 = byrdidentity.evaluate({}, {"identity_score": 0.05, "identity_backend": "arcface",
+                                        "identity_target_similarity": 0.99}, gate_cfg)
+        check("recolour guard fires on the numbers alone (no method_guess needed)",
+              d5["decision"] == "reject", str(d5))
+
+        print("== identity core recipe (SDXL likeness route, subject-agnostic v2)")
+        idr = json.loads((ROOT / "recipes" / "identity_sdxl_t2i.v2.json")
+                         .read_text(encoding="utf-8-sig"))
+        check("identity recipe routes to the IP-Adapter FaceID SDXL graph",
+              idr["workflow"] == "workflows/sdxl_ipadapter_face_api.json"
+              and (ROOT / idr["workflow"]).is_file())
+        check("identity v2 moved the model pack OFF the recipe and onto the profile",
+              "identity" not in idr and idr.get("model_family") == "sdxl")
+        check("identity recipe demands GROUND-TRUTH (camera) reference conditioning",
+              idr.get("reference_policy", {}).get("source") == "ground_truth")
+        prof = json.loads((ROOT / "profiles" / "me" / "profile.json").read_text(encoding="utf-8-sig"))
+        gt = prof["references"]["ground_truth"]
+        check("profile declares real camera photos as ground truth (no generated faces)",
+              gt and all("me_photo" in n for n in gt), str(gt))
+        check("profile carries per-family identity packs (subject owns its adapters)",
+              prof.get("identity_packs", {}).get("sdxl", {}).get("lora") == "carey_sdxl_identity_v1"
+              and prof["identity_packs"].get("sd15", {}).get("lora") == "carey_meina_sd15_v1")
+        import byrdimage as _bi
+        check("bare identity recipe name resolves to the subject-agnostic v2",
+              _bi.find_recipe(ROOT, "identity_sdxl_t2i").name == "identity_sdxl_t2i.v2.json")
+        # An identity recipe must never run unconditioned just because the caller
+        # forgot the LoRA name — byrdimage adopts the recipe's own pack.
+        src = (ROOT / "scripts" / "byrdimage.py").read_text(encoding="utf-8-sig")
+        check("byrdimage adopts the recipe's identity pack when no LoRA is passed",
+              'recipe_identity = recipe.get("identity") or {}' in src
+              and 'if not lora and recipe_identity.get("lora")' in src)
+        wsrc = (ROOT / "scripts" / "worker.py").read_text(encoding="utf-8-sig")
+        check("worker refuses a ground_truth recipe with no real reference photo",
+              'ground_truth_only=gt_only' in wsrc
+              and "requires a ground-truth (real camera) " in wsrc)
+
+        print("== multi-person: create a profile, upload a photo, generate as them")
+        gp = api("/profiles", {"display_name": "Guest Person"})
+        check("POST /profiles creates a subject profile",
+              gp.get("id") == "guest_person"
+              and (ROOT / "profiles" / "guest_person" / "profile.json").is_file(), str(gp))
+        guest_png = _tiny = None
+        import io as _io
+        from PIL import Image as _Img
+        buf = _io.BytesIO(); _Img.new("RGB", (256, 256), (150, 110, 90)).save(buf, "PNG")
+        rq = urllib.request.Request(
+            f"http://127.0.0.1:{RP}/profiles/guest_person/references/guest.png",
+            data=buf.getvalue(), method="POST",
+            headers={"Content-Type": "image/png", "Authorization": f"Bearer {TOKEN}"})
+        up = json.loads(urllib.request.urlopen(rq, timeout=15).read().decode())
+        check("photo upload lands on disk + registers a fetchable reference artifact",
+              up.get("id", "").startswith("ref_")
+              and (ROOT / "profiles" / "guest_person" / "references" / "guest.png").is_file(),
+              str(up))
+        plist = api("/profiles")
+        guest = next(p for p in plist if p["id"] == "guest_person")
+        check("GET /profiles exposes ground truth + fetch map for the worker sync",
+              guest["ground_truth_names"] == ["guest.png"]
+              and guest["reference_artifacts"].get("guest.png") == up["id"], str(guest))
+
+        api("/jobs", {"type": "image.generate", "project": "identity_lab",
+                      "required_mode": "IMAGE", "required_caps": ["comfyui"],
+                      "payload": {"recipe": "identity_sdxl_t2i",
+                                  "subject_profile": "guest_person",
+                                  "slots": {"setting": "a sunlit rooftop garden"},
+                                  "project": "identity_lab",
+                                  "purpose": "guest likeness t2i", "batch": 1, "seed": 9}})
+        run_worker()
+        garts = [a for a in api("/artifacts?limit=300")
+                 if json.loads(a["meta"] or "{}").get("subject_profile") == "guest_person"
+                 and json.loads(a["meta"] or "{}").get("recipe", "").startswith("identity_sdxl_t2i")]
+        check("the SAME identity recipe generates a different uploaded person",
+              len(garts) >= 1, str(len(garts)))
+        if garts:
+            gm = json.loads(garts[0]["meta"])
+            check("guest card: their photo conditioned it, no one else's LoRA leaked in",
+                  gm.get("reference", "").endswith("guest.png") and "lora" not in gm
+                  and "ipadapter_face" in gm.get("workflow", ""), str(gm)[:200])
+            check("unmeasured guest likeness is NOT auto-rejected (gate never rejects blind)",
+                  garts[0]["status"] != "rejected", garts[0]["status"])
+
+        api("/profiles", {"display_name": "No Photos Yet"})
+        api("/jobs", {"type": "image.generate", "project": "identity_lab",
+                      "required_mode": "IMAGE", "required_caps": ["comfyui"],
+                      "payload": {"recipe": "identity_sdxl_t2i",
+                                  "subject_profile": "no_photos_yet",
+                                  "slots": {"setting": "anywhere"},
+                                  "project": "identity_lab", "purpose": "must refuse"}})
+        run_worker()
+        refused_gen = [j for j in api("/jobs?type=image.generate&status=dead")
+                       if "must refuse" in j["payload"]]
+        check("a subject with no real photo REFUSES likeness generation (fail closed)",
+              refused_gen and "ground-truth" in (refused_gen[0]["error"] or ""),
+              (refused_gen[0]["error"] or "")[:120] if refused_gen else "no dead job")
+
+        print("== identity img2img (make THIS image look like me/them)")
+        iv_wf = json.loads((ROOT / "workflows" / "sdxl_ipadapter_face_img2img_api.json")
+                           .read_text(encoding="utf-8-sig"))
+        iv_wf.pop("_comment", None)
+        iv_titles = {v.get("_meta", {}).get("title") for v in iv_wf.values()
+                     if v.get("class_type") == "LoadImage"}
+        check("img2img identity graph titles its two image inputs (never wired blind)",
+              iv_titles == {"SOURCE IMAGE", "IDENTITY PHOTO"}, str(iv_titles))
+        check("img2img identity graph: source -> VAEEncode -> batch -> sampler + FaceID",
+              any(v["class_type"] == "VAEEncode" for v in iv_wf.values())
+              and any(v["class_type"] == "RepeatLatentBatch" for v in iv_wf.values())
+              and any(v["class_type"] == "IPAdapterUnifiedLoader" for v in iv_wf.values()))
+        iv_src = [a for a in api("/artifacts?limit=100")
+                  if a["kind"] == "image" and a["status"] == "approved" and a["path"]][0]
+        api("/jobs", {"type": "image.identity_variation", "project": "identity_lab",
+                      "required_mode": "IMAGE", "required_caps": ["comfyui"],
+                      "payload": {"recipe": "identity_sdxl_img2img",
+                                  "subject_profile": "guest_person",
+                                  "source_path": iv_src["path"],
+                                  "project": "identity_lab",
+                                  "purpose": "redraw as guest", "seed": 11}})
+        run_worker()
+        ivars = [a for a in api("/artifacts?limit=300")
+                 if json.loads(a["meta"] or "{}").get("recipe") == "identity_sdxl_img2img@1"]
+        check("identity variation redraws an existing image as the chosen subject",
+              len(ivars) >= 1, str(len(ivars)))
+        if ivars:
+            im = json.loads(ivars[0]["meta"])
+            check("variation card: source + reference + denoise + subject all recorded",
+                  im.get("source_image") and im.get("reference", "").endswith("guest.png")
+                  and im.get("denoise") == 0.5
+                  and im.get("subject_profile") == "guest_person", str(im)[:220])
+
+        print("== identity PROBE (plain t2i — the test that had never been run)")
+        probe = json.loads((ROOT / "recipes" / "carey_identity_probe.v1.json")
+                           .read_text(encoding="utf-8-sig"))
+        check("probe is plain text-to-image: no target-edit runner, no mask",
+              "runner" not in probe and probe["workflow"] == "workflows/sdxl_base_api.json")
+        check("probe prompt carries the training trigger phrase",
+              "careybh person" in probe["template"])
+        check("probe declares SD1.5 native resolution",
+              probe["defaults"]["width"] == 512 and probe["defaults"]["height"] == 512)
+        # A recipe's native resolution must actually apply, or an SD1.5 recipe
+        # renders at the SDXL default and mushes — which reads as a bad LoRA.
+        check("recipe-declared resolution is honoured by the dims resolver",
+              _bi.pick_dims(None, probe["defaults"]["width"],
+                            probe["defaults"]["height"]) == (512, 512))
+        # Stage the model files the probe needs, exactly as GAMING has them: the
+        # identity lane REFUSES to run unconditioned, so a missing LoRA is a hard
+        # failure by design (that is the point) — the test must supply one.
+        lora_dir = ROOT / "Generators" / "ComfyUI" / "models" / "loras"
+        lora_dir.mkdir(parents=True, exist_ok=True)
+        (lora_dir / "carey_meina_sd15_v1.safetensors").write_bytes(b"stub-lora")
+        ck_dir = ROOT / "Generators" / "ComfyUI" / "models" / "checkpoints"
+        ck_dir.mkdir(parents=True, exist_ok=True)
+        # A DIAGNOSTIC must refuse a substituted checkpoint. With only an SDXL
+        # model installed, the probe would otherwise silently run an SD1.5 LoRA
+        # on SDXL and render mush — read as "the LoRA never learned the face",
+        # the most expensive wrong conclusion available. Prove it refuses first.
+        (ck_dir / "juggernautXL_v9.safetensors").write_bytes(b"stub-sdxl")
+        try:
+            _bi.generate(ROOT, "carey_identity_probe@1", {}, "identity_probe",
+                         "probe with the wrong family installed", dry_run=True)
+            check("probe REFUSES a substituted checkpoint (no false negative)", False)
+        except SystemExit as e:
+            check("probe REFUSES a substituted checkpoint (no false negative)",
+                  "requires the exact checkpoint" in str(e), str(e)[:110])
+        (ck_dir / "juggernautXL_v9.safetensors").unlink()
+        (ck_dir / "meina_v11.safetensors").write_bytes(b"stub-ckpt")
+        api("/jobs", {"type": "image.generate", "project": "identity_probe",
+                      "required_mode": "IMAGE", "required_caps": ["comfyui"],
+                      "payload": {"recipe": "carey_identity_probe@1", "slots": {},
+                                  "project": "identity_probe", "seed": 42, "batch": 1,
+                                  "purpose": "IDENTITY PROBE — t2i, no target"}})
+        run_worker()
+        probed = [a for a in api("/artifacts?limit=200")
+                  if json.loads(a["meta"] or "{}").get("recipe", "").startswith("carey_identity_probe")]
+        check("probe generates through the belt with a card", len(probed) >= 1, str(len(probed)))
+        if probed:
+            pm = json.loads(probed[0]["meta"])
+            check("probe card records the trigger prompt and its fixed seed",
+                  "careybh person" in pm.get("prompt", "") and pm.get("seed") == 42,
+                  str(pm.get("prompt", ""))[:80])
+            check("probe rendered at SD1.5 512px, not the SDXL default",
+                  pm.get("size") == "512x512", str(pm.get("size")))
+        # Tear down the probe's staged checkpoint so later assertions about which
+        # checkpoint is "the only installed one" still hold.
+        (ck_dir / "meina_v11.safetensors").unlink()
+
+        print("== video lane (LTX i2v, gated on an APPROVED still)")
+        ltx = json.loads((ROOT / "workflows" / "ltx_i2v_api.json").read_text(encoding="utf-8-sig"))
+        ltx.pop("_comment", None)
+        check("LTX graph is API format, not a UI export (UI exports cannot POST)",
+              "nodes" not in ltx and "links" not in ltx
+              and all(isinstance(v, dict) and "class_type" in v for v in ltx.values()))
+        ltx_classes = {v["class_type"] for v in ltx.values()}
+        check("LTX graph keeps the real LTX node contract",
+              {"LTXVImgToVideo", "LTXVConditioning", "LTXVScheduler", "SamplerCustom",
+               "LTXVPreprocess", "VAEDecode", "LoadImage"} <= ltx_classes,
+              str(sorted(ltx_classes)))
+        i2v = next(v for v in ltx.values() if v["class_type"] == "LTXVImgToVideo")
+        check("LTX img2video is wired to the preprocessed still and the VAE",
+              i2v["inputs"]["image"][0] ==
+              next(k for k, v in ltx.items() if v["class_type"] == "LTXVPreprocess")
+              and i2v["inputs"]["vae"][0] ==
+              next(k for k, v in ltx.items() if v["class_type"] == "CheckpointLoaderSimple"))
+        check("LTX frame length satisfies (length-1) % 8 == 0",
+              (i2v["inputs"]["length"] - 1) % 8 == 0, str(i2v["inputs"]["length"]))
+        # The shipped baseline must still be recognised as un-POSTable — this is
+        # the documented reason video never ran, so it stays asserted.
+        ui_ltx = json.loads((REPO / "Video" / "Workflows" /
+                             "ltxv_i2v_simple_0.9.5.json").read_text(encoding="utf-8-sig"))
+        check("the original LTX baseline is confirmed UI-format (why video never ran)",
+              "nodes" in ui_ltx and "links" in ui_ltx)
+
+        # VIDEO RULE: refuse to animate a still that is not approved
+        rejected_art = [a for a in api("/artifacts?limit=100")
+                        if a["status"] == "rejected"]
+        api("/jobs", {"type": "video.i2v", "project": "careyrpg",
+                      "required_mode": "VIDEO", "required_caps": ["comfyui"],
+                      "payload": {"source_artifact": rejected_art[0]["id"],
+                                  "project": "careyrpg", "purpose": "should refuse",
+                                  "prompt": "slow push in"}})
+        run_worker()
+        refused = [j for j in api("/jobs?type=video.i2v")
+                   if j["status"] in ("dead", "failed")]
+        check("video.i2v REFUSES an unapproved still (the VIDEO RULE)",
+              refused and "not 'approved'" in (refused[0]["error"] or ""),
+              str(refused[0]["error"])[:140] if refused else "no failed job")
+
+        # an APPROVED still animates and archives a carded video artifact
+        approved_still = [a for a in api("/artifacts?limit=100")
+                          if a["status"] == "approved" and a["kind"] == "image"
+                          and a["path"]][0]
+        api("/jobs", {"type": "video.i2v", "project": "careyrpg",
+                      "required_mode": "VIDEO", "required_caps": ["comfyui"],
+                      "payload": {"source_artifact": approved_still["id"],
+                                  "project": "careyrpg", "purpose": "identity still -> motion",
+                                  "prompt": "slow cinematic push in, subtle head turn",
+                                  "seed": 7}})
+        run_worker()
+        vids = [a for a in api("/artifacts?limit=200") if a["kind"] == "video"]
+        check("approved still animates into a carded video artifact",
+              len(vids) == 1, str(len(vids)))
+        if vids:
+            vm = json.loads(vids[0]["meta"])
+            check("video card records engine/seed/frames/fps/duration + source lineage",
+                  vm.get("engine") == "ltx-video" and vm.get("seed") == 7
+                  and vm.get("length_frames") and vm.get("fps")
+                  and vm.get("duration_seconds")
+                  and vm.get("source_artifact") == approved_still["id"], str(vm)[:200])
+            check("video output collected despite a non-'images' output key",
+                  (vids[0]["path"] or "").endswith(".webm"), str(vids[0]["path"]))
+            # The web app must be able to PLAY the clip: served as video/webm,
+            # and the worker's preview upload cached it WITH its extension so
+            # the 2-PC dashboard (router on MINI, clip on GAMING) works too.
+            with urllib.request.urlopen(
+                    f"http://127.0.0.1:{RP}/artifacts/{vids[0]['id']}/file",
+                    timeout=15) as r:
+                check("router serves the clip as video/webm (not a fake png)",
+                      r.headers.get("Content-Type") == "video/webm",
+                      str(r.headers.get("Content-Type")))
+            cached_clips = list((ROOT / "artifacts" / "_previews").glob(
+                f"{vids[0]['id']}.webm"))
+            check("clip preview cached with its media extension for 2-PC playback",
+                  len(cached_clips) == 1, str(cached_clips))
+
+        # The web app drives video end-to-end: structural proof the dashboard
+        # has the Animate contract (approved stills only) and real playback.
+        dash = (ROOT / "dashboard" / "index.html").read_text(encoding="utf-8-sig")
+        check("dashboard renders video artifacts with a playable <video> tag",
+              "<video src=\"/artifacts/${a.id}/file\" controls" in dash)
+        check("dashboard Animate lives only on APPROVED stills and queues video.i2v",
+              "a.status === 'approved'" in dash and "animateArt" in dash
+              and "type:'video.i2v', required_mode:'VIDEO'" in dash.replace('"', "'"))
+        check("staging bring-up script exists for not-routed-in-yet validation",
+              (ROOT / "scripts" / "stage-byrdhouse.ps1").is_file()
+              and "-staging" in (ROOT / "scripts" / "stage-byrdhouse.ps1")
+              .read_text(encoding="utf-8-sig"))
+
+        print("== inventory.scan (belt remembers every file it has)")
+        api("/jobs", {"type": "inventory.scan", "project": "byrdhouse",
+                      "required_mode": "ANY", "payload": {}})
+        run_worker()
+        invs = [a for a in api("/artifacts?limit=200") if a["kind"] == "inventory"]
+        check("inventory.scan registered an approved inventory artifact",
+              len(invs) >= 1 and invs[0]["status"] == "approved", str(len(invs)))
+        inv_json = ROOT / "artifacts" / "inventory.json"
+        check("inventory.json written to disk", inv_json.is_file())
+        if inv_json.is_file():
+            inv_data = json.loads(inv_json.read_text())
+            check("inventory captures models/workflows/recipes/profiles/flags",
+                  all(k in inv_data for k in
+                      ("models", "workflows", "recipes", "profiles", "flags"))
+                  and inv_data["workflows"]["count"] >= 1
+                  and inv_data["recipes"]["count"] >= 1)
+            check("inventory flags the UI-format flux2_klein workflows as dead weight",
+                  any("ui-format" in f.lower() or "flux2" in f.lower()
+                      for f in inv_data["flags"]),
+                  str(inv_data["flags"][:2]))
+
         # Idempotency: the same key submitted twice yields one job, not two
         k = "idem-test-key-1"
         j1 = api("/jobs", {"type": "report.daily", "idempotency_key": k})
@@ -200,7 +634,10 @@ def main():
         api("/jobs", {"type": "image.generate", "required_mode": "IMAGE",
                       "payload": {"recipe": "nope", "slots": {}, "purpose": "fail"}})
         run_worker()
-        dead = [x for x in api("/jobs?type=image.generate") if x["status"] == "dead"]
+        # filter to THIS block's job — the multi-person section deliberately
+        # produces its own dead job (the no-real-photo refusal) earlier on
+        dead = [x for x in api("/jobs?type=image.generate")
+                if x["status"] == "dead" and "'nope'" in (x["error"] or "")]
         check("dead after retries", len(dead) == 1)
         check("real error message recorded", dead and "no recipe 'nope'" in (dead[0]["error"] or ""))
 
@@ -224,7 +661,9 @@ def main():
         check("artifacts expose job timing", timed and all(
             a["job_queued_at"] and a["job_claimed_at"] and a["job_finished_at"]
             and isinstance(a["gen_seconds"], int) and a["gen_seconds"] >= 0 for a in timed))
-        card_meta = json.loads(timed[0]["meta"])
+        tier = [a for a in timed
+                if json.loads(a["meta"] or "{}").get("recipe", "").startswith("rpg_tier_list")]
+        card_meta = json.loads(tier[0]["meta"])
         check("card records requested slots", card_meta.get("slots", {}).get("game") == "Last Epoch")
 
         # Operator chat: router proxies to LM Studio with live belt context

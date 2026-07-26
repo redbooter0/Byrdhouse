@@ -25,7 +25,7 @@ Endpoints (v2 §6):                                          access
   GET  /artifacts?project=&status=&id=&limit=               open
   GET  /artifacts/<id>/file image bytes (local or preview)  open
   POST /artifacts/<id>/file upload preview bytes (worker)   token
-  POST /artifacts/<id>/review {action:approve|reject|judge} token
+  POST /artifacts/<id>/review {action:approve|reject|judge|caption} token
   POST /artifacts/<id>/refine {strength,scale,prompt,lora}   token
   GET  /recipes             list recipe files               open
   POST /chat                {messages:[...]} -> operator    token
@@ -62,13 +62,16 @@ REFERENCES = ROOT / "references"  # founder-loved thumbnails the judge scores ag
 SOURCES = ROOT / "artifacts" / "_sources"  # dashboard-uploaded real source images
 
 JOB_TYPES = {
-    "image.generate", "image.judge", "image.refine", "image.upscale", "image.faceswap",
+    "image.generate", "image.judge", "image.caption", "image.identity_generate",
+    "image.identity_variation",
+    "image.refine", "image.upscale", "image.faceswap",
     "video.i2v",
-    "memory.save", "memory.import", "report.daily",
+    "memory.save", "memory.import", "report.daily", "inventory.scan",
     "export.csv", "export.zip", "backup.nightly",
     "game.godot_task", "code.task",
 }
-REVIEW_TYPES = {"image.generate", "image.refine", "image.upscale", "image.faceswap",
+REVIEW_TYPES = {"image.generate", "image.identity_generate", "image.identity_variation",
+                "image.refine", "image.upscale", "image.faceswap",
                 "video.i2v"}  # done -> needs_review
 
 # The worker heartbeats from a dedicated thread (worker.py) every ~30s even
@@ -114,6 +117,15 @@ def repo_build(start=None):
 
 
 BUILD = repo_build()
+
+MEDIA_CTYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                ".webp": "image/webp", ".gif": "image/gif",
+                ".webm": "video/webm", ".mp4": "video/mp4"}
+
+
+def media_ctype(name: str) -> str:
+    return MEDIA_CTYPES.get(Path(str(name)).suffix.lower(), "application/octet-stream")
+
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS jobs(
@@ -689,13 +701,15 @@ class Handler(BaseHTTPRequestHandler):
             row = db().execute("SELECT path FROM artifacts WHERE id=?", (m.group(1),)).fetchone()
             if row and row["path"] and Path(row["path"]).exists():
                 data = Path(row["path"]).read_bytes()
-                ctype = "image/png" if row["path"].endswith(".png") else "application/octet-stream"
-                return self._send(data, content_type=ctype)
+                return self._send(data, content_type=media_ctype(row["path"]))
             # artifact files live on the worker's disk — fall back to the
-            # preview copy the worker uploaded at registration time
-            cached = PREVIEWS / f"{m.group(1)}.png"
-            if row and cached.exists():
-                return self._send(cached.read_bytes(), content_type="image/png")
+            # preview copy the worker uploaded at registration time (extension
+            # preserved at upload so a video clip plays instead of downloading
+            # as a broken "png")
+            if row:
+                for cached in sorted(PREVIEWS.glob(f"{m.group(1)}.*")):
+                    return self._send(cached.read_bytes(),
+                                      content_type=media_ctype(cached.name))
             return self._send({"error": "file not on this host"}, 404)
 
         if path == "/references":
@@ -730,10 +744,18 @@ class Handler(BaseHTTPRequestHandler):
                         refs_dir = pdir / "references"
                         photos = [f.name for f in refs_dir.iterdir()
                                   if f.suffix.lower() in (".jpg", ".jpeg", ".png")] if refs_dir.is_dir() else []
+                        refs = p.get("references", {})
                         out.append({"id": p.get("id", pdir.name),
                                     "display_name": p.get("display_name", pdir.name),
                                     "references": len(photos),
                                     "has_references": len(photos) > 0,
+                                    # what the worker's reference sync and the
+                                    # identity lane need: which photos are real
+                                    # (ground truth), how to fetch them, and
+                                    # which model packs this subject owns
+                                    "ground_truth_names": refs.get("ground_truth", []),
+                                    "reference_artifacts": refs.get("reference_artifacts", {}),
+                                    "identity_packs": p.get("identity_packs", {}),
                                     "preferences": p.get("preferences", {})})
                     except Exception:
                         continue
@@ -849,6 +871,86 @@ class Handler(BaseHTTPRequestHandler):
             return self._send({"error": "bad or missing bearer token"}, 401)
         path = urlparse(self.path).path.rstrip("/")
 
+        if path == "/profiles":
+            # Create a subject profile — "whoever else I upload". The profile is
+            # the identity truth (handoff §3): photos, ground-truth list, and
+            # per-model-family identity packs all live here; engines consume it.
+            try:
+                body = self._body()
+            except json.JSONDecodeError:
+                return self._send({"error": "invalid JSON"}, 400)
+            display = str(body.get("display_name", "")).strip()
+            if not display:
+                return self._send({"error": "display_name required"}, 400)
+            pid = str(body.get("id", "")).strip().lower() or \
+                re.sub(r"[^a-z0-9_-]+", "_", display.lower()).strip("_")
+            if not re.fullmatch(r"[a-z0-9_-]{1,40}", pid):
+                return self._send({"error": f"bad profile id '{pid}'"}, 400)
+            pdir = ROOT / "profiles" / pid
+            if (pdir / "profile.json").exists():
+                return self._send({"error": f"profile '{pid}' already exists"}, 409)
+            (pdir / "references").mkdir(parents=True, exist_ok=True)
+            profile = {
+                "id": pid, "display_name": display,
+                "created": now(),
+                "references": {
+                    "_ground_truth_rule": "Uploaded camera photos of the person. "
+                    "Generated/synthetic images must never be added to ground_truth.",
+                    "ground_truth": [], "default_set": [], "available": [],
+                    "reference_artifacts": {}},
+                "identity_packs": {},
+                "identity_notes": {"disallowed_transforms":
+                                   ["age regression", "gender swap"]},
+            }
+            (pdir / "profile.json").write_text(json.dumps(profile, indent=2),
+                                               encoding="utf-8")
+            event(self._actor(), "profile.create", pid, {"display_name": display})
+            return self._send({"id": pid, "display_name": display}, 201)
+
+        m = re.fullmatch(r"/profiles/([\w-]+)/references/([\w. -]+)", path)
+        if m:  # subject reference photo upload (body is image bytes)
+            pid, name = m.group(1), m.group(2)
+            pfile = ROOT / "profiles" / pid / "profile.json"
+            if not pfile.exists():
+                return self._send({"error": f"no profile '{pid}' — create it first"}, 404)
+            n = int(self.headers.get("Content-Length") or 0)
+            if not 0 < n <= 20_000_000:
+                return self._send({"error": "bad upload size"}, 400)
+            data = self.rfile.read(n)
+            dest = ROOT / "profiles" / pid / "references" / name
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(data)
+            # Register the photo as a fetchable artifact so the WORKER machine
+            # (where generation runs) can pull it — profiles uploaded through the
+            # dashboard land on this router host, not on GAMING's disk.
+            aid = new_id("ref")
+            card = {"artifact_id": aid, "job_id": None, "project": "profiles",
+                    "kind": "reference", "path": str(dest), "name": name,
+                    "subject_profile": pid,
+                    "purpose": f"identity reference photo for profile '{pid}'",
+                    "score": None, "tags": ["reference", pid], "caption": "",
+                    "status": "approved", "created_at": now()}
+            db().execute(
+                "INSERT OR REPLACE INTO artifacts(id,job_id,project_id,kind,path,meta,"
+                "tags,status,created_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                (aid, None, "profiles", "reference", str(dest), json.dumps(card),
+                 json.dumps(["reference", pid]), "approved", now()))
+            db().commit()
+            profile = json.loads(pfile.read_text(encoding="utf-8-sig"))
+            refs = profile.setdefault("references", {})
+            gt_flag = {k: v[0] for k, v in parse_qs(urlparse(self.path).query)
+                       .items()}.get("ground_truth", "1") != "0"
+            for key, include in (("available", True), ("ground_truth", gt_flag)):
+                lst = refs.setdefault(key, [])
+                if include and name not in lst:
+                    lst.append(name)
+            refs.setdefault("reference_artifacts", {})[name] = aid
+            pfile.write_text(json.dumps(profile, indent=2), encoding="utf-8")
+            event(self._actor(), "profile.reference", pid,
+                  {"name": name, "artifact": aid, "ground_truth": gt_flag})
+            return self._send({"id": aid, "profile": pid, "name": name,
+                               "ground_truth": gt_flag}, 201)
+
         m = re.fullmatch(r"/references/([\w-]+)/([\w. -]+)", path)
         if m:  # raw reference upload from the dashboard (body is image bytes)
             n = int(self.headers.get("Content-Length") or 0)
@@ -861,12 +963,17 @@ class Handler(BaseHTTPRequestHandler):
             return self._send({"ok": True, "tag": m.group(1), "name": m.group(2)}, 201)
 
         m = re.fullmatch(r"/artifacts/([\w.-]+)/file", path)
-        if m:  # raw image upload from the worker (body is bytes, not JSON)
+        if m:  # raw media upload from the worker (body is bytes, not JSON)
             n = int(self.headers.get("Content-Length") or 0)
             if not 0 < n <= 20_000_000:
                 return self._send({"error": "bad upload size"}, 400)
             PREVIEWS.mkdir(parents=True, exist_ok=True)
-            (PREVIEWS / f"{m.group(1)}.png").write_bytes(self.rfile.read(n))
+            # keep the media kind: a video clip cached as "<id>.png" would be
+            # served back as an unplayable image
+            ext = {"video/webm": ".webm", "video/mp4": ".mp4",
+                   "image/webp": ".webp"}.get(
+                (self.headers.get("Content-Type") or "").split(";")[0], ".png")
+            (PREVIEWS / f"{m.group(1)}{ext}").write_bytes(self.rfile.read(n))
             event(self._actor(), "artifact.preview", m.group(1), {"bytes": n})
             return self._send({"ok": True}, 201)
 
@@ -1048,20 +1155,61 @@ class Handler(BaseHTTPRequestHandler):
             if not art:
                 return self._send({"error": "no such artifact"}, 404)
             if action in ("approve", "reject"):
+                # A reject may carry WHY (the identity gate sends its reasons) —
+                # keep it on the card so a rejection is evidence, not a dead end.
+                if body.get("reason"):
+                    try:
+                        notes = json.loads(art["judge_notes"] or "{}")
+                    except (TypeError, ValueError):
+                        notes = {}
+                    if not isinstance(notes, dict):
+                        notes = {}
+                    notes["reject_reason"] = str(body["reason"])[:2000]
+                    db().execute("UPDATE artifacts SET judge_notes=? WHERE id=?",
+                                 (json.dumps(notes), aid))
                 db().execute("UPDATE artifacts SET status=? WHERE id=?",
                              ("approved" if action == "approve" else "rejected", aid))
             elif action == "judge":
+                notes = {"caption": body.get("caption", ""),
+                         "notes": body.get("notes", "")}
+                if body.get("identity"):
+                    notes["identity"] = body.get("identity")  # identity gate result
                 db().execute(
                     "UPDATE artifacts SET score=?, tags=?, judge_notes=? WHERE id=?",
                     (body.get("score"), json.dumps(body.get("tags", [])),
-                     json.dumps({"caption": body.get("caption", ""),
-                                 "notes": body.get("notes", "")}), aid))
+                     json.dumps(notes), aid))
             elif action == "unjudged":
                 # score deliberately left null (no vision model) — record why so
                 # the gallery can flag it for manual review, don't invent a score
                 db().execute(
                     "UPDATE artifacts SET judge_notes=? WHERE id=?",
                     (json.dumps({"unjudged": body.get("reason", "no vision model")}), aid))
+            elif action in ("caption", "uncaptioned"):
+                # The caption lane (image.caption) annotates an artifact without
+                # scoring it — merge into judge_notes so a judge score is never
+                # clobbered. 'uncaptioned' records why no caption was written
+                # (no vision model), same honesty rule as 'unjudged'.
+                try:
+                    notes = json.loads(art["judge_notes"] or "{}")
+                except (TypeError, ValueError):
+                    notes = {}
+                if not isinstance(notes, dict):
+                    notes = {}
+                if action == "caption":
+                    notes["caption"] = body.get("caption", "")
+                    notes.pop("uncaptioned", None)
+                    tags = body.get("tags")
+                    if tags is not None:
+                        db().execute(
+                            "UPDATE artifacts SET tags=?, judge_notes=? WHERE id=?",
+                            (json.dumps(tags), json.dumps(notes), aid))
+                    else:
+                        db().execute("UPDATE artifacts SET judge_notes=? WHERE id=?",
+                                     (json.dumps(notes), aid))
+                else:
+                    notes["uncaptioned"] = body.get("reason", "no vision model")
+                    db().execute("UPDATE artifacts SET judge_notes=? WHERE id=?",
+                                 (json.dumps(notes), aid))
             else:
                 return self._send({"error": f"bad action '{action}'"}, 400)
             db().commit()

@@ -201,6 +201,16 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Report the selected files without copying anything.",
     )
+    parser.add_argument(
+        "--vl-captions",
+        action="store_true",
+        help=(
+            "Describe each staged image with the LM Studio vision model "
+            "(byrdcaption) and append the real per-image context to the audited "
+            "template caption. Falls back to the template alone if no vision "
+            "model is available, so the default (off) run stays fully offline."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -342,6 +352,48 @@ def caption_for(source: Path, category: str) -> str:
     return f"{caption}, {details}" if details else caption
 
 
+VL_CONTEXT_HINT = {
+    "real": "a real photograph of the subject",
+    "synthetic": "a synthetic photoreal portrait of the subject",
+    "anime": "an anime/cartoon illustration of the subject",
+    "studio": "a studio identity portrait of the subject",
+}
+
+
+def vl_context(root: Path, source: Path, category: str) -> str:
+    """Per-image variable context (pose, framing, lighting, setting, style) from
+    the LM Studio vision model, or "" if the model is unavailable — the caller
+    keeps the audited template caption in that case, so this only ever ADDS."""
+    scripts_dir = Path(__file__).resolve().parent
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    try:
+        import byrdcaption
+    except Exception as exc:  # pragma: no cover - import guard
+        print(f"  VL captions unavailable ({exc}); using template captions")
+        return ""
+    try:
+        result = byrdcaption.caption_image(
+            root, source, trigger="", style="lora", max_words=40,
+            context=VL_CONTEXT_HINT.get(category, ""))
+    except Exception as exc:  # noqa: BLE001 - never let one image break staging
+        print(f"  VL caption unavailable for {source.name} ({exc}); using template")
+        return ""
+    return result.get("caption", "").strip()
+
+
+def merge_caption(base: str, extra: str) -> str:
+    """Append the VL context phrases the template doesn't already carry, keeping
+    the trigger + identity anchor first (kohya reads left-to-right)."""
+    base = base.strip()
+    if not extra:
+        return base
+    have = {phrase.strip().lower() for phrase in base.split(",")}
+    additions = [phrase.strip() for phrase in extra.split(",")
+                 if phrase.strip() and phrase.strip().lower() not in have]
+    return f"{base}, {', '.join(additions)}" if additions else base
+
+
 def relative_to(path: Path, parent: Path) -> bool:
     try:
         path.resolve().relative_to(parent.resolve())
@@ -350,7 +402,12 @@ def relative_to(path: Path, parent: Path) -> bool:
     return True
 
 
-def stage_images(sources: list[tuple[Path, str, Path]]) -> list[StagedImage]:
+def stage_images(
+    sources: list[tuple[Path, str, Path]],
+    *,
+    describe: bool = False,
+    root: Path | None = None,
+) -> list[StagedImage]:
     staged: list[StagedImage] = []
     counters: dict[tuple[str, Path], int] = {}
     for source, category, destination in sources:
@@ -360,6 +417,8 @@ def stage_images(sources: list[tuple[Path, str, Path]]) -> list[StagedImage]:
         file_name = f"{category}_{counters[key]:03d}_{source.name}"
         copied = destination / file_name
         caption = caption_for(source, category)
+        if describe and root is not None:
+            caption = merge_caption(caption, vl_context(root, source, category))
         shutil.copy2(source, copied)
         copied.with_suffix(".txt").write_text(caption + "\n", encoding="utf-8")
         staged.append(
@@ -451,11 +510,12 @@ def main() -> int:
         shutil.rmtree(mode_root)
     for destination in destinations.values():
         destination.mkdir(parents=True, exist_ok=False)
-    staged = stage_images(sources)
+    staged = stage_images(sources, describe=args.vl_captions, root=root)
     manifest = {
         "version": 3,
         "mode": args.mode,
         "trigger": "careybh person",
+        "captioner": "vl+template" if args.vl_captions else "template",
         "source_root": str(references),
         "buckets": {category: str(path) for category, path in destinations.items()},
         "strategy": (
