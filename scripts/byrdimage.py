@@ -353,6 +353,17 @@ def generate(root, recipe_name, slots, project, purpose,
         print(f"[byrdimage] identity pack from recipe: {lora}")
     ckpt_requested = checkpoint or engine.get("checkpoint") or defaults.get("checkpoint") or die("no checkpoint")
     checkpoint, ckpt_matched = resolve_checkpoint_info(root, ckpt_requested, comfy=comfy)
+    # A DIAGNOSTIC recipe may not accept a checkpoint fallback. Falling back can
+    # cross model families (an SD1.5 LoRA on an SDXL checkpoint renders mush),
+    # and mush in every cell reads as "the adapter never learned the face" —
+    # the most expensive wrong conclusion this repo can reach. Fail loudly.
+    if not ckpt_matched and recipe.get("require_exact_checkpoint"):
+        die(f"recipe '{recipe['id']}' requires the exact checkpoint "
+            f"'{ckpt_requested}' but it is not installed (resolved to "
+            f"'{checkpoint}'). This recipe is a diagnostic: a substituted "
+            f"checkpoint can cross model families and produce a false negative. "
+            f"Install '{ckpt_requested}' or pass --checkpoint with an installed "
+            f"model of the SAME family as the LoRA.")
     batch = batch or defaults.get("batch", 1)
     steps = int(engine.get("steps") or defaults.get("steps", 30))
 

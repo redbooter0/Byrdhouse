@@ -55,17 +55,38 @@ def _score_identity(root, card: dict, image_path) -> dict:
     if verify_identity is None or not _is_identity_card(card):
         return {}
     profile_id = card.get("subject_profile") or "me"
-    refs_dir = Path(root) / "profiles" / str(profile_id) / "references"
+    pdir = Path(root) / "profiles" / str(profile_id)
+    refs_dir = pdir / "references"
     if not refs_dir.is_dir():
         return {"identity_score": None, "identity_backend": "none",
                 "identity_note": f"no reference library at profiles/{profile_id}/references"}
+    # Score ONLY against camera ground truth. Scoring against the whole folder
+    # pulls in synthetic/generated portraits, so an adapter that drifted toward
+    # its own generated look would be scored as a success — the measurement
+    # would validate the exact failure it exists to catch. If a profile has
+    # declared no ground truth, say so rather than quietly grading on synthetics.
+    ground_truth = []
+    pfile = pdir / "profile.json"
+    if pfile.exists():
+        try:
+            ground_truth = [str(refs_dir / n) for n in
+                            json.loads(pfile.read_text(encoding="utf-8-sig"))
+                            .get("references", {}).get("ground_truth", [])
+                            if (refs_dir / n).is_file()]
+        except Exception:
+            ground_truth = []
+    if not ground_truth:
+        return {"identity_score": None, "identity_backend": "none",
+                "identity_note": (f"profile '{profile_id}' declares no camera "
+                                  "ground-truth photos — identity left unmeasured "
+                                  "rather than scored against generated material")}
     source_target = (card.get("swap_target") or card.get("target")
                      or card.get("source_image"))
     if source_target and not Path(str(source_target)).exists():
         source_target = None
     try:
         res = verify_identity.identity_score(
-            str(image_path), str(refs_dir), source_target=source_target)
+            str(image_path), ground_truth, source_target=source_target)
     except Exception as e:  # never let identity scoring break judging
         return {"identity_score": None, "identity_backend": "none",
                 "identity_note": f"identity scoring error: {e}"}

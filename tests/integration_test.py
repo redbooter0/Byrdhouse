@@ -238,6 +238,24 @@ def main():
                                    gate_cfg)
         check("gate leaves an UNMEASURED result for human review (never auto-passes)",
               d3["decision"] == "review", str(d3))
+        # The measurement must not grade against generated material: a profile
+        # whose references folder is full of synthetic portraits but which
+        # declares no camera ground truth is UNMEASURED, not "scored".
+        import byrdjudge as _bj2
+        synth_dir = ROOT / "profiles" / "synthonly" / "references"
+        synth_dir.mkdir(parents=True, exist_ok=True)
+        (synth_dir / "ai_identity_front_v1.png").write_bytes(b"synthetic")
+        (ROOT / "profiles" / "synthonly" / "profile.json").write_text(json.dumps(
+            {"id": "synthonly", "display_name": "Synth Only",
+             "references": {"ground_truth": [], "available": ["ai_identity_front_v1.png"]}}),
+            encoding="utf-8")
+        sres = _bj2._score_identity(ROOT, {"subject_profile": "synthonly",
+                                           "recipe": "identity_sdxl_t2i@2"},
+                                    cap_src["path"])
+        check("identity is NOT scored against generated material when no camera "
+              "ground truth exists (measurement can't validate its own drift)",
+              sres.get("identity_score") is None
+              and "ground-truth" in sres.get("identity_note", ""), str(sres))
         # CLIP is whole-image similarity, not identity — it must never reject alone
         d4 = byrdidentity.evaluate({}, {"identity_score": 0.31, "identity_backend": "clip",
                                         "identity_target_similarity": 0.5}, gate_cfg)
@@ -395,6 +413,19 @@ def main():
         (lora_dir / "carey_meina_sd15_v1.safetensors").write_bytes(b"stub-lora")
         ck_dir = ROOT / "Generators" / "ComfyUI" / "models" / "checkpoints"
         ck_dir.mkdir(parents=True, exist_ok=True)
+        # A DIAGNOSTIC must refuse a substituted checkpoint. With only an SDXL
+        # model installed, the probe would otherwise silently run an SD1.5 LoRA
+        # on SDXL and render mush — read as "the LoRA never learned the face",
+        # the most expensive wrong conclusion available. Prove it refuses first.
+        (ck_dir / "juggernautXL_v9.safetensors").write_bytes(b"stub-sdxl")
+        try:
+            _bi.generate(ROOT, "carey_identity_probe@1", {}, "identity_probe",
+                         "probe with the wrong family installed", dry_run=True)
+            check("probe REFUSES a substituted checkpoint (no false negative)", False)
+        except SystemExit as e:
+            check("probe REFUSES a substituted checkpoint (no false negative)",
+                  "requires the exact checkpoint" in str(e), str(e)[:110])
+        (ck_dir / "juggernautXL_v9.safetensors").unlink()
         (ck_dir / "meina_v11.safetensors").write_bytes(b"stub-ckpt")
         api("/jobs", {"type": "image.generate", "project": "identity_probe",
                       "required_mode": "IMAGE", "required_caps": ["comfyui"],

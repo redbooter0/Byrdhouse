@@ -101,6 +101,34 @@ image in this change set was generated on a GPU. Per the handoff's own rule, a
 successful test is *a visually reviewed artifact on the real RTX 3070*, not a
 green unit test.
 
+## 5b. Opus review of the Fable build (2026-07-25) — two corrections
+
+A second-pass audit found two defects where the machinery would have produced a
+**confident wrong answer**. Both are fixed; both are worth understanding.
+
+1. **The identity judge was grading against generated faces.** `_score_identity`
+   scored the output against the whole `profiles/<id>/references/` folder, which
+   holds the synthetic `ai_identity_*.png` portraits beside the real photos. An
+   adapter that had drifted toward its own *generated* look would therefore
+   score as a SUCCESS — the measurement would validate the exact failure it
+   exists to catch, which is worse than no measurement. It now scores only
+   against `references.ground_truth` (camera photos), and a profile with no
+   declared ground truth returns **unmeasured** instead of a number.
+
+2. **The probe could return a false negative.** `carey_identity_probe` asks for
+   the `meina` SD1.5 checkpoint; the normal fallback would silently substitute
+   any installed checkpoint — plausibly SDXL. An SD1.5 LoRA on an SDXL
+   checkpoint at 512px renders mush in every cell, which reads as *"no cell
+   reads as Carey"* — and per handoff v2.1 §13.2 that verdict sends you into a
+   multi-day retrain. Diagnostics now support `require_exact_checkpoint`, and
+   the probe refuses to run rather than produce an uninterpretable grid.
+
+**One claim refined.** "The mesh-seed lane cannot produce a likeness by
+construction" is exactly true for the **default** path (`skip_gpu_cleanup: true`
+= pure CPU warp into the target's mesh). The **v3** path (ControlNet canny,
+denoise 0.55) is a materially different bet that has never run on hardware —
+it should not be written off with the same sentence.
+
 ## 6. Next actions, in order
 
 1. **WO-0 baseline** — five locked targets, fixed seeds, archived

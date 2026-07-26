@@ -49,8 +49,15 @@ def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
     return num / (na * nb)
 
 
-def _expand_refs(reference: str) -> list[str]:
-    """Accept a file, a dir, or a glob and return concrete image paths."""
+def _expand_refs(reference) -> list[str]:
+    """Accept a file, a dir, a glob, or an explicit list of paths.
+
+    The list form matters: scoring identity against a whole reference FOLDER
+    silently includes synthetic/generated portraits, and an adapter that has
+    drifted toward its own generated look would then score as a success. Callers
+    that know which files are camera ground truth pass them explicitly."""
+    if isinstance(reference, (list, tuple, set)):
+        return sorted(str(r) for r in reference if os.path.isfile(str(r)))
     if os.path.isdir(reference):
         out: list[str] = []
         for ext in ("*.jpg", "*.jpeg", "*.png", "*.webp"):
