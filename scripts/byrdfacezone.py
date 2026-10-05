@@ -114,23 +114,30 @@ def _ordered_rings(edges: Iterable[tuple[int, int]]) -> list[list[int]]:
     return rings
 
 
+def _comfy_models(root: Path) -> Path:
+    """Reuse the current Windows config; retain the historical root layout."""
+    root = Path(root).resolve()
+    local_config = root / 'byrdhouse-local.json'
+    if local_config.is_file():
+        config = json.loads(local_config.read_text(encoding='utf-8-sig'))
+        directory = config.get('comfy_dir') if isinstance(config, dict) else None
+        if not isinstance(directory, str) or not directory.strip():
+            raise ValueError('Current Windows config has no valid comfy_dir; refusing a guessed model path.')
+        path = Path(directory)
+        return (path if path.is_absolute() else root / path).resolve() / 'models'
+    return root / 'Generators' / 'ComfyUI' / 'models'
+
+
 def _model_path(root: Path) -> Path:
-    return root / "Generators" / "ComfyUI" / "models" / "detection" / MODEL_NAME
+    return _comfy_models(root) / 'detection' / MODEL_NAME
 
 
 def _selfie_segmenter_path(root: Path) -> Path:
-    return (
-        root
-        / "Generators"
-        / "ComfyUI"
-        / "models"
-        / "segmentation"
-        / SELFIE_SEGMENTER_NAME
-    )
+    return _comfy_models(root) / 'segmentation' / SELFIE_SEGMENTER_NAME
 
 
 def _parsenet_path(root: Path) -> Path:
-    return root / "Generators" / "ComfyUI" / "models" / "facedetection" / PARSENET_NAME
+    return _comfy_models(root) / 'facedetection' / PARSENET_NAME
 
 
 @lru_cache(maxsize=2)
@@ -364,7 +371,7 @@ def _run_parsenet(root: Path, crop: Image.Image) -> tuple[np.ndarray, dict]:
     """Run the already-installed 19-class parser as the local anime fallback."""
     model_path = _parsenet_path(root)
     _verify_model(model_path, PARSENET_SHA256, "ParseNet face parser")
-    reactor_root = root / "Generators" / "ComfyUI" / "custom_nodes" / "ComfyUI-ReActor"
+    reactor_root = _comfy_models(root).parent / "custom_nodes" / "ComfyUI-ReActor"
     model = _load_parsenet_model(str(model_path), str(reactor_root))
     array = np.asarray(crop.convert("RGB"), dtype=np.float32) / 127.5 - 1.0
     tensor = torch.from_numpy(array.transpose(2, 0, 1)).unsqueeze(0)

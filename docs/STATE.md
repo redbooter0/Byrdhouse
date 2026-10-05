@@ -1,6 +1,177 @@
 # ByrdHouse STATE
 
+**Latest requirement, 2026-10-05: 100% local production, no subscriptions or paid
+services.** Keep already saved ChatGPT artwork; do not generate more through
+cloud services. Advance the Radeon pipeline and local reusable animation rig.
+
+**2026-10-05 production direction:** Carey authorized ChatGPT asset generation
+where local results fail and requested publishing the Windows/Radeon updates.
+Six expressions and a stoop keyframe are saved locally as candidates; canon is
+unchanged. Read [asset/prototype handoff](reviews/2026-10-05-chatgpt-assets-and-publication.md)
+and [existing animation system comparison](reviews/2026-10-05-animation-source-comparison.md).
+Prioritize a reusable Carey dialogue rig, editable costume parts and Brambleton
+sets. No approved full 3D body, local LoRA or finished episode is claimed.
+
+**2026-10-04 hairline/mesh advance:** the examiner now excludes detached
+eyebrow patches from connected head-hair measurements. A separate V2 profile
+retains the same approved anchor; queued reviews bind examiner code/weights
+and refuse mixed versions. Full 33-frame V2 review keeps the borderline
+afro-width flags at 5/7, and the rejected still still flags all six features.
+The existing CPU mesh loader's official 5.42 MB model was restored and its
+current-PC config lookup fixed; normal analysis succeeds with 478 landmarks.
+183 tests pass. No new edit/warp or animated identity approval is claimed.
+See [calibration, live deployment and remaining alignment gates](reviews/2026-10-04-hairline-v2-and-face-mesh.md).
+
+**2026-10-04 FreeVideo follow-up:** newer upstream pin `a9098b7…` adds no
+documented AMD path; its CUDA/Python installer requirements are unchanged.
+Separate Radeon H3 implementations were source-reviewed, but none was
+installed or qualified on this PC. The standard H3 model license explicitly
+excludes the US/EU/UK/Republic of Korea; no separate authorization is recorded.
+The existing Wan Carey preview, all 33 frame hashes and live services were
+verified again without a render or restart. It remains `needs_review`.
+See [updated sources, license and deployment choice](reviews/2026-10-04-freevideo-follow-up.md).
+
+**2026-10-04 Studio continuity milestone:** illustrated stills and clips now
+have a visible-angle selector and queued **Check likeness** action, reusing
+the approved matching-view examiner. Every saved frame of the 33-frame Wan
+clip was checked: afro-width cues flagged frames 5 and 7, just beyond the
+review range; the other five feature screens had no change flags. The
+rejected new-scene still flagged all six feature groups and remains rejected.
+Both checks retain human review; nothing is automatically approved. A live
+CPU-review restart preserved ten report hashes and finished the same job
+without a Comfy submission. 173 tests pass. Report images are diagnostic
+artifacts and cannot become animation sources. The earlier five-frame pass
+was a sample, not full temporal qualification. See
+[the deployed full-frame record](reviews/2026-10-04-studio-continuity-review-validation.md).
+
+**2026-10-04 native Radeon video milestone:** the official ComfyUI Wan 2.2
+5B image-to-video workflow is installed with three verified model files on D:
+and integrated into the existing Studio queue/gallery. Carey anchor job
+`3d6490df1abea740c499afcbca8befe7` rendered 33 frames / 1.375 seconds at
+384x576 in 472.68 seconds. Five sampled frames pass matching three-quarter
+hair/forehead/outline screens; mouth softness and color fringing remain for
+visual review. The video is **needs_review**, not an exact-replica approval.
+Dynamic VRAM caused a loader failure; `--disable-dynamic-vram` resolved this
+run and is now persisted. Enabling MIOpen made the controlled retry slower
+(694.64 s) and increased sampled VRAM; it was rolled back. The existing SDXL
+scene-edit regression completed in 60.08 s Comfy execution and kept all
+499,269 frozen Carey core pixels identical. Its thin light afro edge remains
+unqualified. 165 Studio tests pass. Sources, hashes, measured RAM/VRAM, rejected
+settings, clips and recovery limits are saved in
+[the native video record](reviews/2026-10-04-native-wan-amd-qualification.md).
+
+**2026-10-04 FreeVideo assessment:** Carey's linked MiniMax H3 project is
+source-staged at `D:\ByrdHouse\external\FreeVideo`, commit `98b3550…`.
+Its execution policy, kernels and Windows installer target NVIDIA/CUDA;
+it is unqualified for the working RX 7900 XT ROCm runtime. No packages/models
+were installed. See [the hardware-specific review](reviews/2026-10-04-freevideo-amd-assessment.md).
+The CivitAI new-scene lab is now deployed and rendered. Its new portrait
+`15a745b5272cda3fe8c73f8b0ed41003` was rejected for facial/hair drift and
+lighter skin. Do not animate or train from it. The native Wan milestone above
+records the qualified alternative; the existing ROCm runtime remains in place.
+
+**2026-10-04 Carey approval:** Carey explicitly approved the generated
+full-body four-view and enlarged-head model sheets as looking exactly like
+him. Their hashes and stable paths are locked in
+`D:\ByrdHouse\assets\characters\carey-anime\turnaround-v1.json`. The outfits
+are **not approved**; both are placeholders for a future wardrobe change.
+The sheets are 2D design references, not yet a rig, clean transparent sprite,
+or trained local LoRA. See the
+[turnaround record](reviews/2026-10-04-carey-chatgpt-turnaround.md).
+
+**2026-10-04 matching-view review:** The approved head turnaround now has
+hash-checked front, facing-right, back, and facing-left diagnostic crops,
+plus the approved close-up for three-quarter portraits.
+The local read-only examiner compares a proposed illustrated still with its
+explicitly selected matching view; clothing is outside its likeness scope.
+Profiles are detectable, but their similarity to a front reference is not a
+valid approval gate. The operator tool and validation are in
+[the matching-view record](reviews/2026-10-04-carey-multiview-belt.md).
+It does not yet run automatically inside Studio jobs or approve new frames.
+
+**2026-10-04 Carey model-sheet and scene milestone:** ChatGPT image
+generation produced front/facing-right/back/facing-left full-body Carey sheets
+in a plain base outfit and a matching burgundy outfit, plus a larger head
+turnaround. Carey approved the illustrated likeness; the outfits remain
+unapproved placeholders. The head sheet has an extra ear stud and no 2D
+rig/LoRA has been claimed. See the
+[turnaround review](reviews/2026-10-04-carey-chatgpt-turnaround.md). Locally,
+Studio's independent Animagine background composite removed the broad pale
+afro halo from the prior Brambleton scene edits. The best new still
+`a3b1a4a04a2e2d7d7458e75a5f058ca3` preserves all 499,269 frozen Carey
+face/hair core pixels and remains `needs_review` because a thin light edge is
+still visible. Both previous broad-halo jobs are rejected. 153 Studio tests
+pass. See the [scene-edge record](reviews/2026-10-04-anime-scene-edge-qualification.md).
+
+**2026-10-04 current Carey Anime Canon belt:** Studio has a saved, hash-bound
+feature profile for the owner-approved illustrated anchor and a deployed
+read-only same-view examiner for afro silhouette, hairline, forehead, jaw, and
+skin brightness. The known rejected redraw fails hair, forehead and outline
+screens; the close redraw passes those screens but remains unapproved. The
+parser's anime-afro-as-hat behavior is handled only for illustrated review.
+The existing Anchor v1 motion clip's sampled frames pass those geometry
+screens, though the middle frame softens teeth and mustache detail. The clip
+still needs owner approval. Repeated anchor inspection is cached by exact
+file hash, reducing the measured same-process repeat to `0.0019 s`.
+See [the measured belt record](reviews/2026-10-04-anime-canon-belt-validation.md).
+New poses, seamless afro-edge scene swaps, and episode-ready motion still need
+Carey visual review.
+
 *One page of current truth. Update weekly or on any milestone. Paste this to any AI to resume work instantly.*
+
+**2026-10-03 latest source-preservation milestone:** new photo analysis and scene
+editing run through the shared queue with fixed snapshots and saved-pixel checks.
+138 focused tests pass. Browser mask analysis took 10.53 s; scene edits took
+45.44 s and 13.58 s warm. Each kept all 331,764 protected source pixels identical,
+but both were rejected for retained tile/background halo around the afro. No
+animation of those rejected stills was submitted. New ordinary stills now bind
+their actual reference input; legacy jobs without snapshots are refused for new
+execution/resume. See [implementation and failures](reviews/2026-10-03-source-preservation-validation.md).
+ComfyUI PID 6840 stayed unchanged; both queues ended empty. Next: upstream hair
+matting/boundary refinement with explicit protected-interior/edge claims. Exact
+new poses, animation, live restart and sustained AMD stability remain unapproved.
+
+**2026-10-03 latest queue milestone:** correction now shares the Studio worker
+with still generation and animation; each operation records its submission for
+resume/collection. 63 focused tests pass. Browser correction completed in
+54.56 s, then animation rendered. The GUI recovered that animation's same
+completed prompt after a collector numeric-coercion fix; all 44 frames decoded
+and browser playback loaded. Exact likeness remains unapproved. Mid-render
+restart is mock-tested, not live-qualified. See
+[implementation evidence](reviews/2026-10-03-queue-recovery-validation.md).
+The [upstream workflow research](reviews/2026-10-03-source-preservation-workflow-research.md)
+identifies installed CPU parsing and core masked editing/compositing nodes for
+the source-preserved scene prototype. The latest milestone above supersedes
+the earlier proposal; source preservation passed but scene quality did not.
+
+**2026-10-03 current PC restoration:** `D:\ByrdHouse`, Windows RX 7900 XT 20 GB,
+32 GB RAM, attached 2 TB HDD. The mini PC remains deferred. A local Studio now
+uses RealVisXL V5 Lightning + actual FaceID Plus V2 by default, with local
+ReActor/SAM + verified GPEN correction and visible hairline/jaw checks. FLUX.2
+Klein and exact SDXL photo editing remain alternatives. The experimental Carey
+LoRA defaults to zero. All new Carey generations require his original
+photo and preserve his Black identity in their direction. Five batch recipes,
+SQLite records, comparison/rejection UI, and Blender pack export are implemented.
+Corrected stills now have their own gallery review records and retained parents.
+Warm generation after restoration measured 13.09 seconds; cold load remains
+about two minutes. Likeness across poses is not approved. A 2.93-second original
+photo blink/head-motion preview now runs through upstream AdvancedLivePortrait;
+it softens details and is not an approved exact replica. Detailed proof
+and outstanding likeness gates are in `IMAGE_GENERATION_STATE.md`. Historical
+two-PC state below is retained for continuity and must not be mistaken for this PC.
+
+**2026-10-03 persistent hardware/architecture review:** i9-10850K, RX 7900 XT
+20 GB, 32 GB RAM; C: SATA SSD has 27.1 GiB free and D: HDD has 1,563.5 GiB free.
+The [saved review index](reviews/README.md) and
+[current-PC improvement proposal](CURRENT_PC_IMPROVEMENT_PLAN.md) distinguish
+verified findings from proposed fixes. Priorities: one recoverable queue,
+bounded SSD cache, source-preserved likeness, matched reference analysis and
+reviewed short animation. The audit found correction bypassed the shared worker;
+startup did not reconcile saved ComfyUI prompt IDs at the audit baseline.
+The latest queue milestone above supersedes those two findings; remaining
+qualification and likeness gaps are recorded in the implementation evidence.
+The animation button is tested through the shared queue; 25 focused tests pass.
+Exact generated likeness and sustained AMD stability remain unapproved.
 
 **Last updated:** 2026-07-16 · **Current unlock: U1 IMAGE LAB · Handoff P0 (baseline & governance) repo-side complete** · **North star: R0 (first thumbnail shipped on Carey's channel)**
 

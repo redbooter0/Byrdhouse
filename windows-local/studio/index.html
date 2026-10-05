@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ByrdHouse · Local Studio</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="mark">B<span>.</span></span><span>BYRDHOUSE<small>LOCAL STUDIO</small></span></a>
+    <div class="header-right"><span class="connection" id="connection"><i></i>Connecting</span><a id="comfyLink" class="text-link" target="_blank" rel="noopener noreferrer">Open ComfyUI ↗</a></div>
+  </header>
+  <main>
+    <section class="intro"><p class="eyebrow">YOUR FACE. YOUR WORLD.</p><h1>Every version. <em>Still Carey.</em></h1><p>Build character variations from your photos, compare the likeness, and save stills for animation.</p></section>
+    <div class="workspace">
+      <section class="create-panel" aria-labelledby="createTitle">
+        <div class="section-title"><h2 id="createTitle">Create an image</h2><span id="engineTag" class="tag">SDXL</span></div>
+        <form id="generateForm">
+          <div class="two-fields"><div class="field"><label for="recipe">Create</label><select id="recipe"><option value="">Single image</option></select></div><div class="field"><label for="versions">Versions per shot</label><select id="versions"><option value="1">1 version</option><option value="2">2 versions</option><option value="3">3 versions</option></select></div></div>
+          <p id="recipeDescription" class="small">Describe your scene. Carey’s identity is included automatically.</p>
+          <div class="field"><label for="engine">Image engine</label><select id="engine"><option value="sdxl" selected>Photo guidance & editing · SDXL</option><option value="flux">Photo edit · FLUX.2 Klein</option></select></div>
+          <label for="prompt">Scene or extra direction</label>
+          <textarea id="prompt" rows="5" maxlength="3000" required placeholder="A sunlit rooftop portrait, Los Angeles in the distance, relaxed and confident…"></textarea>
+          <div class="field"><label for="preset">Look</label><div class="segmented" id="presetPicker"><button type="button" data-preset="photo" class="selected">Photo</button><button type="button" data-preset="cinematic">Cinematic</button><button type="button" data-preset="anime">Anime</button></div></div>
+          <div class="two-fields"><div class="field"><label for="mode">Generation</label><select id="mode"><option value="fast">Fast · 4 steps</option><option value="quality" selected>Quality · 24 steps</option></select></div><div class="field"><label for="aspect">Shape</label><select id="aspect"><option value="square">Square · 1024 × 1024</option><option value="portrait" selected>Portrait · 832 × 1216</option><option value="landscape">Landscape · 1216 × 832</option></select></div></div>
+          <div class="identity-box"><div class="identity-heading"><span class="dot"></span><strong id="identityTitle">Loading Carey identity</strong></div><p id="identityNote">Your photo anchors every candidate. Compare the face before keeping it.</p><div id="sdxlMethod"><label for="identityMode">Identity method</label><select id="identityMode"><option value="reference">FaceID photo guidance · new scenes</option><option value="instantid">InstantID private lab · new pose / scene</option><option value="photo_edit">Photo variation · may alter features</option><option value="lora">Carey LoRA · creative variations</option></select></div><div id="referenceControls"><label for="reference">Your photo</label><select id="reference"></select><img id="referencePreview" class="reference-preview" alt="Original Carey photo used for identity"><div id="photoStrengthRow" class="strength-row"><label for="referenceStrength">Photo strength</label><input id="referenceStrength" type="range" min="0.2" max="1.2" step="0.01" value="0.6"><output id="referenceStrengthValue">0.60</output></div></div><div id="sdxlModel"><label for="lora">Carey model</label><select id="lora"></select><div class="strength-row"><label for="strength">Model strength</label><input id="strength" type="range" min="0" max="1.5" step="0.05" value="0.65"><output id="strengthValue" for="strength">0.65</output></div></div><p class="small">Your Black identity and skin tone guidance are automatic. Likeness still needs your review.</p><div class="belt-box"><label for="beltTarget">Identity belt target</label><input id="beltTarget" type="text" placeholder="PNG filename in your ByrdHouse image folder"><button id="beltButton" type="button" class="secondary-button">Run ReActor likeness belt</button><p id="beltStatus" class="small">Face swap → mask → likeness score. Every candidate stays local and needs your review.</p><img id="beltPreview" class="belt-preview" alt="Identity belt result" hidden><a id="beltDownload" class="secondary-button belt-download" hidden download>Save corrected still</a></div></div>
+          <details class="advanced"><summary>Seed & reproducibility</summary><label for="seed">Seed</label><input id="seed" type="text" inputmode="numeric" placeholder="Random on every generation" pattern="[0-9]*"><p class="small">Reuse an image’s seed and settings to repeat it. Every output includes a metadata card.</p></details>
+          <div id="formError" class="error" role="alert" hidden></div>
+          <button class="generate-button" id="generateButton" type="submit"><span id="generateLabel">Generate Carey image</span><span>↗</span></button>
+          <p class="local-note">Images stay on this PC. No cloud generation.</p>
+          <button id="sourceMaskButton" type="button" class="secondary-button" disabled>Analyze photo for face protection</button>
+          <p id="sourceMaskStatus" class="small" role="status">Protect the original face and hair while editing the background. Inspect the mask before use; the pose stays the same.</p>
+          <button id="animatePhotoButton" type="button" class="secondary-button" disabled>Animate original photo</button>
+          <button id="animateSceneButton" type="button" class="secondary-button" disabled>Preview Carey scene motion</button>
+          <p id="animationStatus" class="small" role="status">Gentle blink and head movement using the selected photo. Review the motion for changed features.</p>
+        </form>
+      </section>
+      <section class="gallery-panel" aria-labelledby="galleryTitle">
+        <div class="section-title"><h2 id="galleryTitle">Your images <span class="count" id="imageCount">0</span></h2><span class="small" id="queueStatus">Ready when you are</span></div>
+        <div id="packList" class="pack-list"></div>
+        <div class="gallery-tools"><label for="packFilter">Show</label><select id="packFilter"><option value="">All candidates</option></select><label class="checkbox-label"><input id="showRejected" type="checkbox"> Include rejected</label></div>
+        <div id="queueList" class="queue-list" aria-live="polite"></div>
+        <div id="emptyState" class="empty-state"><div class="empty-art"><span>✦</span></div><h3>Your next idea starts here.</h3><p>Write a prompt and generate your first image.<br>Fast mode is great for trying a few directions.</p><button id="tryPrompt" type="button" class="secondary-button">Try a sample prompt</button></div>
+        <div id="gallery" class="gallery"></div>
+      </section>
+    </div>
+    <section class="photos-panel"><div><p class="eyebrow">MAKE IT CAREY</p><h2>Your identity starts with your photos.</h2><p>Keep 12–20 clear, varied photos here: front, three-quarter views, profile, neutral, and smiling. Keep a few separate for checking likeness.</p><p class="path" id="photoPath">Loading your local photo folder…</p></div><div class="photo-status"><strong id="photoCount">0</strong><span>reference photos</span><button id="copyPhotoPath" type="button" class="secondary-button">Copy folder path</button><small id="trainingStatus">Training is pending.</small></div></section>
+    <footer><span>ByrdHouse / Windows local image studio</span><span id="outputPath"></span></footer>
+  </main>
+  <dialog id="imageDialog"><button id="closeDialog" class="close-dialog" aria-label="Close image">×</button><div class="likeness-comparison"><figure><figcaption>Your original photo</figcaption><img id="comparisonReference" alt="Original Carey photo"></figure><figure><figcaption>Generated candidate · check likeness</figcaption><img id="largeImage" alt="Generated image"></figure></div><p id="largePrompt"></p></dialog>
+</body>
+</html>

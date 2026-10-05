@@ -107,3 +107,10 @@ Thumbs.db
 Desktop.ini
 .vscode/
 .idea/
+
+# Current Windows deployment: private machine configuration and downloaded vendors.
+/windows-local/byrdhouse-local.json
+/windows-local/extra-model-paths.yaml
+/external/
+/windows-local/workflows/civitai-ipadapter-faceid-sdxl-1144810-unpacked/
+/windows-local/workflows/ByrdHouse_CivitAI_IPAdapterFaceID_SDXL_Carey.json

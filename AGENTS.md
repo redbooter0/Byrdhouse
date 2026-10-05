@@ -2,6 +2,45 @@
 
 This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
+## Current Windows PC handoff — 2026-10-03
+
+2026-10-04 hairline/CPU-mesh update: read
+`docs/reviews/2026-10-04-hairline-v2-and-face-mesh.md`. Current queued
+likeness reviews bind V2 examiner code/weight hashes; old reports/profiles
+remain historical. The existing MediaPipe loader/model and configured paths
+work for CPU analysis. Full target-aligned face editing is still unqualified.
+
+2026-10-04 FreeVideo newer-source/licensing follow-up is saved in
+`docs/reviews/2026-10-04-freevideo-follow-up.md`. It establishes no AMD
+drop-in path and records H3's standard territorial exclusions. No H3
+deployment was made; native Wan remains the tested local preview route.
+
+2026-10-04 update: Studio now queues matching-view CPU continuity checks for
+illustrated stills and all collected clip frames. Read
+`docs/reviews/2026-10-04-studio-continuity-review-validation.md`. The approved
+Carey sheets remain canon; new media remains subject to separate visual
+approval. Diagnostic report images cannot be animation inputs. CPU review
+restart passed locally; do not claim GPU mid-render restart from that test.
+
+The active deployment is `D:\ByrdHouse` on Carey's Windows PC with an RX 7900 XT
+20 GB, i9-10850K and 32 GB RAM. The attached 2 TB HDD is D:; the mini PC remains
+deferred. The historical RTX 3070 / E: / two-PC descriptions below are not this
+machine's current hardware or deployment. Read `docs/STATE.md`,
+`docs/IMAGE_GENERATION_STATE.md`, `docs/reviews/README.md` and
+`docs/CURRENT_PC_IMPROVEMENT_PLAN.md` before continuing this lane.
+
+Carey explicitly requested that detailed reviews be saved locally so future work
+builds on them. Retain dated reviews and add real validation when implementing
+their proposals. The correction queue bypass is now fixed; read
+`docs/reviews/2026-10-03-queue-recovery-validation.md` for resume behavior and limits.
+New stills bind fixed reference inputs and source-preservation pixel checks pass;
+read `docs/reviews/2026-10-03-source-preservation-validation.md` for the two
+rejected scenes and boundary-quality gap. Current gaps include generated
+identity drift, hair-edge/background compositing, a live mid-render restart
+test and sustained AMD worker health.
+Exact likeness is unapproved; similarity/geometry scores are not identity proof.
+Do not restart first-install loops or treat a proposed improvement as completed.
+
 ## What ByrdHouse Is
 
 A local-first AI command platform run by one founder (Carey) across three devices: iPad Pro (cockpit/browser), BYRD-MINI (`D:\ByrdHouse` — orchestration: SQLite ops db, Qdrant, memory MCP, future router/dashboard) and BYRD-GAMING (`E:\ByrdHouse` — RTX 3070 heavy worker: ComfyUI, LM Studio, Godot). This repo is the **source of truth for the platform kit**; the machines sync from it via `scripts/setup-*.ps1`.
