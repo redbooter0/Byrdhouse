@@ -1,5 +1,539 @@
 # Image Generation State — read before changing the GAMING image lane
 
+## Connected hairline V2 and CPU mesh restored — 2026-10-04
+
+Detached semantic eyebrow patches no longer become hairline points in the
+tested frames. The approved anchor is unchanged; its new separate measurement
+profile is `anchor-v1-profile-v2.json`. New CPU checks bind code/model hashes
+and measurement version. Live V2 job `3bbf35932e789a0c427faec1fabfa4d2`
+examined 33 frames in 271.37 s; existing afro-width cues remain at 5/7.
+Rejected-still review `279548b6036ef1d2bad7f9b54fc1e8f6` took 10.84 s and
+flags all six groups. Source states/pixels/hashes are unchanged.
+Official MediaPipe weights (5,423,900 bytes, verified on D: and runtime copy)
+restore the existing CPU 478-point loader. Its configured current-PC paths
+and normal CLI analysis work; full semantic face editing remains unqualified.
+183 tests pass. No Comfy restart or new generation occurred. Read
+[the implementation record and limits](reviews/2026-10-04-hairline-v2-and-face-mesh.md).
+
+## FreeVideo source follow-up — 2026-10-04
+
+Carey's repeated link was checked against upstream `a9098b7…`, four commits
+beyond the original source pin. No documented AMD path was added; the working
+Python/ROCm runtime remains unchanged. Additional H3 Radeon examples are
+different implementations/hardware, not qualified local results. The standard
+H3 license excludes the US/EU/UK/Republic of Korea and requires separate
+licensing for excluded territories. No H3 weights or custom nodes were added.
+Existing Wan preview `3d6490df1abea740c499afcbca8befe7` decoded all 33 frames;
+its frame/movie/approved-anchor hashes match and its state is `needs_review`.
+Both queues were empty. See [the source and media evidence](reviews/2026-10-04-freevideo-follow-up.md).
+
+## Matching-view checks are now in Studio — 2026-10-04 (latest)
+
+**Check likeness** queues a read-only CPU review of an illustrated still or
+every collected frame of a clip against its explicitly selected approved
+view. Front/profile/rear/three-quarter choices reuse the locked sheets;
+rear views make no face claim. Review/report images cannot seed animation.
+No source pixels or source-job approval change. 173 tests pass, including
+changed-input, cached-report and restart refusal/resume cases.
+
+All 33 frames of Wan job `3d6490df1abea740c499afcbca8befe7` are now examined.
+Frames **5 and 7** have borderline afro-width cues (0.162619/0.166566 vs the
+existing 0.16 screen) that the earlier five-frame sample missed. They are
+review flags, not identity verdicts; the clip remains `needs_review`.
+The known rejected new-scene portrait flags all six measured feature groups,
+including +53.285 parsed skin-brightness shift. A live CPU-review restart
+preserved ten completed report hashes and completed the same job, with no
+GPU submission. This is not live GPU-render restart proof. The full check
+spanned 298 seconds including restart; warm rejected-still review took 8.08 s.
+Estimated hairline points can leak onto brows; eyes/beard/teeth/mouth still
+require direct visual checking. See
+[the Studio integration and exact artifact paths](reviews/2026-10-04-studio-continuity-review-validation.md).
+
+## Native Wan 5B Radeon motion candidate — 2026-10-04 (latest)
+
+Official ComfyUI Wan 2.2 5B image-to-video is integrated into the existing
+Studio queue, using verified D: models, hash-bound source/template/submission,
+native tiled VAE decode and durable PNG-to-MP4 collection. No extra CUDA wheels
+or custom-node packs were installed. Job `3d6490df1abea740c499afcbca8befe7`
+animated the approved Carey anime anchor: 384x576, 33 frames, 24 fps,
+1.375 seconds, 472.68 s total. It is **needs_review**. Matching-view review
+of frames 0/8/16/24/32 passes hair, forehead and outline screens but is not
+exact likeness or full temporal review; color fringing and softer mouth/teeth
+still need inspection. Browser playback loaded both completed candidates.
+
+Default dynamic VRAM failed with `HostBuffer.read_file_slice`; the same-seed
+retry worked with `--disable-dynamic-vram`. This option is now saved in the
+live config/launcher. MIOpen-enabled retry `fda13a693d3ab6340826dd8e1c55bfc6`
+took 694.64 s and used more sampled VRAM, so that setting was rolled back.
+Working-run sampled maxima: 17.54 GiB device VRAM, 30.01 GiB whole-system RAM;
+these are observations at about 2-second spacing, not exact peaks. Detail
+resolution, long episodes, full-body motion and lip-sync remain untested.
+
+After rollback, SDXL source-edit `6048e11528ab334f6375f5c001377df8` completed
+in 60.08 s Comfy execution / about 8 s sampling. All 499,269 semantic Carey
+face/hair core pixels stayed identical. Its thin pale hair edge keeps it in
+`needs_review`; it was not animated. The CivitAI new-scene portrait
+`15a745b5272cda3fe8c73f8b0ed41003` was visibly rejected for identity drift
+and lighter skin. 165 Studio tests pass. See
+[full sources, deployment and qualification](reviews/2026-10-04-native-wan-amd-qualification.md).
+
+## Carey four-view anime and wardrobe candidates — 2026-10-04 (latest)
+
+Built-in ChatGPT image generation produced a four-view full-body Carey
+turnaround, a matching burgundy-hoodie clothing variant, and a larger head
+turnaround from the owner-approved illustrated anchor plus real Carey face and
+body photos. They are saved under `D:\ByrdHouse\assets\characters\carey-anime`.
+Carey subsequently approved their illustrated likeness as looking exactly
+like him; stable hash-locked copies are listed in `turnaround-v1.json`. The
+outfits remain unapproved placeholders. These are not a trained identity
+model, layered rig, or episode assets. The head front has an extra ear stud;
+a focused edit failed to fix it.
+Back details are inferred because no rear photo was supplied. Details, hashes,
+reference photos, wardrobe prompts, and review limits are in
+[the turnaround review](reviews/2026-10-04-carey-chatgpt-turnaround.md). The
+RX 7900 XT was not used for these ChatGPT-generated sheets; the local Comfy
+workflow remains the episode production route.
+
+The approved head turnaround has hash-checked front and profile crops for
+read-only **matching-view** review. The side profiles are detected; comparing
+them against the close-up front anchor produced misleadingly low similarity
+cues because the view changed. `windows-local/studio/anime_view_review.py`
+now compares a proposed new frame against the selected approved view, including
+the close-up anchor for three-quarter portraits, keeps
+wardrobe out of the likeness decision, and never grants automatic approval.
+It is a local operator tool, not yet integrated into Studio's job report.
+See [the measured record](reviews/2026-10-04-carey-multiview-belt.md).
+
+The Brambleton scene jobs `26e31a04331739f4bd13346c1274d8c5` and
+`1df18317cd9131ecb66e143feb4236fa` are **rejected** because a visible pale
+halo survived around the afro even though the semantic core pixels matched
+the anchor exactly. An independent-background version
+`a3b1a4a04a2e2d7d7458e75a5f058ca3` removes the broad haze, preserves all
+499,269 frozen core pixels, and changes 234,999 background pixels. A thin light
+outline remains at full resolution, so it stays `needs_review`. See
+[the scene-edge qualification](reviews/2026-10-04-anime-scene-edge-qualification.md).
+
+## Anime canon belt now measures the approved afro and forehead — 2026-10-04 (latest)
+
+The CPU face parser labeled the illustrated Carey afro primarily as `hat` even
+though its segmentation visibly traced the correct outer curls. Studio now
+uses the union of hair and hat labels only in its illustrated continuity
+inspector; photoreal hats remain excluded. The owner-approved Anchor v1 has a
+hash-bound local measurement profile with face box, hair bounds, median
+hairline position, forehead height, afro dimensions, outline signature, and
+parsed skin RGB. Its profile and registered anchor hashes are checked before
+an anime report is trusted.
+
+On a same-view comparison, the faithful source-latent redraw `346b…` passes
+the hair, forehead, and outline review screens; the rejected AnimeFix redraw
+`3a…` fails all three, with a `+46.936` median skin-luminance shift. The belt
+now highlights which features need change on its annotated report. It never
+automatically approves illustrated identity. Tests and exact values are in
+[the 2026-10-04 belt validation](reviews/2026-10-04-anime-canon-belt-validation.md).
+Three sampled frames of the existing 44-frame canon-anchor motion clip passed
+same-view hair, forehead and outline screens, but the teeth and mustache were
+visibly softer in the middle frame. It remains a motion test in `needs_review`.
+The unchanged anchor examination is now cached by SHA256 within the Studio
+process; repeated measurement fell from `15.836 s` cold to `0.0019 s` on this PC.
+
+## Anime show-canon route — anchor motion passes technical playback; first new-scene keyframe rejected — 2026-10-03 (latest)
+
+Carey selected `Carey Anime Canon Anchor v1` as the show’s illustrated visual
+source of truth. The owner-approved anchor is hash-locked at
+`D:\ByrdHouse\assets\characters\carey-anime\anchor-v1.png` (SHA256
+`2f85df9f6efa92915b57d666dbd2c3e3467ae91e540f603156bc4084c0ff4640`). The
+Studio permits that explicitly approved illustrated source for a private
+AdvancedLivePortrait motion test. Job `0cf48a1d6a53295f53b4727bd0efb4e7`
+rendered 44 frames / 2.93 seconds; sampled frames retained the anchor’s face
+and afro while adding a small blink/head shift. It remains **needs_review**:
+technical playback is not animation approval.
+
+Animagine XL 4.0 Opt is hash-verified and installed as an illustrated SDXL
+keyframe candidate. The first local existing-workflow-inspired IP-Adapter Plus
+Face + SDPose + ControlNet Union shot (`97b0b62f810d753cec3bf3c836329261`,
+same locked seed) rendered in 117.26 seconds but was visually **rejected**. It
+produced a generic small face, lost the canonical beard/brow/mouth detail,
+made the afro an oversized smooth sphere, and failed to establish a recognizable
+Brambleton setting. The local face/hairline review detector could not find a
+usable face in that illustration, so its saved inspection is explicitly
+**inconclusive** (`similarity: null`, no geometry values), never a passed score.
+It must not be animated or used as an anchor-kit example.
+
+Studio now records that illustrated-detector gap as a review failure without
+crashing the completed still. The next gate is a close, sharp canonical
+portrait/turnaround kit approved by Carey before another full-body or episode
+pose. Do not use the rejected frame to train a LoRA or seed a replacement.
+See [the detailed anime keyframe lab record](reviews/2026-10-03-anime-anchor-keyframe-lab.md).
+
+## Existing online workflow qualification: source-latent anchor and scene swap — 2026-10-03 (latest)
+
+Two existing open workflow repositories are staged locally with pinned commits:
+Apache-2.0 `ayushchinmay/ComfyUI_Img2Img_Workflow`
+(`2be98e6b6aff069a51f989cd855c4f5345906931`) and MIT
+`ExMikuPro/AnimeFix-Workflow` (`4caa3dd4d3a0ccb84a6696f52af5a6a6facdbb44`).
+The second workflow’s available FaceDetailer/SAM/YOLO subset was tested; its
+output `3a06290e6e71c7956044964485651edd_1.png` changed the canonical face and
+afro and is rejected. The detailer is disabled by default.
+
+The first repository’s source-latent pattern is qualified: instead of starting
+from empty noise, Studio encodes the locked anime anchor at low denoise before
+applying the existing IP-Adapter and pose controls. Job
+`346b554dc7bf47f8c986aa08aec35729` retained the canonical face/hair design
+(`0.876475` read-only visual-similarity cue) but did not sufficiently change
+the scene, which is expected for a likeness-first anchor-kit stage.
+
+Studio now has an anchor-specific reviewed scene-swap route. It uses the
+installed face parser/BiRefNet mask to preserve the illustrated person and
+Animagine XL to inpaint only the background. In the Brambleton test
+`26e31a04331739f4bd13346c1274d8c5`, 499,269 semantic face/hair/body core
+pixels were exactly identical to Anchor v1; 231,775 background pixels changed.
+This proves source-pose preservation only. A later full-size inspection found
+a pale exterior afro halo, so the still was **rejected for show art**.
+
+The local image belt was also corrected for the approved illustrated anchor:
+the upstream photo-trained face parser labels the drawn afro primarily as
+`hat`, despite visibly segmenting its full silhouette. The belt now preserves
+the literal hair and headwear areas separately and evaluates their union as an
+illustrated hair silhouette. This makes the forehead/hairline, afro width, and
+afro height measurable review cues rather than incorrectly reporting no hair.
+
+## PuLID v1.1 new-scene workflow works; likeness rejected — 2026-10-03 (latest)
+
+The local RX 7900 XT now has a private PuLID v1.1 / SDPose / ControlNet Union
+qualification lane based on a staged CivitAI SDXL IP-Adapter + Union workflow.
+It is not a scratch-built renderer. A three-real-photo Carey identity batch and
+a separate full-body real Carey pose image produced a new 832×1216 studio still
+in 128.40 seconds including its first EVA encoder download. The output is
+rejected: CPU identity similarity was 0.591786 against the clean smile reference
+(below the 0.65 review screen), and the visual review found a taller/spikier
+afro, higher/smoother hairline, narrowed midface/jaw, and regenerated beard/
+mouth. Do not animate it. The full workflow, hashes, failed first wiring attempt,
+annotated comparison, and next gate are in
+[the PuLID/SDPose/Union lab record](reviews/2026-10-03-pulid-sdpose-union-lab.md).
+
+ComfyUI and Studio were restored after a restart-script application-control
+block by launching the trusted base Python with the exact venv site-packages.
+Both respond at their normal localhost ports. The normal restart script still
+needs a launch-path repair before relying on it again.
+
+## Source pixels preserved; scene edges rejected — 2026-10-03 (latest)
+
+Installed CPU semantic parsing and core masked SDXL/final compositing now run
+through Studio's shared queue. Original analysis `377bcabf9a3e55e422fe8f3df3430ad4`
+completed in 10.53 s. Scenes `25656bbecdfab3a0b1166aeb3512d8df` (45.44 s) and
+`0c310b7900be3748cbfb35389007d053` (13.58 s warm) each kept all 331,764 protected
+pixels identical to the native 1152×1536 working photo, with zero changes outside
+the editable mask. Both scene candidates were visually **rejected** for the hard
+retained tile/background halo around the afro. Exact protected pixels do not
+establish a seamless scene. Neither rejected still was animated.
+
+New stills now stage and rehash fixed reference inputs; originals are separately
+hash verified for source preservation. Ambiguous submissions refuse a second
+POST, known submissions resume from their exact journal, and masks cannot be
+animated. 138 focused tests pass; eleven deployed/source hashes match. ComfyUI
+PID 6840 remained unchanged. No new model/runtime installed; parser model scope
+is private research per its model card. No during-render VRAM peak was sampled.
+Both queues are empty. Full proof, model hash, source hash, workflow IDs,
+rejection reasons and files are in
+[source-preservation validation](reviews/2026-10-03-source-preservation-validation.md).
+
+Next: compare existing upstream hair matting/boundary refinement. Keep facial
+features and reviewed head interior fixed; record any edge-pixel changes and
+their narrower guarantee. Do not shrink a mask silently or claim that exact
+face/head pixels also guarantee new poses or animated frames. SSD cache,
+matched-pose feature analysis, live mid-render restart and sustained AMD health
+remain unfinished.
+
+## Shared queue and recovered animation — 2026-10-03 (latest)
+
+Correction now enqueues before rendering and shares the SQLite worker with stills
+and animation. Submitted operations preserve prompt IDs and durable provenance;
+restart reconciliation/resume and a GUI **Recover existing render** button collect
+known submissions without a new render. 63 focused tests pass.
+
+Browser correction `87e2a2d1e2336791766879e738644975` completed in 54.56 s;
+animation `aafca1c98eba4c671445df41d245ae09` started after it. ComfyUI rendered 44
+frames, but strict collector validation first rejected upstream FLOAT coercion.
+The verified correction accepts equal int-to-float widget values while keeping
+source/workflow bindings strict. GUI recovery collected the same prompt
+`371274e1-790e-43e5-af31-3273b2c77938`, no second render, with accumulated execution/
+collection time 42.63 s. Browser playback is 1152x1536/2.933333 s; all 44 MP4
+frames decoded. Correction/animation remain `needs_review`, not exact replicas.
+The corrected still still has generated spiky/tall hair and changed teeth/details.
+
+See [full implementation proof and limits](reviews/2026-10-03-queue-recovery-validation.md).
+Seven source/deployment hashes match. Live mid-render restart was not performed
+(jobs completed before the attempt); recovery is mock-tested and completed-output
+collection is live-tested. Sustained AMD stability, ordinary-still input rehashing,
+pose matching and exact likeness remain open. Next: semantic source-preservation
+with the installed upstream parser/core composite workflow.
+
+## Saved current-PC reviews — 2026-10-03
+
+Carey requested persistent detailed reviews for future work. The
+[review index](reviews/README.md) links the hardware/runtime and
+architecture/identity audits; the [implementation proposal](CURRENT_PC_IMPROVEMENT_PLAN.md)
+orders the next work. The audit found correction bypasses the Studio worker,
+startup recovery does not reconcile prompt IDs, and current hair/geometry checks
+cannot establish exact likeness. The queue gap was subsequently fixed above;
+other proposals and qualification limits remain open.
+Current machine: i9-10850K, RX 7900 XT 20 GB, 32 GB RAM; C: SSD and D: 2 TB HDD.
+
+## GPEN and gallery validation — 2026-10-03 (current)
+
+### Studio animation integration (latest)
+
+The tested upstream portrait-motion graph is now connected to the Studio's
+SQLite queue. **Animate original photo** uses the selected original reference.
+**Animate still** requires a kept still; the API also enforces this and rechecks
+approval and source SHA256 before rendering. Gallery videos have playback,
+download, source comparison and separate motion-review controls. Metadata stays
+`identity_verified: false` / `exact_replica: false` regardless of measurement scores.
+
+Browser-submitted job `43ec9f44984da64b6a8737de5bc39825` completed in 42.43 s.
+HTTP video response is 200/video-mp4; the browser loaded it with readyState 4,
+1152x1536 and duration 2.933333 s. FFmpeg decoded all 44 frames at 15 fps.
+Live POST of an unreviewed generated still correctly returned HTTP 400.
+25 focused tests pass, including source hash recording, approved-source
+enforcement, rechecking after rejection, and request/path boundaries.
+The command-line-only limitation recorded for the earlier preview below is
+superseded. Talking and full-body motion remain outside this tested preset.
+
+Founder clarification: an approximate face is unacceptable. The belt must show
+which features differ, explain the correction and preserve likeness through
+animation. Do not equate an embedding score or a passed geometry gate with an
+exact replica. Photo variation UI wording was corrected because low denoise can
+still alter facial features.
+
+The annotated `belt-gpen-gallery-validation-3e34227396.png-analysis.png` now marks
+five visually reviewed differences: hair silhouette, forehead/hairline,
+eyes/brows, smile/teeth, and jaw/beard. It explains preserving original pixels
+and matching pose before comparison. These are explicit visual-review notes,
+not fabricated automatic measurements. The generated candidate is not exact.
+
+An original-photo animation was completed using the upstream
+`PowerHouseMan/ComfyUI-AdvancedLivePortrait` no-driving-video example, commit
+`3bba732915e22f18af0d221b9c5c282990181f1b`. Five converted safetensors were
+downloaded from Kijai/LivePortrait_safetensors and matched Hub SHA256 metadata;
+provenance is in `D:\ByrdHouse\models\liveportrait\provenance.json`.
+Local job `f0460e2ce897719fcf60ef3e26af8b8e` produced 44 frames at 15 fps
+(2.93 seconds), encoded as `Carey-original-photo-motion.mp4`, in 44.94 seconds.
+The source was the original portrait, not a generated surrogate. Frames 0, 14,
+and 30 were visually inspected: blink and slight head movement, with some
+softening of detail. LivePortrait reconstructs moving pixels; exact identity
+and final animation quality are NOT approved. This is a command-line preview
+lane, not yet a Studio animation button, talking animation or full-body motion.
+Sample-frame examination measured similarity 0.985036 / 0.964021 / 0.985036
+against the original for frames 0 / 14 / 30. All three geometry checks passed;
+these uncalibrated scores do not establish exact likeness. Full measurements
+are saved beside the animation in `frame-review.json`.
+
+Stability caveat: a second warm workflow-switch test
+`e42bab0d07e78825bc19b51ab65c422c` failed with HIP launch failure during VAE
+decoding and terminated ComfyUI's prompt worker. Its log is preserved as
+`comfy-launch-failure-20261003.log`. After verified empty queues the process was
+restarted with `--disable-async-offload`; identical prompt/seed retry
+`1b9e8a6e8f8606f347e260ed2b41a6e0` completed in 56.05 seconds. This mitigates a
+suspected offload issue; one success does not establish long-run stability.
+
+The native AMD lane now uses verified RealVisXL V5 Lightning, the upstream
+FaceID Plus V2 paired loader, and ReActor/SAM correction with GPEN-BFR-512.
+The installed GPEN file was truncated (239,304,704 bytes). The ReActor maintainer's
+284,244,491-byte distribution was downloaded, its SHA256 verified against Hub
+metadata, and ONNX parsing/checking passed before installation. The damaged file
+is retained under external/models/reactor for audit. See the license manifest.
+
+Same-target restoration comparison: GPEN visibility 0.6 scored 0.894661, GPEN 1.0
+scored 0.890355, GFPGAN 1.0 scored 0.843990. GPEN 1.0 looked cleaner in direct
+inspection and is the current restoration setting. The restored candidate gets
+a small selection preference only within 0.015 of the direct similarity score;
+this is a heuristic, not a calibrated likeness test. The upstream Impact Pack
+FaceDetailer example is preserved unchanged; private RealVis refinements at
+denoise 0.20 and 0.35 were tested and rejected (blur or identity drift), not added
+to the default workflow.
+
+Integrated correction of job `6a479e91e333b6a276aed36a018c257b` completed in
+49.5 seconds and produced a separate gallery record
+`3cd314ab11006a65259279a8e221d6fb`, retaining its parent and all source files.
+Its forehead/hairline/jaw measurement gates passed; it remains `needs_review`
+with `identity_verified: false`. The original/target/candidate overlay was viewed.
+The belt preserves the generated hairstyle; measuring hair is not hair transfer.
+Human approval and reliable likeness across poses remain unproven.
+
+ComfyUI is now launched with explicit RAM headrooms `--cache-ram 4 8`, verified
+in its live argv. After a cold 130.11-second generation and a restoration graph,
+job `acdaef5a2ee676b581f6d658cb6dd56b` completed in 13.09 seconds Studio time
+(12.68 backend), compared with the earlier 139.05-second reload. This is a
+measured warm workflow switch, not a cold-start performance promise.
+
+21 focused tests pass, including separate correction review records, parent
+preservation and persistent analysis links. Browser inspection confirms the
+corrected gallery entry and current fast defaults. The broad goal remains active.
+
+## Correction audit — late 2026-10-02 (supersedes earlier FaceID claims below)
+
+The earlier route was named FaceID but loaded `ip-adapter-plus-face_sdxl_vit-h.safetensors`.
+The upstream implementation detects adapter type from weights, so this did **not**
+use identity embeddings. Earlier speed/quality records labelled FaceID are records
+of that appearance-adapter route, not proof of FaceID Plus V2 quality.
+
+The Studio now uses upstream `IPAdapterUnifiedLoaderFaceID`, preset FACEID PLUS V2,
+with companion LoRA strength 0.6, the actual `ip-adapter-faceid-plusv2_sdxl.bin`,
+and local InsightFace. The untouched upstream example is preserved in
+`external/workflows/upstream-ipadapter-faceid.json` (installed upstream commit
+`a0f451a5113cf9becb0847b92884cb10cbdec0ef`). Default reference is the full original
+`portrait.jpeg`; cropped references can fail face detection. Carey reference is
+required; LoRA-only mode is disabled. Reference+optional LoRA remains supported.
+
+Actual corrected FaceID base test: job `504cf231aac3d8f7e823c5d230944627`, 119.12 s
+including loading, 24 sampling steps in 11.9 s. Original-to-generated embedding
+similarity 0.620872. ReActor/SAM belt `faceid-v2-corrected-9360b369ee` selected restored
+at 0.884733. The result still looks synthetic and is NOT visually approved.
+Similarity is not a calibrated percentage or proof of likeness.
+
+Belt v2 fixes three measurement errors: first hair pixel was mistaken for the
+hair/skin boundary, the ROI top was added twice, and padded detection keypoints
+were passed to the parser without subtracting the padding. The jaw gate now uses
+the jaw landmarks rather than all 68 points. Missing segmentation or landmarks
+fail the measurement gates. Real reference/target/candidate overlays visibly trace
+the hairline and jaw in `belt-faceid-v2-corrected-9360b369ee.png-analysis.png`.
+Direct and restored candidates are the default; extended blur/mean-face comparisons
+are opt-in via `belt_extended_candidates`. All outputs still require human review.
+
+Downloaded creator-published `SG161222/RealVisXL_V5.0_Lightning`, revision
+`f4454158cedaab9f0688c199561d6c92525f3a85`, file
+`RealVisXL_V5.0_Lightning_fp16.safetensors` (6,938,065,512 bytes), verified SHA256
+`fabcadd9330dcc4f9702063428d40b9d4d07168d8acefc819b8d1d9db466b3ec`.
+Fast mode uses its published 5-step DPM++ SDE/Karras, CFG 1.5 settings, without
+adding another Lightning LoRA. Base SDXL remains the quality route. RealVis test
+`6a479e91e333b6a276aed36a018c257b` completed: 92.27 s backend including cold load,
+4.8 s sampling. Warm seed variation `844092163971861342a22339f3403dce` completed
+in 12 s Studio wall time / 9.19 s backend. Both were visually inspected: cleaner
+texture and scene adherence, but likeness still requires review. Fast is now the
+default mode; the experimental Carey LoRA strength defaults to zero and can be
+raised explicitly alongside the required photo reference.
+
+Belt `realvis-five-step-b92d52b963` completed in 53.89 s with two candidates.
+Direct: similarity 0.899480, jaw-outline error 0.082064, forehead-height delta
+0.012074, hair-width delta 0.009603; restored similarity 0.878202. All measurement
+gates pass. Visual inspection nevertheless finds the selected direct swap blurry
+at full size (128px swap limitation); restored is cleaner but softer. Do not call
+this final quality or declare the broad goal achieved. Next: reuse an upstream
+FaceDetailer/refinement stage to recover texture without losing identity, and
+review across poses. Both candidates and the hairline/jaw overlay are retained.
+The Studio gallery now has a Check likeness action and a link to the analysis.
+Final saved-defaults job `ad4cdb700a0364dc6cfceceb0323691e` completed successfully
+after a belt-to-generation switch: 139.05 s Studio / 138.75 s backend, with only
+4.4 s spent sampling. HDD-backed model reload/initialization is a material
+bottleneck. Do not advertise the 12 s warm time as an end-to-end promise.
+
+20 focused tests pass (Studio routes, model pairing, no double acceleration,
+hairline translation invariance, padding coordinates, missing-measurement rejection).
+CPU examiner benchmark: warm 4 threads 7.71 s vs 10 threads 7.61 s per original;
+no evidence to change the CPU thread count. ComfyUI reports native RX 7900 XT,
+20,464 MiB VRAM. The broad user goal remains active: convincing likeness and a
+reusable simple workflow are not proven by these measurement checks alone.
+
+## Current Windows RX 7900 XT restoration — 2026-10-02
+
+This PC now runs from `D:\ByrdHouse` on the attached 2 TB HDD, with
+ComfyUI/runtime on C:. The owner will set up the mini PC later. The historical
+3070/E: verdicts below do not describe this current hardware.
+
+Founder direction: **all Carey generations and examples must resemble him as a
+Black man**. New Studio jobs require an original local Carey photo. A prompt
+mentioning race is insufficient identity proof. Previous unconditioned demos
+were rejected and hidden; their files remain available for audit.
+
+Likeness correction on 2026-10-02: the full-image SDXL IP-Adapter path copied
+the reference scene and produced neon texture smearing, warped facial features,
+and unusable candidates. That path is retired from the Studio UI. The default
+is now SDXL **FaceID photo guidance**, using the square clean Carey reference
+and the CivitAI-tested `IPAdapterFaceID` chain so pose, clothing, and lighting
+can change without discarding his identity. Exact photo edit and Carey v2 LoRA
+remain available as explicit alternatives, and every result still starts
+`needs_review`.
+
+The local Identity Belt now scores InsightFace similarity plus 68-point face
+outline and SegFormer hair/forehead structure. It pads edge-to-edge close-ups
+for detection and prefers a restored or smoothed candidate when it is within a
+close likeness band of the direct swap, preventing the sharper warped composite
+from winning.
+
+Installed and tested on RX 7900 XT 20 GB, 32 GB system RAM:
+
+- SDXL base + CivitAI-tested FaceID Plus Face adapter, local `buffalo_l`
+  InsightFace, and Carey v2 rank-8 LoRA. A warm FaceID quality job completed in
+  35.8 seconds; the four-step FaceID fast path completed in 3.4 seconds once
+  warm (its first lightning-model load took 45.0 seconds). LoRA-only creative
+  jobs remain exposed for comparison but are not the likeness default.
+- FLUX.2 Klein 4B BF16 distilled + Qwen3 4B + FLUX2 VAE using core ComfyUI
+  `ReferenceLatent`. First actual photo edit `d6d059c99b7f831a75e0dbc018fd1220`
+  completed in 66.39 seconds including initial model load. It changes the shirt,
+  background, and expression more aggressively but is now an optional candidate
+  route. SDXL LoRAs are excluded from the FLUX graph. Model checksums verified;
+  see license manifest.
+- ComfyUI reports native RX 7900 XT with 20,464 MiB. During FLUX batch work,
+  `/system_stats` reported 9,286 MiB free VRAM, 8,454 MiB Torch VRAM total.
+  Core sampling completed without an out-of-memory error. This is a measured
+  snapshot, not a promise of available memory during every step.
+
+Studio source is preserved under `windows-local/`: mandatory photo reference,
+automatic Carey/Black identity guidance, five versioned recipes totaling 34
+variations, one to three versions per shot, atomic bounded SQLite queue,
+side-by-side original/result comparison, rejected-image filtering, pack ZIPs
+with full settings, and an editable Blender handoff with embedded source images.
+
+Real batch tests: **34/34 candidates completed**, six anime, six camera angles,
+six outfits, eight expressions, and eight cinematic stills. All five complete
+contact sheets were visually inspected and show Black
+subjects; specific likeness remains subject to Carey's review. Profile views may
+invent features not visible in the frontal input. Six anime images were packed
+into an actual editable `.blend`; the eight cinematic stills were also packed
+into a separate `.blend`. Camera movement is an animatic, not synthesized
+facial/body motion. Final pack results are recorded in the local `media/packs/index.json`.
+
+An extended run exposed a ComfyUI HTTP stall (one render took 250.50 seconds).
+The first Studio worker marked six jobs failed after 30-second HTTP waits even
+though rendering continued. Fixed: longer submission wait, retry history reads
+after transient timeouts within the existing 20-minute generation deadline,
+and recovery from the original backend prompt record without resubmission.
+All six lost Studio records were recovered from their original ComfyUI histories;
+all five packs now have no failed jobs and include complete exports.
+Warm batch median: 16.23 seconds per candidate (minimum 14.32 seconds; one
+250.49-second stall included in the run). Actual Blender rendering produced all
+384 frames of the eight-shot, 16-second animatic at 416×608/24 fps in 16.34 seconds.
+Frames 1 and 145 were visually inspected for framing and skin-tone preservation,
+then FFmpeg encoded the MP4 successfully. The source `.blend` stays at 832×1216.
+The Studio comparison dialog was tested and captured in `studio-likeness-review.png`.
+The timeout/no-duplicate behavior and the new exact photo-edit graph are covered
+by the Studio's 15 passing tests.
+
+Fresh smoke test on 2026-10-02: three new FLUX reference-conditioned candidates
+completed in 15.49–17.25 seconds (`9372f2d18134babdff8be91a400f54e7`,
+`5058d5d048d784ce44992f911fcf7570`, and
+`87b5ef4cec45db67fe55d382c855b902`). The outputs were visually checked as Black
+Carey candidates with afro hair and beard; they remain `needs_review` and were
+not promoted automatically. The first two preserved the requested black bomber
+and gray shirt; the close-up chose a white shirt, so prompt adherence still needs
+human review.
+
+Those exact three outputs were packed into
+`media/packs/fresh-animation-test-20261002/Carey-animation-stills.blend` and
+rendered successfully as 144 frames at 416×608/24 fps. FFmpeg encoded the frames
+to the six-second
+`media/packs/fresh-animation-test-20261002/Carey-camera-motion-preview.mp4`.
+This proves the local still-to-editable-camera-animatic path; it is camera motion
+over stills, not synthesized facial or body motion.
+
+Likeness gate remains explicit: current images start `needs_review`, no identity
+LoRA is automatically approved. Carey v2 used all 19 original photos; **no held-out
+evaluation occurred**. Corrected the stale manifest's claimed hold-outs without
+changing its weights. Its framing-caption heuristic can mislabel portraits and
+requires curation before further training. No generated images entered training.
+
+## Historical two-PC 3070 lane (last updated July 2026)
+
 **Last updated:** 2026-07-15 (EDT, CPU crop reroute + adapter crop-preflight gate verified on the hard Vegeta target; integration suite green)  
 **Owner:** BYRD-GAMING (`E:\ByrdHouse`)  
 **Rule:** Read this file before changing an image model, graph, training set, or route. Update it after every real local test.

@@ -1,0 +1,85 @@
+{
+  "schema": "byrdhouse.character.recipes.v1",
+  "purpose": "Repeatable Carey likeness candidates for animation planning",
+  "recipes": {
+    "expressions": {
+      "version": 1,
+      "title": "Expressions",
+      "description": "Eight close portraits for acting and facial motion references.",
+      "preset": "photo",
+      "base_prompt": "single person, head and shoulders portrait, facing camera, wearing a plain dark crewneck shirt, soft even studio light, simple gray background, complete hair visible, realistic photograph",
+      "variations": [
+        {"label": "Neutral", "prompt": "neutral relaxed expression, closed mouth"},
+        {"label": "Smile", "prompt": "warm natural smile, teeth visible"},
+        {"label": "Laugh", "prompt": "laughing naturally, joyful expression"},
+        {"label": "Thoughtful", "prompt": "thoughtful expression, looking slightly to camera left"},
+        {"label": "Determined", "prompt": "determined calm expression, focused gaze"},
+        {"label": "Surprised", "prompt": "mild surprised expression, raised eyebrows"},
+        {"label": "Concerned", "prompt": "concerned expression, slightly furrowed brow"},
+        {"label": "Confident", "prompt": "confident subtle smile, relaxed shoulders"}
+      ]
+    },
+    "angles": {
+      "version": 1,
+      "title": "Camera angles",
+      "description": "Six views for character reference and shot planning.",
+      "preset": "photo",
+      "base_prompt": "single person, head and shoulders character reference portrait, plain dark shirt, neutral expression, soft even light, gray studio background, natural proportions, realistic photograph",
+      "variations": [
+        {"label": "Front", "prompt": "front view, facing camera"},
+        {"label": "Left three-quarter", "prompt": "three-quarter view from camera left"},
+        {"label": "Right three-quarter", "prompt": "three-quarter view from camera right"},
+        {"label": "Left profile", "prompt": "left side profile, looking to the left"},
+        {"label": "Right profile", "prompt": "right side profile, looking to the right"},
+        {"label": "Low camera", "prompt": "slightly low camera angle, confident gaze"}
+      ]
+    },
+    "outfits": {
+      "version": 1,
+      "title": "Outfits",
+      "description": "Six wardrobe versions with consistent face and hair.",
+      "preset": "cinematic",
+      "base_prompt": "single person, waist-up portrait, relaxed standing pose, facing camera, soft daylight, uncluttered neutral background, realistic cinematic photograph",
+      "variations": [
+        {"label": "Founder", "prompt": "navy blazer over a white t-shirt"},
+        {"label": "Streetwear", "prompt": "black bomber jacket over a gray t-shirt"},
+        {"label": "Creative studio", "prompt": "burgundy crewneck sweater"},
+        {"label": "Sport", "prompt": "simple purple basketball jersey"},
+        {"label": "Sci-fi", "prompt": "futuristic dark tactical coat, subtle blue details"},
+        {"label": "Fantasy", "prompt": "dark leather adventurer jacket, bronze details"}
+      ]
+    },
+    "game-stills": {
+      "version": 1,
+      "title": "Animation stills",
+      "description": "Eight single-character shots with clear silhouettes and room for motion.",
+      "preset": "cinematic",
+      "base_prompt": "single person, realistic cinematic photograph, dark bomber jacket, plain gray shirt, natural proportions, complete head visible, strong composition, uncluttered background, animation opening keyframe",
+      "variations": [
+        {"label": "Rooftop idle", "prompt": "full body standing relaxed on a rooftop at golden hour, feet visible"},
+        {"label": "City walk", "prompt": "full body walking toward camera on a quiet street, feet visible"},
+        {"label": "Studio seated", "prompt": "seated in an armchair in a creative studio, relaxed posture"},
+        {"label": "Hero close-up", "prompt": "head and shoulders close-up, sunset rim light"},
+        {"label": "Look left", "prompt": "waist-up shot, looking left, cool evening city lights"},
+        {"label": "Look right", "prompt": "waist-up shot, looking right, soft window light"},
+        {"label": "Ready pose", "prompt": "full body athletic ready stance, empty courtyard, feet visible"},
+        {"label": "Quiet moment", "prompt": "waist-up portrait beside a studio window, thoughtful expression"}
+      ]
+    },
+    "anime": {
+      "version": 1,
+      "title": "Anime Carey",
+      "description": "Six illustrated character candidates for game concepts.",
+      "preset": "anime",
+      "base_prompt": "single Black male character based on the reference, brown skin matching reference, dark brown eyes, black textured afro, short beard, crisp original anime illustration, clear silhouette, no text, animation character concept",
+      "variations": [
+        {"label": "Portrait", "prompt": "head and shoulders portrait, calm confident expression, dark jacket"},
+        {"label": "Hero", "prompt": "full body hero stance, dark streetwear, simple background"},
+        {"label": "Basketball", "prompt": "athletic stance holding a basketball, purple jersey"},
+        {"label": "Adventure", "prompt": "leather adventurer outfit, mountain backdrop"},
+        {"label": "Sci-fi", "prompt": "futuristic tactical outfit, neon city backdrop"},
+        {"label": "Smile", "prompt": "close-up natural smile, soft light, simple background"}
+      ]
+    }
+  }
+}

@@ -1,5 +1,15 @@
 # Semantic Face-Zone + Mesh-Seed Workflow
 
+**Current Windows PC — 2026-10-04:** the existing CPU landmarker now loads
+the pinned official 478-point model through `byrdhouse-local.json`'s
+configured `comfy_dir`. `byrdfacezone.py --root D:\ByrdHouse analyze` succeeds
+on the approved anchor; approved front/profile probes also detected 478
+finite landmarks. This restores the geometry foundation. Full semantic
+preparation/warp is still unqualified on the RX 7900 XT PC. Read
+[the current validation and next gate](reviews/2026-10-04-hairline-v2-and-face-mesh.md)
+before using the historical examples/defaults below; they do not select the
+current approved Carey canon or establish episode-ready identity.
+
 **Status:** implemented and exercised locally on BYRD-GAMING. The architecture transfers Carey identity/color into the Gojo target, but the current Naruto-seeded Gojo render fails the visual gate. This is a private calibration lane, not a production approval.
 
 ## Required behavior

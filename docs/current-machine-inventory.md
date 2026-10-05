@@ -8,7 +8,33 @@ Living document (handoff deliverable). Two kinds of entries:
   treated as current. Paste each machine's preflight summary into its section
   and flip the labels.
 
-## BYRD-GAMING (GPU worker)
+## Current single-PC Windows restoration (2026-10-02)
+
+2026-10-04 video update: native Wan 2.2 5B, UMT5 scaled FP8 and Wan 2.2 VAE
+are verified and installed on D:, total 18,144,966,705 bytes. A 384x576,
+33-frame Carey anchor video rendered in 472.68 s. Live startup persists
+`--cache-ram 4 8 --disable-async-offload --disable-dynamic-vram`; MIOpen
+remains at Comfy's default disabled behavior after a slower local experiment.
+The launcher uses trusted Python 3.13.15 with the existing venv site-packages
+via config, avoiding the observed venv-launcher App Control block. Native
+Torch/runtime versions are unchanged. See
+[the measured qualification](reviews/2026-10-04-native-wan-amd-qualification.md).
+
+Confirmed locally: Intel i9-10850K (10 cores / 20 threads), 32 GB RAM,
+AMD Radeon RX 7900 XT (20,464 MiB), and attached 2 TB D: data HDD with
+approximately 1.96 TB free. Current root is `D:\ByrdHouse`, independent of
+the disconnected/erased former E: installation. The mini PC is deferred by owner.
+
+ComfyUI 0.38.0, Python 3.13.15, PyTorch 2.13.0+rocm10.0.0; ComfyUI reports
+the RX 7900 XT as its active device. The local Studio and ComfyUI bind to
+loopback only; addresses and model paths live in `byrdhouse-local.json`.
+FLUX.2 Klein 4B BF16 reference editing and SDXL LoRA + IP-Adapter routes
+have both completed actual local image jobs. Blender 5.2.2 is installed locally.
+
+The inventories below describe the older two-PC deployment; their CONFIRMED
+labels reflect those historical runs, not this newly restored hardware.
+
+## Historical BYRD-GAMING (GPU worker)
 
 | Item | Value | Status |
 |---|---|---|
